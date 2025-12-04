@@ -37,7 +37,7 @@
 
 2. **Phase 3**: Telemetry-Based Routing (~5-7 hours)
 3. **Phase 4**: Fallback Matrix (~4-5 hours, can run in parallel)
-4. **Phase 6-8**: Advanced features (~20-24 hours)
+4. **Phase 6-8**: Advanced features (~20-24 hours) plus targeted King Arthur lifts described in Phase 7/8 tasks
 5. **Phase 9**: Telemetry/UX/Cost instrumentation (~4-6 hours, parallel with Codex Category F)
 
 ---
@@ -56,7 +56,7 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 
 **Can run in PARALLEL with PLAN_CODEX.md**
 
-> **King Arthur Integration Note:** All lift-and-integrate work for `legacy/king_arthur/` components (JSON engine, toolkit, overrides, manifest hygiene) is now tracked in `legacy/king_arthur/INTEGRATION_PLAN.md`. Keep this plan focused on research-driven architectural work; coordinate with the integration plan before taking any King Arthur tasks.
+> **King Arthur Integration Note:** The only remaining King Arthur code lives under `legacy/king_arthur/`. Whenever this plan calls for JSON engine, toolkit, override, or manifest hygiene capabilities, copy only the necessary implementations from that directory into `agent_engine/` while stripping legacy terminology and verifying alignment with AGENT_ENGINE_OVERVIEW. Do not reintroduce Arthur-specific roles or assumptions.
 
 ---
 
@@ -451,7 +451,7 @@ fallbacks:
 
 ## Phase 5: Override Parser (RESEARCH §8.1)
 
-*Delegated.* Override parser, manager, and manifest hygiene work now live in `legacy/king_arthur/INTEGRATION_PLAN.md`. Follow that plan for all King Arthur lift tasks; do not implement override work inside this document. Remove this section entirely once the integration plan lands.
+*Delegated.* Override parser, manager, and manifest hygiene work require porting vetted implementations from `legacy/king_arthur/`. When executing these tasks, copy only the minimal code into `agent_engine/`, rename types to the neutral Agent Engine vocabulary, and add tests before treating them as production-ready.
 
 ---
 
@@ -681,7 +681,7 @@ evolution:
 | **Phase 2: Context Profiles** | 6 tasks (2.1-2.6) | Tasks 2.2-2.3 parallel | 5-7 hours | Phase 1 complete |
 | **Phase 3: Telemetry Routing** | 5 tasks (3.1-3.5) | Tasks 3.2-3.4 parallel | 5-7 hours | Phase 2 for profiles |
 | **Phase 4: Fallback Matrix** | 5 tasks (4.1-4.5) | Tasks 4.2-4.3 parallel | 4-5 hours | None (independent) |
-| **Phase 5: Override Parser** | _Tracked in `legacy/king_arthur/INTEGRATION_PLAN.md`_ | See integration plan | — | — |
+| **Phase 5: Override Parser** | Port override manager/parser from `legacy/king_arthur/` into Agent Engine | Tasks 5.2-5.3 parallel | 4-6 hours | Phase 1 for memory writes |
 | **Phase 6: Post-Mortem** | 4 tasks (6.1-6.4) | Linear | 3-4 hours | None (independent) |
 | **Phase 7: Evolution** | 5 tasks (7.1-7.5) | Tasks 7.2-7.4 parallel | 5-6 hours | Phase 3 for routing |
 | **Phase 8: ReAct Support** | 3 tasks (8.1-8.3) | Linear | 3-4 hours | None (independent) |
