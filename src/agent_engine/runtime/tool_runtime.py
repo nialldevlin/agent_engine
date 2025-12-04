@@ -1,4 +1,4 @@
-"""ToolRuntime executes deterministic tools or LLM peasants with safety checks."""
+"""ToolRuntime executes deterministic tools or LLM-backed handlers with safety checks."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class ToolRuntime:
         handler = self.tool_handlers.get(stage.tool_id)
         if tool_def.kind == ToolKind.DETERMINISTIC and handler:
             output = handler(call_input)
-        elif tool_def.kind == ToolKind.LLM_PEASANT and self.llm_client:
+        elif tool_def.kind == ToolKind.LLM_TOOL and self.llm_client:
             output = self.llm_client.generate(call_input)
         else:
             output = {"tool": stage.tool_id, "echo": call_input}

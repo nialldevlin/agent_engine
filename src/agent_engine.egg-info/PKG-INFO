@@ -39,11 +39,10 @@ Use `config_loader.load_engine_config(...)` to load a manifest and then run a pi
 
 1. Define manifests (YAML/JSON) for agents, tools, stages, workflow, pipelines, and memory under a `configs/` folder.
 2. Load them with `config_loader.load_engine_config(...)` to get an `EngineConfig`.
-3. Provide tool handlers (or LLM peasants) to `ToolRuntime`, and an LLM client to `AgentRuntime`.
+3. Provide tool handlers (deterministic or LLM-backed) to `ToolRuntime`, and an LLM client to `AgentRuntime`.
 4. Create a `TaskSpec`, let `Router` pick a pipeline, and execute via `PipelineExecutor` or the `run_task` helper.
 
 ## Documentation
 
 - Architecture: `docs/canonical/AGENT_ENGINE_OVERVIEW.md` (authoritative).
-- Research basis: `docs/canonical/RESEARCH.md` and `docs/canonical/RESEARCH_UPDATED.md` (context, memory, routing, JSON).
-- Plans: `docs/operational/PLAN_AGENT_ENGINE_CODEX.md` (implementation checklist) and `docs/operational/PLAN_AGENT_ENGINE.md` (phase steps).
+- Research basis: `docs/canonical/RESEARCH.md` (context, memory, routing, JSON).

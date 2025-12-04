@@ -52,6 +52,8 @@ This plan implements **research-driven enhancements** from RESEARCH.md that requ
 
 These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex because they require deep understanding of the research context and architectural implications.
 
+> **Scope note:** Context-profile work and “agent challenger” evolution described below are prospective research items; they are not part of the current Agent Engine runtime and must remain explicitly gated until implemented.
+
 **Can run in PARALLEL with PLAN_CODEX.md**
 
 > **King Arthur Integration Note:** All lift-and-integrate work for `legacy/king_arthur/` components (JSON engine, toolkit, overrides, manifest hygiene) is now tracked in `legacy/king_arthur/INTEGRATION_PLAN.md`. Keep this plan focused on research-driven architectural work; coordinate with the integration plan before taking any King Arthur tasks.

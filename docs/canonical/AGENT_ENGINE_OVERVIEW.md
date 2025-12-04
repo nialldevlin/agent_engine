@@ -1,6 +1,8 @@
 # Agent Engine Overview
 _Last updated: 2025-12-03_
 
+[Research Notes](docs/canonical/RESEARCH.md) is the only other canonical document; consult it for the research basis and open checklists.
+
 ## 1. Overview
 
 The **Agent Engine** is an extensible, modular framework for building
@@ -50,7 +52,7 @@ The engine consists of these components:
 
 ---
 
-## 2. Engine Responsibilities
+ ## 2. Engine Responsibilities (see RESEARCH.md §1)
 
 The Agent Engine performs three high-level operations:
 
@@ -65,7 +67,7 @@ construction, memory retrieval—supports these operations.
 
 ---
 
-## 3. Configuration
+## 3. Configuration (see RESEARCH.md §5)
 
 The engine has configurations to allow extensibility for:
 
@@ -103,7 +105,7 @@ A Task:
 
 ---
 
-## 5. Workflow Graph & Pipelines
+## 5. Workflow Graph & Pipelines (see RESEARCH.md §3)
 
 The **Workflow Graph** is the complete map of stages and allowed routing
 decisions. **Pipelines** are specific traversals through this graph.
@@ -205,7 +207,7 @@ assigned to which stages and which optional branches are enabled).
 
 ---
 
-## 6. Routing
+## 6. Routing (see RESEARCH.md §4.1-4.2)
 
 The **Router** determines:
 
@@ -233,7 +235,7 @@ are recorded on the Task for inspection and debugging.
 
 ---
 
-## 7. Agent Runtime
+## 7. Agent Runtime (see RESEARCH.md §5.1-5.3)
 
 The Agent Runtime is responsible for:
 
@@ -248,7 +250,7 @@ The Agent Runtime is responsible for:
 
 ---
 
-## 8. Tool Runtime
+## 8. Tool Runtime (see RESEARCH.md §3.1-3.3)
 
 The Tool Runtime handles:
 
@@ -273,7 +275,7 @@ the security and permissions layer. Tool execution is deterministic: agents can 
 
 ---
 
-## 9. Memory and Context
+## 9. Memory and Context (see RESEARCH.md §1-2)
 
 LLMs have no built-in memory.
 The engine constructs memory layers to supply context to agents.
@@ -334,7 +336,7 @@ pipeline and agent configuration. These conceptual layers are realized via the t
 
 ---
 
-## 10. JSON Engine
+## 10. JSON Engine (see RESEARCH.md §5.2, §7)
 
 The JSON Engine ensures reliability:
 
@@ -351,7 +353,7 @@ outputs structured and predictable.
 
 ---
 
-## 11. Telemetry and Event Bus
+## 11. Telemetry and Event Bus (see RESEARCH.md §6-7)
 
 Every significant action emits an Event:
 
@@ -378,7 +380,7 @@ The Event Bus is the observability backbone of the engine.
 
 ---
 
-## 12. Plugin and Hook System
+## 12. Plugin and Hook System (see RESEARCH.md §3.2, §5)
 
 Plugins add custom functionality without modifying the core engine.
 
@@ -398,7 +400,7 @@ engine stays lightweight while plugins provide heavy customization.
 
 ---
 
-## 13. LLM Backend Interface
+## 13. LLM Backend Interface (see RESEARCH.md §3-5)
 
 The engine is backend-agnostic.
 An `LLMClient` interface defines standard methods:
@@ -422,7 +424,7 @@ reasoning and another for fast tool-style calls), configured via manifests.
 
 ---
 
-## 14. Security and Permissions
+## 14. Security and Permissions (see RESEARCH.md Appendix A)
 
 All tools used by agents go through a permissions layer that requires explicit
 consent, with engine-level defaults and configurable per-project and per-agent

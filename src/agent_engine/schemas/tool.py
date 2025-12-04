@@ -12,7 +12,7 @@ from .base import SchemaBase
 
 class ToolKind(str, Enum):
     DETERMINISTIC = "deterministic"
-    LLM_PEASANT = "llm_peasant"
+    LLM_TOOL = "llm_tool"
 
 
 class ToolCapability(str, Enum):

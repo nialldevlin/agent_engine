@@ -150,7 +150,7 @@ Contracts and data model blueprint for Agent Engine. These are language‑agnost
 ```json
 {
   "tool_id": "string",
-  "kind": "enum: deterministic | llm_peasant",
+  "kind": "enum: deterministic | llm_tool",
   "name": "string",
   "description": "string",
   "inputs_schema_id": "string",
