@@ -18,6 +18,7 @@ from .override import OverrideSpec
 from .stage import Stage
 from .task import Task, TaskSpec
 from .tool import ToolCallRecord, ToolDefinition, ToolPlan, ToolStep
+from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
 from .workflow import Edge, Pipeline, WorkflowGraph
 
 SchemaType = Type
@@ -37,6 +38,10 @@ SCHEMA_REGISTRY: Dict[str, SchemaType] = {
     "tool_plan": ToolPlan,
     "tool_step": ToolStep,
     "tool_call_record": ToolCallRecord,
+    "gather_context_input": GatherContextInput,
+    "gather_context_output": GatherContextOutput,
+    "execution_input": ExecutionInput,
+    "execution_output": ExecutionOutput,
     "memory_config": MemoryConfig,
     "context_item": ContextItem,
     "context_fingerprint": ContextFingerprint,

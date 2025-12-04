@@ -88,6 +88,21 @@
     fallback_stage_id: null
   metadata: {}
 
+- stage_id: review
+  name: review
+  type: agent
+  entrypoint: false
+  terminal: false
+  agent_id: orchestrator
+  tool_id: null
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: fail
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}
+
 - stage_id: results
   name: results
   type: agent

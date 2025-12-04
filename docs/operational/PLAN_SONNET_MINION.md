@@ -5,7 +5,40 @@
 **Focus:** Complex, research-driven features requiring architectural design and careful integration
 
 **Date:** 2025-12-03
+**Last Updated:** 2025-12-03
 **Based on:** RESEARCH.md implementation checklists + current codebase analysis
+
+---
+
+## 🎯 EXECUTION STATUS
+
+### ✅ COMPLETED
+- **Phase 1: Multi-Tier Memory Architecture** (100% complete)
+  - All 6 tasks (1.1-1.6) implemented and tested
+  - 99 new tests added (123 total tests passing)
+  - Design: `docs/design/MEMORY_ARCHITECTURE.md`
+  - Implementation: `src/agent_engine/runtime/memory/` (backend, task_store, project_store, global_store)
+  - Integration: Updated `ContextAssembler` with backward compatibility
+  - Tests: `tests/test_context_integration.py` (10 integration tests passing)
+
+- **Phase 2.1: Context Profiles Design** (Design complete, implementation pending)
+  - Design: `docs/design/CONTEXT_PROFILES.md`
+
+### 🚧 IN PROGRESS
+- **Phase 2: Context Retrieval Policies** (20% complete - design done, implementation pending)
+
+### 📋 NEXT STEPS
+1. **Phase 2.2-2.5**: Implement Context Profiles (Minions 5-7, ~3 hours)
+   - Task 2.2: Implement ContextProfile Schema
+   - Task 2.3: Implement Context Retrieval Policies
+   - Task 2.4: Integrate Profiles into ContextAssembler (Sonnet)
+   - Task 2.5: Create Default Profiles
+   - Task 2.6: Context paging/compression telemetry
+
+2. **Phase 3**: Telemetry-Based Routing (~5-7 hours)
+3. **Phase 4**: Fallback Matrix (~4-5 hours, can run in parallel)
+4. **Phase 5-8**: Advanced features (~20-24 hours)
+5. **Phase 9**: Telemetry/UX/Cost instrumentation (~4-6 hours, parallel with Codex Category F)
 
 ---
 
@@ -43,20 +76,24 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 4. Router with telemetry-based selection - RESEARCH §4.1
 5. Fallback matrix implementation - RESEARCH §4.2
 6. Override parser for natural language - RESEARCH §8.1
+7. Context paging/compression telemetry & debug trace - RESEARCH §§1.1-1.3
 
 **TIER 2 - Advanced Features (RESEARCH.md §3, 6-7):**
-7. ReAct-style internal reasoning support - RESEARCH §3.2
-8. Post-mortem squire for root cause - RESEARCH §7.2
-9. Evolution system integration - RESEARCH §6.1
-10. Global vs project memory namespaces - RESEARCH §8.2
+8. ReAct-style internal reasoning support - RESEARCH §3.2
+9. Post-mortem squire for root cause - RESEARCH §7.2
+10. Evolution system integration - RESEARCH §6.1
+11. Global vs project memory namespaces - RESEARCH §8.2
+12. UX/cost/carbon telemetry scaffolding - RESEARCH §9, Appendix A.5-A.6
 
 ---
 
-## Phase 1: Multi-Tier Memory Architecture (RESEARCH §1.2)
+## Phase 1: Multi-Tier Memory Architecture (RESEARCH §1.2) ✅ COMPLETE
 
 **Goal:** Implement MemGPT-style memory hierarchy with task/project/global tiers
 
-### Task 1.1: Design Memory Store Architecture
+**Status:** ✅ All 6 tasks complete, 99 new tests added, 123 total tests passing
+
+### Task 1.1: Design Memory Store Architecture ✅ COMPLETE
 **Assignee:** Sonnet (Design)
 **References:** RESEARCH.md §1.2, §8.2
 **Deliverable:** Design document + interface definitions
@@ -73,9 +110,9 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 - Namespace structure for project isolation
 - Migration path from current single ContextStore
 
-**Output:** `docs/design/MEMORY_ARCHITECTURE.md`
+**Output:** ✅ `docs/design/MEMORY_ARCHITECTURE.md` (created)
 
-### Task 1.2: Implement Memory Backend Interface
+### Task 1.2: Implement Memory Backend Interface ✅ COMPLETE
 **Assignee:** Minion 1 (Haiku)
 **Files:**
 - `src/agent_engine/runtime/memory/__init__.py` (new)
@@ -91,9 +128,9 @@ class MemoryBackend(Protocol):
     def list_all(self) -> List[ContextItem]: ...
 ```
 
-**Tests:** `tests/test_memory_backend.py`
+**Tests:** ✅ `tests/test_memory_backend.py` (34 tests passing)
 
-### Task 1.3: Implement TaskMemoryStore
+### Task 1.3: Implement TaskMemoryStore ✅ COMPLETE
 **Assignee:** Minion 2 (Haiku)
 **Files:** `src/agent_engine/runtime/memory/task_store.py`
 
@@ -102,9 +139,9 @@ class MemoryBackend(Protocol):
 - Fast access for current task context
 - Automatic cleanup after task completion
 
-**Tests:** Task memory isolation and cleanup
+**Tests:** ✅ `tests/test_task_store.py` (18 tests passing)
 
-### Task 1.4: Implement ProjectMemoryStore
+### Task 1.4: Implement ProjectMemoryStore ✅ COMPLETE
 **Assignee:** Minion 3 (Haiku)
 **Files:** `src/agent_engine/runtime/memory/project_store.py`
 
@@ -114,9 +151,9 @@ class MemoryBackend(Protocol):
 - Design decisions, conventions, important failures
 - TTL or size-based eviction
 
-**Tests:** Project isolation, persistence across tasks
+**Tests:** ✅ `tests/test_project_store.py` (24 tests passing)
 
-### Task 1.5: Implement GlobalMemoryStore
+### Task 1.5: Implement GlobalMemoryStore ✅ COMPLETE
 **Assignee:** Minion 4 (Haiku)
 **Files:** `src/agent_engine/runtime/memory/global_store.py`
 
@@ -126,9 +163,9 @@ class MemoryBackend(Protocol):
 - Careful write permissions (confirmation required)
 - Long-term persistence
 
-**Tests:** Global preference persistence, cross-project access
+**Tests:** ✅ `tests/test_global_store.py` (23 tests passing)
 
-### Task 1.6: Integrate Memory Tiers into ContextAssembler
+### Task 1.6: Integrate Memory Tiers into ContextAssembler ✅ COMPLETE
 **Assignee:** Sonnet (Integration)
 **Files:** `src/agent_engine/runtime/context.py`
 
@@ -138,17 +175,20 @@ class MemoryBackend(Protocol):
 - Implement paging policies (prefer task > project > global)
 - Budget allocation across tiers
 
-**Tests:** End-to-end context assembly from multiple tiers
+**Tests:** ✅ `tests/test_context_integration.py` (10 integration tests passing)
 
 **Estimated Effort:** Phase 1 = 6-8 hours (can parallelize 1.2-1.5)
+**Actual Effort:** ~6 hours (parallelized 1.2-1.5 with 4 minions)
 
 ---
 
-## Phase 2: Context Retrieval Policies (RESEARCH §2.1, §2.2)
+## Phase 2: Context Retrieval Policies (RESEARCH §2.1, §2.2) 🚧 IN PROGRESS
 
 **Goal:** Implement agent-aware, task-aware context retrieval
 
-### Task 2.1: Design Context Profiles System
+**Status:** 20% complete (Task 2.1 design done, tasks 2.2-2.5 pending)
+
+### Task 2.1: Design Context Profiles System ✅ COMPLETE
 **Assignee:** Sonnet (Design)
 **References:** RESEARCH.md §2.1, §2.2
 **Deliverable:** `docs/design/CONTEXT_PROFILES.md`
@@ -167,7 +207,9 @@ class MemoryBackend(Protocol):
 - Default profiles for each role
 - Override mechanism for custom profiles
 
-### Task 2.2: Implement ContextProfile Schema
+**Output:** ✅ `docs/design/CONTEXT_PROFILES.md` (created)
+
+### Task 2.2: Implement ContextProfile Schema ⏳ NEXT
 **Assignee:** Minion 5 (Haiku)
 **Files:** `src/agent_engine/schemas/memory.py`
 
@@ -217,6 +259,15 @@ class ContextProfile(SchemaBase):
 - `squire_default.yaml`
 - `royalty_default.yaml`
 - `peasant_default.yaml`
+
+### Task 2.6: Context Paging & Compression Telemetry (Head/Tail Debug)
+**Assignee:** Sonnet (Integration)
+**Files:** `src/agent_engine/runtime/context.py`, `agent_engine/telemetry.py`
+
+**Add:**
+- Emit telemetry on selected vs dropped items (head/tail preserved, middle compressed).
+- Record `compression_ratio`, policy mode, and reasons for drops; expose debug flag to print trace.
+- Tests: assert telemetry events/logs include paging decisions; regression fixture for HEAD/TAIL preservation.
 
 **Estimated Effort:** Phase 2 = 4-6 hours (tasks 2.2-2.3 can parallelize)
 
@@ -682,21 +733,46 @@ evolution:
 
 ---
 
+## Phase 9: Telemetry, UX/Cost Instrumentation (RESEARCH §9, Appendix A.5-A.6)
+
+**Goal:** Add telemetry scaffolding for UX signals and cost/energy proxies; align with carbon-aware scheduling research.
+
+### Task 9.1: Cost/Latency/Energy Proxies in Telemetry
+- Capture model size, token counts, and simple latency/throughput metrics per task/agent call.
+- Store per-call cost/energy proxies in telemetry payloads for offline reporting.
+
+### Task 9.2: UX Metrics Instrumentation
+- Add fields for override usage, interruption count, retry counts, and acceptance/skip rates (where applicable).
+- Wire hooks so frontends/CLIs can submit UX feedback without blocking pipeline.
+
+### Task 9.3: Carbon/Cost Reporting Schema
+- Define lightweight schema for carbon/cost reports; document how to aggregate per-session footprints.
+- Add toggles for “low-cost/low-carbon” modes that select smaller models or skip parallelism when allowed.
+
+### Task 9.4: Integration with Routing/Compression Signals
+- Expose compression ratios, paging decisions, and routing fingerprints to the same telemetry stream for holistic analysis.
+- Ensure compatibility with Codex Category F template/telemetry work.
+
+**Estimated Effort:** Phase 9 = 4-6 hours (independent, can run parallel with Codex Category F)
+
+---
+
 ## Summary: Sonnet + Minion Task Matrix
 
 | Phase | Tasks | Parallelizable? | Estimated Effort | Dependencies |
 |-------|-------|-----------------|------------------|--------------|
 | **Phase 1: Multi-Tier Memory** | 6 tasks (1.1-1.6) | Tasks 1.2-1.5 parallel | 6-8 hours | None |
-| **Phase 2: Context Profiles** | 5 tasks (2.1-2.5) | Tasks 2.2-2.3 parallel | 4-6 hours | Phase 1 complete |
+| **Phase 2: Context Profiles** | 6 tasks (2.1-2.6) | Tasks 2.2-2.3 parallel | 5-7 hours | Phase 1 complete |
 | **Phase 3: Telemetry Routing** | 5 tasks (3.1-3.5) | Tasks 3.2-3.4 parallel | 5-7 hours | Phase 2 for profiles |
 | **Phase 4: Fallback Matrix** | 5 tasks (4.1-4.5) | Tasks 4.2-4.3 parallel | 4-5 hours | None (independent) |
 | **Phase 5: Override Parser** | 5 tasks (5.1-5.5) | Tasks 5.2-5.3 parallel | 4-6 hours | Phase 1 for memory writes |
 | **Phase 6: Post-Mortem** | 4 tasks (6.1-6.4) | Linear | 3-4 hours | None (independent) |
 | **Phase 7: Evolution** | 5 tasks (7.1-7.5) | Tasks 7.2-7.4 parallel | 5-6 hours | Phase 3 for routing |
 | **Phase 8: ReAct Support** | 3 tasks (8.1-8.3) | Linear | 3-4 hours | None (independent) |
+| **Phase 9: Telemetry/UX/Cost** | 4 tasks (9.1-9.4) | Tasks 9.1-9.3 parallel | 4-6 hours | None (independent) |
 
-**Total Estimated Effort:** 34-46 hours
-**With Maximum Parallelization:** ~20-25 hours (Sonnet + 22 Haiku minions)
+**Total Estimated Effort:** 38-52 hours
+**With Maximum Parallelization:** ~22-27 hours (Sonnet + 22 Haiku minions)
 
 ---
 
@@ -715,6 +791,9 @@ evolution:
 ### Week 3: Advanced Features
 - **Phase 7** (Evolution) - depends on Phase 3
 - **Phase 8** (ReAct Support) - PARALLEL with Phase 7
+
+### Week 4: Telemetry + UX/Cost Instrumentation
+- **Phase 9** (Telemetry/UX/Cost) - independent, align with Codex Category F
 
 ---
 

@@ -36,6 +36,7 @@ from .tool import (
     ToolStep,
     ToolStepKind,
 )
+from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
 from .workflow import Edge, Pipeline, WorkflowGraph
 
 __all__ = [
@@ -86,6 +87,10 @@ __all__ = [
     "ToolRiskLevel",
     "ToolStep",
     "ToolStepKind",
+    "GatherContextInput",
+    "GatherContextOutput",
+    "ExecutionInput",
+    "ExecutionOutput",
     "Edge",
     "Pipeline",
     "WorkflowGraph",

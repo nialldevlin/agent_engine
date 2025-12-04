@@ -17,7 +17,7 @@
   inputs_schema_id: execution_input
   outputs_schema_id: execution_output
   capabilities:
-    - workspace_mutation
+    - deterministic_safe
   risk_level: medium
   metadata: {}
   version: "0.0.1"

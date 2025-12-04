@@ -1,6 +1,6 @@
 """Runnable linear example for the Agent Engine.
 
-Pipeline: user_input -> gather_context -> interpretation -> decomposition -> planning -> execution -> results.
+Pipeline: user_input -> gather_context -> interpretation -> decomposition -> planning -> execution -> review -> results.
 """
 
 from __future__ import annotations
@@ -35,6 +35,8 @@ class ExampleLLMClient:
             return {"steps": ["clarify goals", "list files", "prepare edits"], "request": request}
         if stage_id == "planning":
             return {"plan": f"Plan steps for: {request}", "tools": prompt.get("tools")}
+        if stage_id == "review":
+            return {"status": "approved", "notes": "Plan reviewed", "request": request}
         if stage_id == "results":
             return {"status": "done", "request": request}
         return {"echo": request, "stage": stage_id}

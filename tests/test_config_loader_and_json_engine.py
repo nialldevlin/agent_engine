@@ -33,8 +33,8 @@ def test_config_loader_success(tmp_path: Path) -> None:
             "kind": "deterministic",
             "name": "ls",
             "description": "List files",
-            "inputs_schema_id": "in",
-            "outputs_schema_id": "out",
+            "inputs_schema_id": "task_spec",
+            "outputs_schema_id": "event",
             "risk_level": "low",
         }
     ]

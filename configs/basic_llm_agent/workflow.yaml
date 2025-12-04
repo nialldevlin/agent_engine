@@ -6,6 +6,7 @@ stages:
   - decomposition
   - planning
   - execution
+  - review
   - results
 edges:
   - from_stage_id: user_input
@@ -24,6 +25,9 @@ edges:
     to_stage_id: execution
     condition: null
   - from_stage_id: execution
+    to_stage_id: review
+    condition: null
+  - from_stage_id: review
     to_stage_id: results
     condition: null
 invariants: {}

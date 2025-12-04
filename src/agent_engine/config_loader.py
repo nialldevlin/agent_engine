@@ -21,6 +21,7 @@ from agent_engine.schemas import (
     Pipeline,
     Severity,
     Stage,
+    SCHEMA_REGISTRY,
     ToolDefinition,
     WorkflowGraph,
 )
@@ -46,6 +47,13 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
         agents = _load_list(manifests.get("agents"), AgentDefinition, "agent_definition")
         tools = _load_list(manifests.get("tools"), ToolDefinition, "tool_definition")
         stages = _load_list(manifests.get("stages"), Stage, "stage")
+        schema_error = _validate_tool_schemas(tools)
+        if schema_error:
+            return None, schema_error
+        schema_error = _validate_tool_schemas(_load_list(manifests.get("tools"), ToolDefinition, "tool_definition"))
+        if schema_error:
+            return None, schema_error
+        tools = _load_list(manifests.get("tools"), ToolDefinition, "tool_definition")
 
         workflow_payload = _load_file(manifests.get("workflow"))
         workflow, err = validate("workflow_graph", workflow_payload) if workflow_payload is not None else (None, None)
@@ -129,6 +137,18 @@ def _error(message: str, details=None) -> EngineError:
         severity=Severity.ERROR,
         details=details,
     )
+
+
+def _validate_tool_schemas(tools: Dict[str, ToolDefinition]) -> Optional[EngineError]:
+    missing: list[str] = []
+    for tool in tools.values():
+        for kind, schema_id in (("inputs", tool.inputs_schema_id), ("outputs", tool.outputs_schema_id)):
+            if schema_id and schema_id not in SCHEMA_REGISTRY:
+                missing.append(f"{tool.tool_id} {kind}='{schema_id}'")
+    if missing:
+        joined = ", ".join(missing)
+        return _error(f"Unknown tool schema references: {joined}")
+    return None
 
 
 def _validate_workflow(workflow: WorkflowGraph, pipelines: Dict[str, Pipeline]) -> Optional[EngineError]:
