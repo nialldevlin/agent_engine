@@ -195,6 +195,22 @@ This stage: skeleton + module stubs only.
 * Tool capability checks
 * Agent/tool/pipeline referencing rules
 
+### 2.4 Task Persistence & Resumability
+
+Tasks must be reconstructible from persisted state:
+
+* **Task Serialization:** `to_dict()` / `from_dict()` methods on Task
+* **State Checkpointing:** Store task state at stage boundaries
+* **Resume Logic:** Ability to resume from last completed stage
+* **Integration with ProjectMemory:** Store task history for later retrieval
+
+Implement:
+* `TaskManager.save_checkpoint(task_id)` - Serialize current state
+* `TaskManager.load_checkpoint(task_id)` - Restore task from checkpoint
+* `TaskManager.list_tasks(project_id)` - Query task history
+
+Storage backend: JSON files in `.agent_engine/tasks/{project_id}/{task_id}.json`
+
 ---
 
 # 🔀 **Phase 3 — Workflow Graph & Pipeline Executor**
@@ -203,13 +219,24 @@ This stage: skeleton + module stubs only.
 
 ### 3.1 Graph Representation
 
-* Node types:
+The workflow graph has two independent design axes:
 
-  * LLM agent node
-  * Tool node
-  * Decision node
-  * Merge node
-  * Feedback node
+**A. Stage Types** (what the node *does*):
+* **Agent Stage** - Executes an LLM agent with prompt + context
+* **Tool Stage** - Executes a deterministic tool or external call
+* **Start Stage** - Entry point(s) for pipeline execution
+* **End Stage** - Terminal node(s) marking completion
+
+**B. Graph Roles** (how the node behaves in the DAG):
+* **Transformation Node** - Single input → single output (most stages)
+* **Decision Node** - Single input → multiple outputs (routing/branching)
+* **Merge Node** - Multiple inputs → single output (join point)
+
+A stage's *type* determines its execution logic.
+A stage's *role* determines its connectivity in the DAG.
+
+**Example:** An "agent stage" with "decision node" role calls an LLM and routes based on output.
+
 * Edge types: normal / error / fallback / policy-driven
 
 ### 3.2 DAG Validator
@@ -230,6 +257,39 @@ This stage: skeleton + module stubs only.
 
 This produces the core execution model of Agent Engine.
 
+### 3.4 Stage Function Library
+
+Each stage type requires a defined execution pipeline. Implement:
+
+**Agent Stage Pipeline:**
+1. Load context (from ContextAssembler)
+2. Build prompt (system + user + context)
+3. Call LLM (via LLM Adapter)
+4. Validate JSON output (via JSON Engine)
+5. Store result
+6. Emit telemetry
+
+**Tool Stage Pipeline:**
+1. Validate inputs (against tool schema)
+2. Check permissions (via Security)
+3. Execute tool (handler dispatch)
+4. Validate outputs (against tool schema)
+5. Store result
+6. Emit telemetry
+
+**Decision Stage Pipeline:**
+1. Evaluate decision logic (from stage config or agent output)
+2. Select outgoing edge(s)
+3. Return next stage(s)
+
+**Merge Stage Pipeline:**
+1. Wait for all incoming stages (if synchronous merge)
+2. Aggregate inputs (as configured)
+3. Continue to next stage
+
+Create `stage_library.py` with functions for each pipeline.
+Map stage type → pipeline function in Pipeline Executor.
+
 ---
 
 # 🧠 **Phase 4 — Agent Runtime (LLM Adapter, Prompt Builder, Replies)**
@@ -238,17 +298,54 @@ This produces the core execution model of Agent Engine.
 
 ### 4.1 LLM Adapter Interface
 
-* Backend-agnostic:
+Backend-agnostic LLM interface with full observability:
 
-  * OpenAI
-  * Anthropic
-  * Local models
-* Unified:
+**Required Methods:**
+```python
+class LLMClient(Protocol):
+    def complete(
+        self,
+        messages: List[dict],
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        response_schema: Optional[dict] = None,
+        timeout: Optional[float] = None
+    ) -> LLMResponse
+```
 
-  * cost tracking
-  * token counting
-  * timeouts
-  * retries
+**LLMResponse Structure:**
+```python
+@dataclass
+class LLMResponse:
+    content: str  # or dict if JSON mode
+    model: str
+    finish_reason: str
+    usage: TokenUsage
+    latency_ms: float
+    cost_usd: Optional[float]
+```
+
+**TokenUsage Tracking:**
+```python
+@dataclass
+class TokenUsage:
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+```
+
+**Implementations Required:**
+* OpenAI adapter (GPT-4, GPT-3.5)
+* Anthropic adapter (Claude Opus, Sonnet, Haiku)
+* Local model adapter (Ollama, LM Studio)
+
+**Features:**
+* Automatic cost calculation (model-specific pricing table)
+* Timeout handling with graceful degradation
+* Retry logic (3 attempts with exponential backoff)
+* Streaming support (optional, for future)
+* Request/response logging for debugging
 
 ### 4.2 Prompt Construction
 
@@ -258,9 +355,33 @@ This produces the core execution model of Agent Engine.
 
 ### 4.3 JSON Response Enforcement
 
-* Integrate salvaged JSON Engine
-* Automatic retries with context clues
-* Clear error surfaces
+Integrate salvaged JSON Engine with comprehensive error handling:
+
+**EngineError Hierarchy:**
+* Base class: `EngineError(code, message, context, recovery_suggestion)`
+* Error codes: `validation`, `routing`, `tool`, `agent`, `json`, `security`, `unknown`
+* Severity levels: `info`, `warning`, `error`, `critical`
+
+**Schema Registry Integration:**
+* All manifests validated against registered schemas
+* Runtime JSON validated against output schemas
+* Schema version compatibility checking
+
+**Repair Strategies:**
+* Syntax repair (fix trailing commas, missing braces)
+* Schema repair (add missing required fields with defaults)
+* Re-ask with error context (when repair impossible)
+
+**Retry Logic:**
+* Retry count: configurable per stage (default 3)
+* Exponential backoff between retries
+* Include previous error in retry context
+* Escalate to error handler after max retries
+
+Implement in `json_engine.py`:
+* `validate(data, schema_id)` → (is_valid, error)
+* `repair_and_validate(data, schema_id)` → (repaired_data, error)
+* `EngineError` class hierarchy
 
 ---
 
@@ -282,7 +403,42 @@ This produces the core execution model of Agent Engine.
 * timeouts
 * execution logs
 
-### 5.3 Tool Hooks
+### 5.3 Security Model
+
+Comprehensive security framework for tool execution:
+
+**1. Tool Permission Levels:**
+* `READ_ONLY` - File reads, queries, analysis
+* `WORKSPACE_MUTATION` - File writes/edits within workspace
+* `EXTERNAL_NETWORK` - HTTP requests, API calls
+* `SYSTEM_COMMANDS` - Shell/bash execution
+* `HARDWARE_ACCESS` - GPU, special devices
+
+**2. Workspace Boundaries:**
+* Define workspace root at engine initialization
+* All file operations validated against workspace root
+* Path traversal attacks blocked (use `filesystem_safety.py`)
+* Symlink escapes prevented
+
+**3. Execution Modes:**
+* `analysis_only` - No mutations, read-only access
+* `dry_run` - Simulate mutations, don't execute
+* `normal` - Full execution with permission checks
+* `review_required` - Human approval for high-risk operations
+
+**4. Command Restrictions:**
+* Dangerous command patterns blocked (rm -rf, sudo, mkfs)
+* Whitelist of safe commands in analysis_only mode
+* Network access gated by tool capabilities
+
+**5. Implementation:**
+Create `security.py` with:
+* `check_tool_permissions(tool: ToolDefinition, mode: ExecutionMode)` → SecurityDecision
+* `validate_workspace_path(path: str)` → bool
+* `check_command_safety(command: str)` → SecurityDecision
+* `enforce_execution_mode(mode: ExecutionMode, tool: ToolDefinition)` → bool
+
+### 5.4 Tool Hooks
 
 * before_tool_call
 * after_tool_call
@@ -314,11 +470,31 @@ This produces the core execution model of Agent Engine.
 
 ### 6.3 Retrieval Policies
 
-* Recency
-* Hybrid scoring
-* Embeddings (optional, plugin)
-* ContextProfile configuration
-* Deterministic selection
+Implement concrete retrieval strategies:
+
+**Recency Policy:**
+* Select most recent N items
+* Weight by timestamp (exponential decay)
+
+**Hybrid Scoring Policy:**
+* Combine recency (40%) + relevance (40%) + importance (20%)
+* Relevance: keyword matching or embedding similarity
+* Importance: user-tagged or inferred priority
+
+**Token Budgeting:**
+* Allocate token budget across tiers (task 40%, project 40%, global 20%)
+* Crop to budget using HEAD/TAIL preservation
+* Compress middle content if compression policy enabled
+
+**Profile-Based Retrieval:**
+* Different profiles for different agent types (e.g., coder vs analyst)
+* Configurable via ContextProfile schema
+
+Create `retrieval_policies.py` with:
+* `RecencyPolicy` class
+* `HybridScoringPolicy` class
+* `TokenBudgetEnforcer` class
+* Policy interface for extensibility
 
 ---
 
@@ -379,17 +555,41 @@ No analytics baked in—only raw events + sinks.
 
 **Goal:** Create the extension layer future features depend on.
 
-### 9.1 Hook Points
+### 9.1 Hook Interface Definition
 
-* before_task
-* before_node
-* after_node
-* before_agent
-* after_agent
-* before_tool
-* after_tool
-* on_error
-* on_task_complete
+Define the complete hook API:
+
+**Hook Signatures:**
+```python
+# Task-level hooks
+def before_task(task: Task, config: EngineConfig) -> Optional[Task]
+def after_task(task: Task, result: Any) -> None
+def on_task_error(task: Task, error: EngineError) -> Optional[Task]
+
+# Stage-level hooks
+def before_stage(task: Task, stage: Stage, context: ContextPackage) -> Optional[Tuple[Stage, ContextPackage]]
+def after_stage(task: Task, stage: Stage, output: Any) -> None
+def on_stage_error(task: Task, stage: Stage, error: EngineError) -> Optional[str]  # Returns next_stage_id or None
+
+# Agent-level hooks
+def before_agent(task: Task, stage: Stage, prompt: dict) -> Optional[dict]
+def after_agent(task: Task, stage: Stage, response: dict) -> Optional[dict]
+
+# Tool-level hooks
+def before_tool(task: Task, tool_id: str, inputs: dict) -> Optional[dict]
+def after_tool(task: Task, tool_id: str, output: Any) -> None
+```
+
+**Hook Constraints:**
+* All hooks are **synchronous** (no async)
+* Hooks are **fail-open** by default (exceptions logged, execution continues)
+* Hooks can modify data by returning non-None values
+* Hook execution order: registration order
+
+**Hook Call Order:**
+1. before_task → 2. before_stage → 3. before_agent/before_tool → 4. execution → 5. after_agent/after_tool → 6. after_stage → 7. after_task
+
+Create `hooks.py` with hook interface definitions and dispatcher.
 
 ### 9.2 Plugin Loader
 
@@ -407,6 +607,8 @@ No analytics baked in—only raw events + sinks.
 # 🎛 **Phase 10 — Patterns Library (Optional, App-Layer)**
 
 **Goal:** Provide optional templates—not core engine behavior.
+
+**Note:** These patterns are **optional** and **not** part of core engine. The engine must function without them.
 
 ### 10.1 Agent Templates
 
@@ -431,7 +633,9 @@ The engine must not depend on any of them.
 
 # 🔍 **Phase 11 — Advanced Application-Layer Plugins (Optional)**
 
-This is where the “awesome later” features belong.
+**IMPORTANT:** These are **NOT core engine components**. They are application-layer plugins that consume the engine's APIs. The engine must NOT depend on any of these.
+
+This is where the "awesome later" features belong.
 
 ### 11.1 ReAct Pattern Plugin
 
