@@ -11,10 +11,9 @@ from .base import SchemaBase
 
 
 class AgentRole(str, Enum):
-    KNIGHT = "knight"
-    SQUIRE = "squire"
-    PEASANT = "peasant"
-    ROYALTY = "royalty"
+    """Neutral agent roles for manifest-driven configuration."""
+
+    AGENT = "agent"
 
 
 class ToolBias(str, Enum):
@@ -35,7 +34,7 @@ class Emphasis(str, Enum):
     HIGH = "high"
 
 
-class KnightManifest(SchemaBase):
+class AgentManifest(SchemaBase):
     reasoning_steps: Optional[int] = Field(default=None)
     tool_bias: ToolBias = Field(default=ToolBias.BALANCED)
     verbosity: Verbosity = Field(default=Verbosity.NORMAL)
@@ -46,7 +45,7 @@ class AgentDefinition(SchemaBase):
     agent_id: str
     role: AgentRole
     profile: Dict[str, object] = Field(default_factory=dict)
-    manifest: KnightManifest = Field(default_factory=KnightManifest)
+    manifest: AgentManifest = Field(default_factory=AgentManifest)
     schema_id: Optional[str] = Field(default=None, description="Expected output schema")
     version: str = Field(default="0.0.1")
     metadata: Dict[str, object] = Field(default_factory=dict)

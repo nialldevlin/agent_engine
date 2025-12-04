@@ -1,7 +1,7 @@
 """Runtime exports and helpers."""
 
 from agent_engine.runtime.agent_runtime import AgentRuntime
-from agent_engine.runtime.context import ContextAssembler, ContextStore
+from agent_engine.runtime.context import ContextAssembler
 from agent_engine.runtime.llm_client import AnthropicLLMClient, LLMClient, MockLLMClient, OllamaLLMClient
 from agent_engine.runtime.pipeline_executor import PipelineExecutor
 from agent_engine.runtime.router import Router
@@ -11,7 +11,6 @@ from agent_engine.runtime.tool_runtime import ToolRuntime
 __all__ = [
     "AgentRuntime",
     "ContextAssembler",
-    "ContextStore",
     "AnthropicLLMClient",
     "OllamaLLMClient",
     "MockLLMClient",

@@ -15,22 +15,6 @@ from agent_engine.runtime.memory import (
 
 
 @dataclass
-class ContextStore:
-    """DEPRECATED: Legacy single-tier context store.
-
-    Kept for backward compatibility. New code should use ContextAssembler
-    with multi-tier memory stores (task/project/global).
-    """
-    items: Dict[str, ContextItem] = field(default_factory=dict)
-
-    def add(self, item: ContextItem) -> None:
-        self.items[item.context_item_id] = item
-
-    def list_items(self) -> List[ContextItem]:
-        return list(self.items.values())
-
-
-@dataclass
 class ContextAssembler:
     """Assembles context from multi-tier memory stores.
 
@@ -39,11 +23,8 @@ class ContextAssembler:
     - Project Memory: Persistent, project-scoped (isolated by project_id)
     - Global Memory: Persistent, cross-project (user preferences)
 
-    Migration note: Old 'store' field kept for backward compatibility.
+    Legacy ContextStore support has been removed; only multi-tier stores are supported.
     """
-
-    # Legacy field (deprecated)
-    store: Optional[ContextStore] = None
 
     # Multi-tier memory stores
     task_stores: Dict[str, TaskMemoryStore] = field(default_factory=dict)
@@ -65,12 +46,7 @@ class ContextAssembler:
         5. Select items within budget using HEAD/TAIL + importance
         6. Return ContextPackage with compression ratio
 
-        Backward compatibility: Falls back to old store if multi-tier not set up.
         """
-
-        # Backward compatibility: use old store if present and no task stores
-        if self.store and not self.task_stores:
-            return self._build_context_legacy(task, request)
 
         # Get or create task store
         task_store = self.task_stores.get(task.task_id)
@@ -116,44 +92,6 @@ class ContextAssembler:
             items=selected,
             summary=None,
             compression_ratio=compression_ratio
-        )
-
-    def _build_context_legacy(self, task: Task, request: ContextRequest) -> ContextPackage:
-        """Legacy context building (backward compatibility)."""
-        items = self.store.list_items() if self.store else []
-        budget = request.budget_tokens
-        selected: List[ContextItem] = []
-
-        # Sort by importance then insertion order
-        items_sorted = sorted(items, key=lambda i: (-(i.importance or 0), i.timestamp or ""))
-
-        head_tail_preserve = None
-        if self.memory_config and self.memory_config.context_policy:
-            head_tail_preserve = self.memory_config.context_policy.head_tail_preserve
-
-        if head_tail_preserve:
-            head = items_sorted[:head_tail_preserve]
-            tail = items_sorted[-head_tail_preserve:] if head_tail_preserve > 0 else []
-            items_sorted = head + [i for i in items_sorted if i not in head and i not in tail] + tail
-
-        current_tokens = 0
-        for item in items_sorted:
-            cost = item.token_cost or 0
-            if budget and current_tokens + cost > budget:
-                continue
-            selected.append(item)
-            current_tokens += cost
-
-        compression_ratio = None
-        if budget and items:
-            total_cost = sum(i.token_cost or 0 for i in items) or 1
-            compression_ratio = min(1.0, current_tokens / total_cost)
-
-        return ContextPackage(
-            context_package_id=f"ctx-{getattr(task, 'task_id', 'unknown')}",
-            items=selected,
-            summary=None,
-            compression_ratio=compression_ratio,
         )
 
     def _get_budget_allocation(self, request: ContextRequest) -> Dict[str, int]:

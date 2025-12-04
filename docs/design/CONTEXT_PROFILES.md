@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Context retrieval is a **first-class design problem** for multi-agent systems. Different agents (knight, squire, royalty, peasant) need different **views of memory** tailored to their roles and tasks.
+Context retrieval is a **first-class design problem** for multi-agent systems. Different agents (implementer, analyst, reviewer, assistant) need different **views of memory** tailored to their roles and tasks.
 
 This document specifies:
 1. **ContextProfile**: Agent-specific memory preferences
@@ -18,7 +18,7 @@ This document specifies:
 
 ### Key Principles (from RESEARCH.md)
 
-- **Agent-aware**: Knights need code+tests, Royalty needs summaries+decisions
+- **Agent-aware**: Implementer agents need code+tests, Strategist needs summaries+decisions
 - **Task-aware**: Bug fix vs. refactor vs. new feature require different context
 - **Telemetry-driven**: Log profiles + fingerprints to correlate with success/failure
 
@@ -31,7 +31,7 @@ This document specifies:
 class ContextProfile:
     """Defines what context an agent prefers.
 
-    Each agent kind (knight/squire/royalty/peasant) has a default profile
+    Each agent kind (implementer/analyst/reviewer/assistant) has a default profile
     that can be overridden per task.
     """
     profile_id: str
@@ -68,7 +68,7 @@ class ContextProfile:
 
 ## 3. Default Profiles by Agent Kind
 
-### 3.1 Knight Profile (Code Implementer)
+### 3.1 Implementer Profile (Code Implementer)
 
 **Role**: Implements code, runs tools, mutates workspace
 
@@ -78,8 +78,8 @@ class ContextProfile:
 - **Low priority**: Conversation history, summaries, preferences
 
 ```python
-KNIGHT_PROFILE = ContextProfile(
-    profile_id="knight_default",
+IMPLEMENTER_PROFILE = ContextProfile(
+    profile_id="implementer_default",
     task_weight=0.5,      # Focus on current task
     project_weight=0.3,   # Some project context
     global_weight=0.2,    # Minimal global context
@@ -95,11 +95,11 @@ KNIGHT_PROFILE = ContextProfile(
     preserve_tail=3,
 
     description="Code-focused profile for implementation agents",
-    tags=["knight", "implementation"]
+    tags=["implementer", "implementation"]
 )
 ```
 
-### 3.2 Squire Profile (Reviewer/Helper)
+### 3.2 Analyst Profile (Reviewer/Helper)
 
 **Role**: Reviews plans, provides feedback, assists with analysis
 
@@ -110,7 +110,7 @@ KNIGHT_PROFILE = ContextProfile(
 
 ```python
 SQUIRE_PROFILE = ContextProfile(
-    profile_id="squire_default",
+    profile_id="analyst_default",
     task_weight=0.4,
     project_weight=0.4,
     global_weight=0.2,
@@ -126,11 +126,11 @@ SQUIRE_PROFILE = ContextProfile(
     preserve_tail=2,
 
     description="Analysis-focused profile for review agents",
-    tags=["squire", "review"]
+    tags=["analyst", "review"]
 )
 ```
 
-### 3.3 Royalty Profile (High-Level Planner)
+### 3.3 Strategist Profile (High-Level Planner)
 
 **Role**: Decomposes tasks, makes architectural decisions, delegates
 
@@ -141,7 +141,7 @@ SQUIRE_PROFILE = ContextProfile(
 
 ```python
 ROYALTY_PROFILE = ContextProfile(
-    profile_id="royalty_default",
+    profile_id="strategist_default",
     task_weight=0.2,      # Less focus on current task details
     project_weight=0.5,   # Strong focus on project knowledge
     global_weight=0.3,    # More user preferences
@@ -157,21 +157,21 @@ ROYALTY_PROFILE = ContextProfile(
     preserve_tail=1,
 
     description="Strategic profile for planning agents",
-    tags=["royalty", "planning"]
+    tags=["strategist", "planning"]
 )
 ```
 
-### 3.4 Peasant Profile (LLM Tool)
+### 3.4 Assistant Profile (LLM Tool)
 
 **Role**: Narrow helper tasks (ranking, summarization, JSON repair)
 
 **Context needs**:
 - **High priority**: Only what's directly relevant to the helper task
-- **Very minimal context** (peasants are cheap, focused helpers)
+- **Very minimal context** (assistants are cheap, focused helpers)
 
 ```python
 PEASANT_PROFILE = ContextProfile(
-    profile_id="peasant_default",
+    profile_id="assistant_default",
     task_weight=0.8,      # Hyper-focused on immediate task
     project_weight=0.1,
     global_weight=0.1,
@@ -187,7 +187,7 @@ PEASANT_PROFILE = ContextProfile(
     preserve_tail=1,
 
     description="Minimal profile for helper LLM tools",
-    tags=["peasant", "helper"]
+    tags=["assistant", "helper"]
 )
 ```
 
@@ -364,16 +364,16 @@ class ContextAssembler:
     def __init__(self, ...):
         self.policy = ContextPolicy()
         self.default_profiles = {
-            "knight": KNIGHT_PROFILE,
-            "squire": SQUIRE_PROFILE,
-            "royalty": ROYALTY_PROFILE,
-            "peasant": PEASANT_PROFILE
+            "implementer": IMPLEMENTER_PROFILE,
+            "analyst": SQUIRE_PROFILE,
+            "strategist": ROYALTY_PROFILE,
+            "assistant": PEASANT_PROFILE
         }
 
     def build_context_with_profile(
         self,
         task: Task,
-        agent_kind: str,  # "knight", "squire", "royalty", "peasant"
+        agent_kind: str,  # "implementer", "analyst", "strategist", "assistant"
         budget_tokens: int,
         profile_override: Optional[ContextProfile] = None
     ) -> Tuple[ContextPackage, ContextFingerprint]:
@@ -448,7 +448,7 @@ class ContextAssembler:
 
 ## 7. Usage Examples
 
-### Example 1: Knight implementing a bug fix
+### Example 1: Implementer implementing a bug fix
 
 ```python
 # Task: Fix bug in src/parser.py
@@ -464,22 +464,22 @@ task = Task(
     metadata={"project_id": "my-project", "tags": ["bugfix", "parser"]}
 )
 
-# Build context for knight
+# Build context for implementer
 assembler = ContextAssembler()
 package, fingerprint = assembler.build_context_with_profile(
     task=task,
-    agent_kind="knight",
+    agent_kind="implementer",
     budget_tokens=4000
 )
 
-# Knight gets:
+# Implementer gets:
 # - High weight on task memory (current investigation)
 # - src/parser.py boosted (mentioned file)
 # - Code + test items prioritized
 # - Minimal conversation history
 ```
 
-### Example 2: Royalty planning a refactor
+### Example 2: Strategist planning a refactor
 
 ```python
 # Task: Plan refactoring of authentication system
@@ -495,21 +495,21 @@ task = Task(
     metadata={"project_id": "my-project", "tags": ["refactor", "auth"]}
 )
 
-# Build context for royalty
+# Build context for strategist
 package, fingerprint = assembler.build_context_with_profile(
     task=task,
-    agent_kind="royalty",
+    agent_kind="strategist",
     budget_tokens=8000
 )
 
-# Royalty gets:
+# Strategist gets:
 # - High weight on project memory (decisions, conventions)
 # - Summaries and high-level architecture
 # - NO raw code or tool outputs
 # - User preferences about auth patterns
 ```
 
-### Example 3: Squire reviewing a plan
+### Example 3: Analyst reviewing a plan
 
 ```python
 # Task: Review implementation plan
@@ -525,14 +525,14 @@ task = Task(
     metadata={"project_id": "my-project", "tags": ["review", "api"]}
 )
 
-# Build context for squire
+# Build context for analyst
 package, fingerprint = assembler.build_context_with_profile(
     task=task,
-    agent_kind="squire",
+    agent_kind="analyst",
     budget_tokens=3000
 )
 
-# Squire gets:
+# Analyst gets:
 # - Balanced task/project memory
 # - Plans, reasoning, decisions prioritized
 # - Some code for context
@@ -549,8 +549,8 @@ Every context assembly logs:
 {
     "event": "context_assembled",
     "task_id": "fix-parser-bug",
-    "agent_kind": "knight",
-    "profile_id": "knight_default",
+    "agent_kind": "implementer",
+    "profile_id": "implementer_default",
     "fingerprint": {
         "mode": "implement",
         "complexity": "simple",
@@ -568,9 +568,9 @@ Every context assembly logs:
 ```
 
 This enables:
-- **Routing optimization**: "Tasks with fingerprint X succeed 90% with knight Y"
-- **Profile tuning**: "Knight profile should increase task_weight for bugfix tasks"
-- **Evolution**: "Knight variant with higher test preference performs better on complex tasks"
+- **Routing optimization**: "Tasks with fingerprint X succeed 90% with implementer Y"
+- **Profile tuning**: "Implementer profile should increase task_weight for bugfix tasks"
+- **Evolution**: "Implementer variant with higher test preference performs better on complex tasks"
 
 ---
 
@@ -589,7 +589,7 @@ Phase 2 tasks from PLAN_SONNET_MINION.md:
 ## 10. Future Enhancements
 
 1. **Learned Profiles**: Use telemetry to automatically tune profile weights for different task types
-2. **Dynamic Profiles**: Adjust profile mid-task based on outcomes (e.g., if knight fails, increase project context)
+2. **Dynamic Profiles**: Adjust profile mid-task based on outcomes (e.g., if implementer fails, increase project context)
 3. **User-Custom Profiles**: Let users define custom profiles for specific projects or agents
 4. **Profile Inheritance**: Allow profiles to inherit from base profiles with overrides
 5. **Context Diff**: Show users what context each agent sees (debugging/transparency)

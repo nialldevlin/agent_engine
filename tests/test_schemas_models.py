@@ -56,7 +56,7 @@ def test_tool_definition() -> None:
 
 
 def test_agent_definition_defaults() -> None:
-    agent = AgentDefinition(agent_id="a1", role=AgentRole.KNIGHT)
+    agent = AgentDefinition(agent_id="a1", role=AgentRole.AGENT)
     assert agent.manifest.tool_bias.value == "balanced"
 
 

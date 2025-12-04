@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, Type
 
-from .agent import AgentDefinition, KnightManifest
+from .agent import AgentDefinition, AgentManifest
 from .errors import EngineError, FailureSignature
 from .event import Event
 from .memory import (
@@ -33,7 +33,7 @@ SCHEMA_REGISTRY: Dict[str, SchemaType] = {
     "workflow_graph": WorkflowGraph,
     "pipeline": Pipeline,
     "agent_definition": AgentDefinition,
-    "knight_manifest": KnightManifest,
+    "agent_manifest": AgentManifest,
     "tool_definition": ToolDefinition,
     "tool_plan": ToolPlan,
     "tool_step": ToolStep,

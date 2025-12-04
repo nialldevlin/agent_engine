@@ -31,9 +31,9 @@ The Agent Engine is ~85% complete. Two parallel implementation plans bring it to
 - Context retrieval policies (agent-aware, task-aware)
 - Telemetry-based routing (MoA-style with fitness scoring)
 - Fallback matrix for structured failure handling
-- Natural language override parser
+- King Arthur lift/integration tasks (JSON engine, toolkit, overrides, manifest hygiene) coordinated via `legacy/king_arthur/INTEGRATION_PLAN.md` (deterministic manifest edits only; no legacy role resurrection)
 - Post-mortem squire for root-cause analysis
-- Evolution system (knight challengers)
+- Evolution system (deterministic scoring + manifest cloning workflow as defined in integration plan)
 - ReAct-style internal reasoning
 
 **Why Sonnet:** Requires architectural design, research understanding, complex integration
@@ -95,8 +95,8 @@ Both plans can run **simultaneously** for maximum efficiency:
 
 ### Week 3: Advanced Features
 **Codex (Codex Max):** Categories C & D - 7-9 hrs ✨
-**Sonnet:** Phase 5 (Overrides) + Phase 6 (Post-Mortem) - 7-10 hrs
-**Result:** Algorithms + tests + override system
+**Sonnet:** Phase 6 (Post-Mortem) + King Arthur integration follow-ups - 7-10 hrs
+**Result:** Algorithms + tests + post-mortem system + KA lift
 
 ### Week 4: Polish & Evolution
 **Codex (Codex Max):** Category E (Refactoring) - 2-4 hrs ✨
@@ -132,7 +132,7 @@ Both plans can run **simultaneously** for maximum efficiency:
 - ✅ PLAN_CODEX Category C: Compression (RESEARCH §1.3)
 - ✅ PLAN_CODEX Category C: Templates (RESEARCH §5.1)
 - ✅ PLAN_CODEX Category C: JSON repair (RESEARCH §7.1)
-- ✅ PLAN_SONNET Phase 5: Overrides (RESEARCH §8.1)
+- ✅ KA Integration Plan: JSON/toolkit overrides + hygiene (RESEARCH §8.1)
 - ✅ PLAN_SONNET Phase 6: Post-mortem (RESEARCH §7.2)
 - ✅ PLAN_SONNET Phase 7: Evolution (RESEARCH §6.1)
 - ✅ PLAN_SONNET Phase 8: ReAct (RESEARCH §3.2)
@@ -149,7 +149,7 @@ All requirements from the original unified plan are captured:
 - Production hardening → PLAN_CODEX Category E + PLAN_SONNET Phase 4
 - Research features → Both plans comprehensively
 - Tests → PLAN_CODEX Category D
-- Advanced patterns → PLAN_SONNET Phases 5-8
+- Advanced patterns → PLAN_SONNET Phases 6-8 + KA Integration Plan
 
 ---
 

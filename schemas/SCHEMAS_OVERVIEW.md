@@ -126,7 +126,7 @@ Contracts and data model blueprint for Agent Engine. These are language‑agnost
 ```json
 {
   "agent_id": "string",
-  "role": "enum: knight | squire | peasant | royalty",
+  "role": "enum: agent",
   "profile": {
     "specialty": ["string"],                 // domains/files/tags
     "risk_tolerance": "enum: low | medium | high",

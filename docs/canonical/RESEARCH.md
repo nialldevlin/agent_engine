@@ -77,11 +77,11 @@ The goal is to keep implementation decisions tightly linked to published work or
 - Multi‑agent surveys emphasize that each agent type (planner, task_runner, reviewer) may need a **different view of memory**.
 
 **Implications for Agent Engine**  
-- Retrieval must be **task‑aware** (bug‑fix vs. doc rewrite vs. refactor) and **agent‑aware** (knight vs. squire vs. royalty).  
+- Retrieval must be **task‑aware** (bug‑fix vs. doc rewrite vs. refactor) and **agent‑aware** (different agent roles (planner vs. implementer vs. reviewer)).  
 - Context engineering is a module: given a normalized task spec, it produces a **`ContextPackage`** tailored to that step and agent.
 
 **Implementation checklist**
-- [ ] Introduce lightweight `ContextProfile`s per agent kind (knight/squire/royalty/peasant).  
+- [ ] Introduce lightweight `ContextProfile`s per agent kind (planner/implementer/reviewer/assistant).  
 - [ ] Add a `ContextPolicy` that takes `(task_spec, mode, agent_profile)` and returns a `ContextRequest` (`domains`, `files`, `history_types`, `budget`).  
 - [ ] Implement scoring or heuristics that bias retrieval toward:  
   - directly mentioned files/paths;  
@@ -95,15 +95,15 @@ The goal is to keep implementation decisions tightly linked to published work or
 - Telemetry‑driven systems treat each task as a **fingerprint** (features of context + tools + outcome) to learn which agents work best in which regions.
 
 **Implications for Agent Engine**  
-- Knights, squires, peasants, and royalty should have different **default context mixes**. For example:  
-  - Knights: code + tests + minimal prior conversation.  
-  - Royalty: summaries, decisions, user preferences, almost no raw code.  
-- Context fingerprints can drive both **routing** and **evolution** (which knight variants survive).
+- Agents, analysts, assistants, and strategist should have different **default context mixes**. For example:  
+  - Agents: code + tests + minimal prior conversation.  
+  - Strategist: summaries, decisions, user preferences, almost no raw code.  
+- Context fingerprints can drive both **routing** and **evolution** (which agent variants survive).
 
 **Implementation checklist**
 - [ ] Define a `ContextFingerprint` struct (e.g., hashes of key files, tags, mode, approximate complexity).  
 - [ ] Log the fingerprint with each task outcome in telemetry.  
-- [ ] Use fingerprints in router/evolution logic to preferentially route similar tasks to knights that historically perform well there.
+- [ ] Use fingerprints in router/evolution logic to preferentially route similar tasks to agents that historically perform well there.
 
 ---
 
@@ -117,12 +117,12 @@ The goal is to keep implementation decisions tightly linked to published work or
 
 **Implications for Agent Engine**  
 - Tool use should be driven by a **structured plan** (even if produced in‑context), not ad‑hoc calls embedded in free text.  
-- Knights should generate **`ToolPlan` JSON** (sequence of steps with tool IDs, inputs, and reasons) that is then executed by deterministic code.  
+- Agents should generate **`ToolPlan` JSON** (sequence of steps with tool IDs, inputs, and reasons) that is then executed by deterministic code.  
 - Some tool usage patterns can be turned into **macro‑tools** for common workflows (scan → edit → test).
 
 **Implementation checklist**
 - [ ] Add a `ToolPlan` schema (steps with `tool_id`, `inputs`, `reason`, `kind`).  
-- [ ] Wrap knight prompts to require a `ToolPlan` when `mode=implement` or when tools are allowed.  
+- [ ] Wrap agent prompts to require a `ToolPlan` when `mode=implement` or when tools are allowed.  
 - [ ] Implement an task_runner that:  
   - runs `ToolPlan` deterministically;  
   - logs each call with results and errors;  
@@ -136,27 +136,27 @@ The goal is to keep implementation decisions tightly linked to published work or
 
 **Implications for Agent Engine**  
 - Pipeline stages (Interpreter, Planner/Todo, TaskRunner) should be explicit and their artifacts passed as **typed JSON**, not buried in raw text.  
-- For non‑trivial tasks, knights should perform at least a **mini ReAct loop** internally (reason → act → observe → adjust), but expose only the final, structured outputs to the pipeline.
+- For non‑trivial tasks, agents should perform at least a **mini ReAct loop** internally (reason → act → observe → adjust), but expose only the final, structured outputs to the pipeline.
 
 **Implementation checklist**
 - [ ] Require `analysis_only` tasks to output a plan but no tools; `implement` tasks must output both a plan and a `ToolPlan`.  
-- [ ] Allow a small number of internal “reason + act” cycles per knight call, but enforce a hard cap and log counts.  
-- [ ] Add a squire or reviewer mode that can inspect `ToolPlan` + tool logs for obviously unsafe or redundant steps.
+- [ ] Allow a small number of internal “reason + act” cycles per agent call, but enforce a hard cap and log counts.  
+- [ ] Add a analyst or reviewer mode that can inspect `ToolPlan` + tool logs for obviously unsafe or redundant steps.
 
-### 3.3 Deterministic vs. LLM‑based tools and peasants
+### 3.3 Deterministic vs. LLM‑based tools and assistants
 
 **Key results**  
 - Many agent frameworks distinguish between **deterministic tools** (file operations, compilation, tests) and **LLM‑based helpers** used as sub‑agents (rankers, summarizers, JSON repairers).  
 - Mixed‑initiative designs show better safety by letting the LLM propose tool usage but keeping final execution and gating deterministic.
 
 **Implications for Agent Engine**  
-- Peasants (LLM tools) should be **narrow**, with strict schemas and no further agent calls.  
-- Knights should prefer deterministic tools when possible and treat peasants as **advisors** (e.g., for ranking or compression), not direct actors on the workspace.
+- Assistants (LLM tools) should be **narrow**, with strict schemas and no further agent calls.  
+- Agents should prefer deterministic tools when possible and treat assistants as **advisors** (e.g., for ranking or compression), not direct actors on the workspace.
 
 **Implementation checklist**
 - [ ] Mark tools with capabilities and risk levels (`deterministic_safe`, `workspace_mutation`, `external_network`, `expensive`).  
-- [ ] Enforce that peasants can only call deterministic tools (no recursive agent calls).  
-- [ ] Require knights to justify risky tool usage in `ToolPlan`, so consent prompts and reviewers have structured reasons.
+- [ ] Enforce that assistants can only call deterministic tools (no recursive agent calls).  
+- [ ] Require agents to justify risky tool usage in `ToolPlan`, so consent prompts and reviewers have structured reasons.
 
 ---
 
@@ -169,15 +169,15 @@ The goal is to keep implementation decisions tightly linked to published work or
 - Surveys of LLM‑based multi‑agent systems highlight common components: **profiles**, **perception**, **self‑action**, **mutual interaction**, and **evolution** across agents.
 
 **Implications for Agent Engine**  
-- Agent Engine’s royalty/knight/squire/peasant hierarchy fits well into a MoA framing: multiple expert knights plus a router and reviewers.  
+- Agent Engine’s strategist/agent/analyst/assistant hierarchy fits well into a MoA framing: multiple expert agents plus a router and reviewers.  
 - Routing should be informed by **task features and telemetry**, not only hand‑written rules.  
 - Critical tasks can benefit from **parallel agents** plus a reviewer that chooses or fuses outputs.
 
 **Implementation checklist**
-- [ ] Define a router interface that takes a normalized `TaskSpec` + `ContextFingerprint` and returns `(primary_knight, backups, confidence)`.  
+- [ ] Define a router interface that takes a normalized `TaskSpec` + `ContextFingerprint` and returns `(primary_agent, backups, confidence)`.  
 - [ ] Start with a simple heuristic/router (rules + small classifier), log routing decisions and outcomes.  
-- [ ] For high‑risk tasks (large diff, critical files), optionally run 2–3 knights in parallel and use a reviewer squire to compare outputs.  
-- [ ] Maintain per‑knight fitness scores by domain (files, tags) and feed them back into routing.
+- [ ] For high‑risk tasks (large diff, critical files), optionally run 2–3 agents in parallel and use a reviewer analyst to compare outputs.  
+- [ ] Maintain per‑agent fitness scores by domain (files, tags) and feed them back into routing.
 
 ### 4.2 Fallbacks and failure signatures
 
@@ -187,11 +187,11 @@ The goal is to keep implementation decisions tightly linked to published work or
 
 **Implications for Agent Engine**  
 - Every major failure mode (JSON parse error, tool crash, plan invalid, tests fail) should map to a **failure signature** with a recommended response.  
-- Fallbacks might include: retry with the same knight, switch to a more conservative knight, escalate to Agent Engine, or ask the user for guidance.
+- Fallbacks might include: retry with the same agent, switch to a more conservative agent, escalate to Agent Engine, or ask the user for guidance.
 
 **Implementation checklist**
 - [ ] Define a `FailureSignature` schema and attach it to telemetry when tasks fail.  
-- [ ] Implement a fallback matrix: for each signature, specify allowed actions (retry, switch knight, escalate).  
+- [ ] Implement a fallback matrix: for each signature, specify allowed actions (retry, switch agent, escalate).  
 - [ ] Log which fallback path was chosen and whether the second attempt succeeded.
 
 ---
@@ -206,7 +206,7 @@ The goal is to keep implementation decisions tightly linked to published work or
 
 **Implications for Agent Engine**  
 - Prompt wrapping should be centralized in a `build_prompt(agent, task)` function that:  
-  - applies a shared skeleton per agent kind (knight, squire, peasant, royalty);  
+  - applies a shared skeleton per agent kind (agent, analyst, assistant, strategist);  
   - inserts `mode` semantics;  
   - lists allowed tools;  
   - injects context;  
@@ -230,7 +230,7 @@ The goal is to keep implementation decisions tightly linked to published work or
 
 **Implementation checklist**
 - [ ] Ensure every pipeline boundary has an explicit JsonContract/schema, referenced by ID in telemetry.  
-- [ ] Use constrained decoding / structured outputs where available; fall back to a repair squire only on parse or minor schema errors.  
+- [ ] Use constrained decoding / structured outputs where available; fall back to a repair analyst only on parse or minor schema errors.  
 - [ ] Track which backend and which repair tier was used for each call to inform future template or schema tweaks.
 
 ---
@@ -244,14 +244,14 @@ The goal is to keep implementation decisions tightly linked to published work or
 - Evolutionary loops can discover better prompts and strategies than hand‑tuned ones, particularly for reasoning and classification tasks.
 
 **Implications for Agent Engine**  
-- Knights (and possibly squires) can be treated as **evolving species**: manifests and wrappers mutate over time under telemetry‑based selection.  
+- Agents (and possibly analysts) can be treated as **evolving species**: manifests and wrappers mutate over time under telemetry‑based selection.  
 - Evolution should operate over **explicit parameters** (e.g., reasoning steps, tool usage guidelines, verbosity), not random strings.
 
 **Implementation checklist**
-- [ ] Define a `KnightManifest` parameter space (e.g., emphasis on tests, exploration vs. conservatism, verbosity).  
-- [ ] Periodically spawn challenger knights with small manifest/prompt mutations.  
+- [ ] Define a `AgentManifest` parameter space (e.g., emphasis on tests, exploration vs. conservatism, verbosity).  
+- [ ] Periodically spawn challenger agents with small manifest/prompt mutations.  
 - [ ] Route a small fraction of tasks to challengers in parallel, score performance, and either promote or retire them.  
-- [ ] Record evolution lineage so you can trace where a successful knight came from.
+- [ ] Record evolution lineage so you can trace where a successful agent came from.
 
 ### 6.2 Telemetry, benchmarks, and SWE‑style evaluation
 
@@ -260,11 +260,11 @@ The goal is to keep implementation decisions tightly linked to published work or
 - Strong systems use both **synthetic regression tests** and **real‑task benchmarks** to guide evolution and template changes.
 
 **Implications for Agent Engine**  
-- Telemetry should make it easy to compute per‑knight fitness scores and to run periodic evaluation suites.  
+- Telemetry should make it easy to compute per‑agent fitness scores and to run periodic evaluation suites.  
 - Even if you don’t integrate SWE‑bench directly, you can mirror the pattern: repo snapshots + issue → patch + tests.
 
 **Implementation checklist**
-- [ ] Design a simple internal benchmark suite (Python refactors, ROS launch fixes, doc rewrites, etc.) and run it against knights regularly.  
+- [ ] Design a simple internal benchmark suite (Python refactors, ROS launch fixes, doc rewrites, etc.) and run it against agents regularly.  
 - [ ] Store scores and link them to `template_version`, `manifest_version`, and evolution lineage.  
 - [ ] Use scores as part of the fitness function for evolution and routing decisions.
 
@@ -279,7 +279,7 @@ The goal is to keep implementation decisions tightly linked to published work or
 - Practical guides recommend limiting repair logic to syntax/structure to avoid compounding hallucinations.
 
 **Implications for Agent Engine**  
-- JsonContracts and a small **JSON repair squire** are enough to handle most malformed outputs if used judiciously.  
+- JsonContracts and a small **JSON repair analyst** are enough to handle most malformed outputs if used judiciously.  
 - Retries should be **error‑type‑aware**: cosmetic issues get deterministic fixes, major mismatches trigger new calls with better error signals.
 
 **Implementation checklist**
@@ -290,7 +290,7 @@ The goal is to keep implementation decisions tightly linked to published work or
 ### 7.2 Root‑cause analysis and failure tagging
 
 **Key results**  
-- Post‑mortem style analysis (even done by a small LLM squire) can turn raw logs into structured **root‑cause tags** that are useful for evolution and debugging.  
+- Post‑mortem style analysis (even done by a small LLM analyst) can turn raw logs into structured **root‑cause tags** that are useful for evolution and debugging.  
 - Surveys on feedback in LLM agents treat **self‑analysis and external feedback** as key components for stable long‑term behavior.
 
 **Implications for Agent Engine**  
@@ -298,7 +298,7 @@ The goal is to keep implementation decisions tightly linked to published work or
 - These artifacts can later inform routing, evolution, and template changes.
 
 **Implementation checklist**
-- [ ] Create a “post‑mortem squire” that, given the plan, tool logs, and errors, outputs a short root‑cause summary plus tags (`bad_plan`, `context_miss`, `tool_failure`, etc.).  
+- [ ] Create a “post‑mortem analyst” that, given the plan, tool logs, and errors, outputs a short root‑cause summary plus tags (`bad_plan`, `context_miss`, `tool_failure`, etc.).  
 - [ ] Store post‑mortems in telemetry; display them in developer tooling when debugging recurring issues.  
 - [ ] Use root‑cause stats to prioritize improvements (e.g., if many failures are `context_miss`, focus on context engineering).
 
@@ -317,8 +317,8 @@ The goal is to keep implementation decisions tightly linked to published work or
 - “Remember this” should default to **project‑scoped** memory, with global scope only for obvious user preferences.
 
 **Implementation checklist**
-- [ ] Implement a small override parser (could be an LLM squire) that maps raw text to `OverrideSpec { kind, scope, target, severity }`.  
-- [ ] Add confirmation flows for potentially dangerous overrides (e.g., retiring knights, skipping safety checks, global memory writes).  
+- [ ] Implement a small override parser (could be an LLM analyst) that maps raw text to `OverrideSpec { kind, scope, target, severity }`.  
+- [ ] Add confirmation flows for potentially dangerous overrides (e.g., retiring agents, skipping safety checks, global memory writes).  
 - [ ] Log overrides and their effects alongside task telemetry.
 
 ### 8.2 Global vs. project memory and preferences
@@ -354,7 +354,7 @@ This section lists areas where the current research basis is thinner or mostly h
      - explore more recent work on **learned context selection** and “context bandits.”
 
 3. **Multi‑agent collaboration patterns beyond MoA** ([Appendix A.3](#appx-a3))  
-   - Most references focus on MoA‑style ensembles or simple planner/task_runner/reviewer decompositions. There is active research on **social‑simulation‑style multi‑agent systems** (negotiation, argumentation, consensus) that could inform more advanced knight‑coordination strategies, if you ever need them.
+   - Most references focus on MoA‑style ensembles or simple planner/task_runner/reviewer decompositions. There is active research on **social‑simulation‑style multi‑agent systems** (negotiation, argumentation, consensus) that could inform more advanced agent‑coordination strategies, if you ever need them.
 
 4. **Safety, alignment, and capability control for self‑evolving agents** ([Appendix A.4](#appx-a4))  
    - PromptBreeder provides a template for prompt evolution, but applying evolutionary mechanisms to a multi‑agent system that has **file write and tool access** raises additional safety issues. Future reading: safe RL, alignment‑focused agent frameworks, and methods for bounding the behavior of self‑evolving systems.
@@ -363,7 +363,7 @@ This section lists areas where the current research basis is thinner or mostly h
    - Many design choices (routing, review depth, verbosity) affect not only objective success but also how usable Agent Engine is as a collaborator. There is comparatively little formal literature on **UX metrics for AI coding assistants**; gathering your own structured feedback and logs (time saved, manual corrections, user ratings) will likely matter as much as benchmark scores.
 
 6. **Carbon and cost‑aware orchestration** ([Appendix A.6](#appx-a6))  
-   - As the system grows, cost and energy use become more important. There is emerging work on **LLM cost/latency/energy tradeoffs** and model compression beyond prompt compression. Future research could guide policies for when to use smaller models, how aggressively to compress, and when to run parallel knights.
+   - As the system grows, cost and energy use become more important. There is emerging work on **LLM cost/latency/energy tradeoffs** and model compression beyond prompt compression. Future research could guide policies for when to use smaller models, how aggressively to compress, and when to run parallel agents.
 
 ---
 
@@ -407,7 +407,7 @@ Further research required before implementation:
 **Dikkala et al., 2023 – “On the Benefits of Learning to Route in Mixture-of-Experts Models”**  
 N. Dikkala et al., *On the Benefits of Learning to Route in Mixture-of-Experts Models*, EMNLP 2023.  
 - Provides theoretical and empirical evidence that learned routing in MoE can adapt to latent cluster structure and significantly outperform data-independent routing.  
-- Suggests that a learned router over knights (or knight families) can discover latent “task clusters” in your codebase/workload that hand-written rules miss.
+- Suggests that a learned router over agents (or agent families) can discover latent “task clusters” in your codebase/workload that hand-written rules miss.
 
 Further research required before implementation:  
 - Verify whether Agent Engine’s task distribution exhibits latent clusters; run cluster analyses on telemetry.  
@@ -445,7 +445,7 @@ Further research required before implementation:
 **Liang et al., 2024 – “Encouraging Divergent Thinking in Large Language Models through Multi-Agent Debate (MAD)”**  
 T. Liang et al., *Encouraging Divergent Thinking in Large Language Models through Multi-Agent Debate*, EMNLP 2023.  
 - Introduces the MAD framework where multiple agents debate to encourage divergent thinking and improve truthfulness/robustness.  
-- Provides concrete debate protocols you can adapt for “knight vs knight + reviewer” workflows, especially for high-risk or ambiguous tasks.
+- Provides concrete debate protocols you can adapt for “agent vs agent + reviewer” workflows, especially for high-risk or ambiguous tasks.
 
 Further research required before implementation:  
 - Identify task classes where debate improves accuracy enough to justify cost/latency.  
@@ -457,7 +457,7 @@ A. P. Smit et al., *Should We Be Going MAD? A Look at Multi-Agent Debate in LLMs
 - Useful as a design reference when deciding when debate is worth the extra tokens/latency vs. simple MoA voting/single-expert routing.
 
 Further research required before implementation:  
-- Build a small benchmark of Agent Engine tasks to compare parallel knights + debate vs. single knight + reviewer.  
+- Build a small benchmark of Agent Engine tasks to compare parallel agents + debate vs. single agent + reviewer.  
 - Add budget-aware toggles to activate debate only on high-risk tasks (large diffs, critical files).
 
 ---
@@ -478,7 +478,7 @@ Further research required before implementation:
 **Brunke et al., 2022 – “Safe Learning in Robotics: From Learning-Based Control to Safe RL”**  
 L. Brunke et al., *Safe Learning in Robotics: From Learning-Based Control to Safe Reinforcement Learning*, Annual Review of Control, Robotics, and Autonomous Systems 5, 411–444 (2022).  
 - Surveys safe learning and safe RL techniques for real-world robotic systems, including safety certificates, constraint handling, and runtime safety monitors.  
-- Provides theoretical and practical patterns you can adapt for bounding self-evolving knights and tool-using agents (e.g., safety layers that veto unsafe plans).
+- Provides theoretical and practical patterns you can adapt for bounding self-evolving agents and tool-using agents (e.g., safety layers that veto unsafe plans).
 
 Further research required before implementation:  
 - Translate robotics-style safety monitors to developer tooling (plan vetoes, write guards).  

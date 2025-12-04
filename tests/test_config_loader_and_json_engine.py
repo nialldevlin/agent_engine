@@ -26,7 +26,7 @@ def _write_yaml(path: Path, payload) -> None:
 
 
 def test_config_loader_success(tmp_path: Path) -> None:
-    agents = [{"agent_id": "a1", "role": "knight"}]
+    agents = [{"agent_id": "a1", "role": "agent"}]
     tools = [
         {
             "tool_id": "t1",
@@ -80,7 +80,7 @@ def test_config_loader_success(tmp_path: Path) -> None:
 
 
 def test_config_loader_unknown_stage(tmp_path: Path) -> None:
-    _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "knight"}])
+    _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])
     _write_yaml(tmp_path / "tools.yaml", [])
     _write_yaml(tmp_path / "stages.yaml", [])
     _write_yaml(tmp_path / "workflow.yaml", {"workflow_id": "wf1", "stages": ["missing"], "edges": []})
@@ -117,7 +117,7 @@ def test_config_loader_unknown_stage(tmp_path: Path) -> None:
 
 
 def test_config_loader_cycle_detection(tmp_path: Path) -> None:
-    _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "knight"}])
+    _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])
     _write_yaml(tmp_path / "tools.yaml", [])
     _write_yaml(
         tmp_path / "stages.yaml",
@@ -169,7 +169,7 @@ def test_config_loader_cycle_detection(tmp_path: Path) -> None:
 
 
 def test_pipeline_start_not_reaching_end(tmp_path: Path) -> None:
-    _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "knight"}])
+    _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])
     _write_yaml(tmp_path / "tools.yaml", [])
     _write_yaml(
         tmp_path / "stages.yaml",

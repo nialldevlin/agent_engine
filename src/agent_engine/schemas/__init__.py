@@ -1,6 +1,6 @@
 """Schema exports."""
 
-from .agent import AgentDefinition, AgentRole, Emphasis, KnightManifest, ToolBias, Verbosity
+from .agent import AgentDefinition, AgentRole, Emphasis, AgentManifest, ToolBias, Verbosity
 from .base import SchemaBase, Severity
 from .errors import EngineError, EngineErrorCode, EngineErrorSource, FailureCode, FailureSignature
 from .event import Event, EventType
@@ -43,7 +43,7 @@ __all__ = [
     "AgentDefinition",
     "AgentRole",
     "Emphasis",
-    "KnightManifest",
+    "AgentManifest",
     "ToolBias",
     "Verbosity",
     "SchemaBase",

@@ -37,7 +37,7 @@
 
 2. **Phase 3**: Telemetry-Based Routing (~5-7 hours)
 3. **Phase 4**: Fallback Matrix (~4-5 hours, can run in parallel)
-4. **Phase 5-8**: Advanced features (~20-24 hours)
+4. **Phase 6-8**: Advanced features (~20-24 hours)
 5. **Phase 9**: Telemetry/UX/Cost instrumentation (~4-6 hours, parallel with Codex Category F)
 
 ---
@@ -54,6 +54,8 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 
 **Can run in PARALLEL with PLAN_CODEX.md**
 
+> **King Arthur Integration Note:** All lift-and-integrate work for `legacy/king_arthur/` components (JSON engine, toolkit, overrides, manifest hygiene) is now tracked in `legacy/king_arthur/INTEGRATION_PLAN.md`. Keep this plan focused on research-driven architectural work; coordinate with the integration plan before taking any King Arthur tasks.
+
 ---
 
 ## Current State: Research Implementation Gap Analysis
@@ -62,7 +64,7 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 - ContextItem, ContextFingerprint, ContextPackage schemas
 - ToolPlan, ToolCapability, ToolRiskLevel
 - FailureSignature and EngineError schemas
-- KnightManifest with evolution parameters
+- AgentManifest with evolution parameters
 - Basic template_version tracking
 - Basic HEAD/TAIL context preservation
 - Budget-aware context assembly
@@ -75,15 +77,14 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 3. Agent-specific context profiles - RESEARCH §2.2
 4. Router with telemetry-based selection - RESEARCH §4.1
 5. Fallback matrix implementation - RESEARCH §4.2
-6. Override parser for natural language - RESEARCH §8.1
-7. Context paging/compression telemetry & debug trace - RESEARCH §§1.1-1.3
+6. Context paging/compression telemetry & debug trace - RESEARCH §§1.1-1.3
 
 **TIER 2 - Advanced Features (RESEARCH.md §3, 6-7):**
-8. ReAct-style internal reasoning support - RESEARCH §3.2
-9. Post-mortem squire for root cause - RESEARCH §7.2
-10. Evolution system integration - RESEARCH §6.1
-11. Global vs project memory namespaces - RESEARCH §8.2
-12. UX/cost/carbon telemetry scaffolding - RESEARCH §9, Appendix A.5-A.6
+7. ReAct-style internal reasoning support - RESEARCH §3.2
+8. Post-mortem analyst for root cause - RESEARCH §7.2
+9. Evolution system integration - RESEARCH §6.1
+10. Global vs project memory namespaces - RESEARCH §8.2
+11. UX/cost/carbon telemetry scaffolding - RESEARCH §9, Appendix A.5-A.6
 
 ---
 
@@ -108,7 +109,7 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 - Storage backend (in-memory for now, pluggable for future)
 - Paging policies (when to promote task → project, project → global)
 - Namespace structure for project isolation
-- Migration path from current single ContextStore
+- Migration path from legacy single-tier context store (completed)
 
 **Output:** ✅ `docs/design/MEMORY_ARCHITECTURE.md` (created)
 
@@ -170,7 +171,7 @@ class MemoryBackend(Protocol):
 **Files:** `src/agent_engine/runtime/context.py`
 
 **Changes:**
-- Replace single `ContextStore` with multi-tier architecture
+- Replace single-tier context store with multi-tier architecture (complete)
 - Query all three tiers based on ContextRequest
 - Implement paging policies (prefer task > project > global)
 - Budget allocation across tiers
@@ -194,12 +195,12 @@ class MemoryBackend(Protocol):
 **Deliverable:** `docs/design/CONTEXT_PROFILES.md`
 
 **Design Requirements:**
-- ContextProfile per agent role (Knight, Squire, Royalty, Peasant)
+- ContextProfile per agent role (Implementer, Analyst, Strategist, Assistant)
 - Profiles specify: preferred context types, retrieval biases, budget allocation
 - Examples:
-  - Knights: code + tests + minimal conversation
-  - Royalty: summaries + decisions + preferences, no raw code
-  - Squires: specific domain focus (JSON repair, review, etc.)
+  - Implementers: code + tests + minimal conversation
+  - Strategist: summaries + decisions + preferences, no raw code
+  - Analysts: specific domain focus (JSON repair, review, etc.)
 
 **Sonnet Decides:**
 - Profile schema structure
@@ -246,7 +247,7 @@ class ContextProfile(SchemaBase):
 **Changes:**
 - ContextRequest includes agent_profile
 - ContextAssembler uses profile for retrieval decisions
-- Different context packages for Knight vs Royalty vs Squire
+- Different context packages for Implementer vs Strategist vs Analyst
 
 **Tests:** Profile-based context retrieval
 
@@ -255,10 +256,10 @@ class ContextProfile(SchemaBase):
 **Files:** `configs/context_profiles/` (new directory)
 
 **Create:**
-- `knight_default.yaml`
-- `squire_default.yaml`
-- `royalty_default.yaml`
-- `peasant_default.yaml`
+- `agent_default.yaml`
+- `analyst_default.yaml`
+- `strategist_default.yaml`
+- `assistant_default.yaml`
 
 ### Task 2.6: Context Paging & Compression Telemetry (Head/Tail Debug)
 **Assignee:** Sonnet (Integration)
@@ -448,98 +449,11 @@ fallbacks:
 
 ## Phase 5: Override Parser (RESEARCH §8.1)
 
-**Goal:** Parse natural language directives into structured overrides
-
-### Task 5.1: Design Override System
-**Assignee:** Sonnet (Design)
-**References:** RESEARCH.md §8.1
-**Deliverable:** `docs/design/OVERRIDE_SYSTEM.md`
-
-**Design Requirements:**
-- Parse natural language → OverrideSpec
-- Override types: routing, memory, tool, pattern, mode
-- Scopes: global, project, pipeline, stage, agent
-- Confirmation flows for dangerous overrides
-
-**Examples:**
-- "remember this for all projects" → global memory write
-- "be more concise" → verbosity override
-- "analysis only" → mode override
-- "use knight X for file edits" → routing override
-
-**Sonnet Decides:**
-- Override parser approach (LLM squire vs patterns)
-- Confirmation thresholds
-- Override persistence and expiration
-- Conflict resolution between overrides
-
-### Task 5.2: Implement Override Parser Squire
-**Assignee:** Minion 14 (Haiku)
-**Files:** `src/agent_engine/runtime/override_parser.py` (new)
-
-**Implementation:**
-- `OverrideParser` class
-- Use small LLM (or pattern matching for MVP)
-- Parse text → OverrideSpec with kind, scope, target, payload
-- Return confidence score
-
-**Input:** Natural language directive
-**Output:** OverrideSpec or None
-
-**Tests:** Parse common override patterns
-
-### Task 5.3: Implement Override Manager
-**Assignee:** Minion 15 (Haiku)
-**Files:** `src/agent_engine/runtime/override_manager.py` (new)
-
-**Implementation:**
-- Store active overrides (in-memory + optional persistence)
-- Apply overrides to task/pipeline/stage execution
-- Expiration and cleanup
-- Conflict resolution (more specific wins)
-
-**API:**
-```python
-class OverrideManager:
-    def add_override(self, spec: OverrideSpec) -> bool
-    def get_overrides(self, scope: str, target: str) -> List[OverrideSpec]
-    def clear_overrides(self, scope: str) -> None
-```
-
-**Tests:** Override storage, retrieval, conflict resolution
-
-### Task 5.4: Integrate Overrides into Pipeline
-**Assignee:** Sonnet (Integration)
-**Files:**
-- `src/agent_engine/runtime/pipeline_executor.py`
-- `src/agent_engine/runtime/router.py`
-
-**Changes:**
-- Check for overrides before routing
-- Apply mode/tool/agent overrides
-- Log override usage to telemetry
-
-**Tests:** End-to-end override application
-
-### Task 5.5: Add Confirmation Flows
-**Assignee:** Minion 16 (Haiku)
-**Files:** `src/agent_engine/runtime/override_parser.py`
-
-**Add:**
-- Risk scoring for overrides
-- Confirmation prompts for high-risk overrides
-- User feedback integration
-
-**High-risk triggers:**
-- Global scope modifications
-- Security policy changes
-- Agent retirement
-
-**Estimated Effort:** Phase 5 = 4-6 hours (tasks 5.2-5.3 can parallelize)
+*Delegated.* Override parser, manager, and manifest hygiene work now live in `legacy/king_arthur/INTEGRATION_PLAN.md`. Follow that plan for all King Arthur lift tasks; do not implement override work inside this document. Remove this section entirely once the integration plan lands.
 
 ---
 
-## Phase 6: Post-Mortem Squire (RESEARCH §7.2)
+## Phase 6: Post-Mortem Analyst (RESEARCH §7.2)
 
 **Goal:** Automated root-cause analysis for failures
 
@@ -560,12 +474,12 @@ class OverrideManager:
 - Tag taxonomy for root causes
 - How to surface post-mortems to developers
 
-### Task 6.2: Implement Post-Mortem Squire
+### Task 6.2: Implement Post-Mortem Analyst
 **Assignee:** Minion 17 (Haiku)
 **Files:** `src/agent_engine/runtime/post_mortem.py` (new)
 
 **Implementation:**
-- `PostMortemSquire` class
+- `PostMortemAnalyst` class
 - Takes: Task, stage outputs, errors, tool logs
 - Uses small LLM to analyze
 - Returns: `PostMortemReport` with summary + tags
@@ -609,7 +523,7 @@ class PostMortemReport(SchemaBase):
 
 ## Phase 7: Evolution System Integration (RESEARCH §6.1)
 
-**Goal:** Wire evolution into routing and enable knight challengers
+**Goal:** Wire evolution into routing and enable agent challengers
 
 ### Task 7.1: Design Evolution System
 **Assignee:** Sonnet (Design)
@@ -617,25 +531,25 @@ class PostMortemReport(SchemaBase):
 **Deliverable:** `docs/design/EVOLUTION_SYSTEM.md`
 
 **Design Requirements:**
-- Spawn challenger knights with mutated manifests
+- Spawn challenger agents with mutated manifests
 - Route fraction of tasks to challengers
 - Score challengers vs incumbents
 - Promote or retire based on performance
 
 **Sonnet Decides:**
-- Mutation strategy for KnightManifest parameters
+- Mutation strategy for AgentManifest parameters
 - Challenger spawn frequency
 - Evaluation period and criteria
 - Promotion/retirement thresholds
 
-### Task 7.2: Implement Knight Challenger System
+### Task 7.2: Implement Implementer Challenger System
 **Assignee:** Minion 19 (Haiku)
 **Files:** `src/agent_engine/evolution.py`
 
 **Enhance:**
-- `spawn_challenger(base_knight: AgentDefinition) -> AgentDefinition`
+- `spawn_challenger(base_agent: AgentDefinition) -> AgentDefinition`
 - Mutate manifest parameters (reasoning_steps, tool_bias, verbosity, tests_emphasis)
-- Track lineage (parent knight ID)
+- Track lineage (parent agent ID)
 
 **Tests:** Challenger spawning with valid mutations
 
@@ -657,7 +571,7 @@ class PostMortemReport(SchemaBase):
 **Add:**
 - `evaluate_challengers()` - compare fitness scores
 - Promote successful challengers to primary pool
-- Retire underperforming knights (with safeguards)
+- Retire underperforming agents (with safeguards)
 - Preserve lineage for analysis
 
 **Tests:** Promotion and retirement decisions
@@ -722,7 +636,7 @@ evolution:
 **Files:** `src/agent_engine/runtime/agent_runtime.py`
 
 **Changes:**
-- Optional ReAct mode for knights
+- Optional ReAct mode for agents
 - Pass intermediate tool results back to agent
 - Log internal iterations
 - Return final structured output only
@@ -765,7 +679,7 @@ evolution:
 | **Phase 2: Context Profiles** | 6 tasks (2.1-2.6) | Tasks 2.2-2.3 parallel | 5-7 hours | Phase 1 complete |
 | **Phase 3: Telemetry Routing** | 5 tasks (3.1-3.5) | Tasks 3.2-3.4 parallel | 5-7 hours | Phase 2 for profiles |
 | **Phase 4: Fallback Matrix** | 5 tasks (4.1-4.5) | Tasks 4.2-4.3 parallel | 4-5 hours | None (independent) |
-| **Phase 5: Override Parser** | 5 tasks (5.1-5.5) | Tasks 5.2-5.3 parallel | 4-6 hours | Phase 1 for memory writes |
+| **Phase 5: Override Parser** | _Tracked in `legacy/king_arthur/INTEGRATION_PLAN.md`_ | See integration plan | — | — |
 | **Phase 6: Post-Mortem** | 4 tasks (6.1-6.4) | Linear | 3-4 hours | None (independent) |
 | **Phase 7: Evolution** | 5 tasks (7.1-7.5) | Tasks 7.2-7.4 parallel | 5-6 hours | Phase 3 for routing |
 | **Phase 8: ReAct Support** | 3 tasks (8.1-8.3) | Linear | 3-4 hours | None (independent) |
@@ -786,7 +700,6 @@ evolution:
 ### Week 2: Intelligence & Routing
 - **Phase 2** (Context Profiles) - depends on Phase 1
 - **Phase 3** (Telemetry Routing) - depends on Phase 2
-- **Phase 5** (Override Parser) - depends on Phase 1
 
 ### Week 3: Advanced Features
 - **Phase 7** (Evolution) - depends on Phase 3
@@ -825,7 +738,7 @@ evolution:
 
 ### Phase 1-2 Complete:
 ✅ Multi-tier memory working with task/project/global isolation
-✅ Context retrieval adapts to agent roles (Knight vs Royalty)
+✅ Context retrieval adapts to agent roles (Implementer vs Strategist)
 ✅ Tests demonstrate profile-based context assembly
 
 ### Phase 3-4 Complete:
@@ -833,13 +746,12 @@ evolution:
 ✅ Fallback matrix handles failures gracefully
 ✅ Telemetry shows routing decisions and fallback paths
 
-### Phase 5-6 Complete:
-✅ Natural language overrides parsed and applied
+### Phase 6 Complete:
 ✅ Post-mortems generated for failures
-✅ Override and post-mortem systems integrated
+✅ Post-mortem system integrated and logged in telemetry
 
 ### Phase 7-8 Complete:
-✅ Challenger knights spawn and compete
+✅ Challenger agents spawn and compete
 ✅ Evolution cycle promotes successful variants
 ✅ ReAct loops work for complex reasoning tasks
 

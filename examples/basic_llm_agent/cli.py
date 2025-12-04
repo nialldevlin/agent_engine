@@ -1,6 +1,8 @@
-"""Runnable linear example for the Agent Engine.
+"""Runnable declarative example for the Agent Engine.
 
-Pipeline: user_input -> gather_context -> interpretation -> decomposition -> planning -> execution -> review -> results.
+Pipeline structure is defined entirely in configs/basic_llm_agent/*.yaml and
+is a simple DAG: user_input -> gather_context -> interpretation -> decomposition
+-> planning -> execution -> review -> results.
 """
 
 from __future__ import annotations
@@ -10,13 +12,14 @@ from pathlib import Path
 
 from agent_engine.config_loader import load_engine_config
 from agent_engine.runtime.agent_runtime import AgentRuntime
-from agent_engine.runtime.context import ContextAssembler, ContextStore
+from agent_engine.runtime.context import ContextAssembler
 from agent_engine.runtime.pipeline_executor import PipelineExecutor
 from agent_engine.runtime.router import Router
 from agent_engine.runtime.task_manager import TaskManager
 from agent_engine.runtime.tool_runtime import ToolRuntime
 from agent_engine.schemas import ContextItem, ContextRequest, TaskMode, TaskSpec
 from agent_engine.telemetry import TelemetryBus
+from agent_engine.runtime.memory import TaskMemoryStore
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs" / "basic_llm_agent"
 
@@ -98,8 +101,7 @@ def build_example_components():
 
     task_manager = TaskManager()
     router = Router(workflow=engine_config.workflow, pipelines=engine_config.pipelines, stages=engine_config.stages)  # type: ignore[arg-type]
-    context_store = ContextStore()
-    context_assembler = ContextAssembler(store=context_store, memory_config=engine_config.memory)
+    context_assembler = ContextAssembler(memory_config=engine_config.memory)
     agent_runtime = AgentRuntime(llm_client=ExampleLLMClient())
     tool_runtime = ToolRuntime(tools=engine_config.tools, tool_handlers={"gather_context": gather_context_handler, "execution": execution_handler})
     telemetry = TelemetryBus()
@@ -115,8 +117,11 @@ def run_example(user_request: str):
     task = task_manager.create_task(spec, pipeline_id=pipeline.pipeline_id)
 
     # Seed context with the raw request
-    context_store: ContextStore = context_assembler.store
-    context_store.add(
+    task_store = context_assembler.task_stores.get(task.task_id)
+    if not task_store:
+        task_store = TaskMemoryStore(task_id=task.task_id)
+        context_assembler.task_stores[task.task_id] = task_store
+    task_store.backend.add(
         ContextItem(
             context_item_id="req",
             kind="user_request",

@@ -735,21 +735,7 @@ class ContextAssembler:
 
 ### 7.1 Current State
 
-Current `ContextStore` is a simple dict wrapper:
-```python
-@dataclass
-class ContextStore:
-    items: Dict[str, ContextItem] = field(default_factory=dict)
-```
-
-### 7.2 Migration Strategy
-
-**Phase 1:** Implement new multi-tier architecture in parallel
-**Phase 2:** Update PipelineExecutor to use new ContextAssembler
-**Phase 3:** Deprecate old ContextStore
-**Phase 4:** Remove old implementation
-
-**Compatibility:** New ContextAssembler can accept old-style adds temporarily
+Legacy `ContextStore` (single-tier dict wrapper) has been fully removed. The runtime now always uses the multi-tier architecture described above, so migration strategy steps 1-4 are complete and no compatibility shims remain.
 
 ---
 

@@ -1,6 +1,12 @@
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 from examples.basic_llm_agent.cli import build_example_components
 
 from agent_engine.schemas import ContextItem, ContextRequest, TaskMode, TaskSpec, TaskStatus
+from agent_engine.runtime.memory import TaskMemoryStore
 
 
 def test_basic_llm_agent_example_e2e() -> None:
@@ -10,7 +16,11 @@ def test_basic_llm_agent_example_e2e() -> None:
     pipeline = router.choose_pipeline(spec)
     task = task_manager.create_task(spec, pipeline_id=pipeline.pipeline_id)
 
-    context_assembler.store.add(
+    task_store = context_assembler.task_stores.get(task.task_id)
+    if not task_store:
+        task_store = TaskMemoryStore(task_id=task.task_id)
+        context_assembler.task_stores[task.task_id] = task_store
+    task_store.backend.add(
         ContextItem(
             context_item_id="seed",
             kind="user_request",

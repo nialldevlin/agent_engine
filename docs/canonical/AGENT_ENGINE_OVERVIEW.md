@@ -1,6 +1,7 @@
-# **Agent Engine**
+# Agent Engine Overview
+_Last updated: 2025-12-03_
 
-## **1. Overview**
+## 1. Overview
 
 The **Agent Engine** is an extensible, modular framework for building
 multi-agent LLM applications. It provides clean internal data models, strict
@@ -45,11 +46,11 @@ The engine consists of these components:
 * Telemetry/Event Bus
 * Plugin/Hook System
 * LLM Backend Adapter
-* Patterns Library (committee, supervisor, chat)
+* Patterns Library (optional manifest templates such as committee, supervisor, chat; none are enabled unless explicitly authored)
 
 ---
 
-## **2. Engine Responsibilities**
+## 2. Engine Responsibilities
 
 The Agent Engine performs three high-level operations:
 
@@ -64,7 +65,7 @@ construction, memory retrieval—supports these operations.
 
 ---
 
-# **3. Configuration**
+## 3. Configuration
 
 The engine has configurations to allow extensibility for:
 
@@ -80,10 +81,11 @@ The engine has configurations to allow extensibility for:
 All files may be YAML or JSON.
 **YAML is converted to JSON**, and internal storage is JSON-shaped structures
 only with strict schemas.
+Every manifest must validate against the published JSON Schemas; no implicit or undeclared fields are allowed.
 
 ---
 
-# **4. Tasks**
+## 4. Tasks
 
 A **Task** is the engine’s stateful record of work. It carries everything needed
 through the workflow. Tasks act as the glue between stages. Tasks arise from
@@ -101,7 +103,7 @@ A Task:
 
 ---
 
-# **5. Workflow Graph & Pipelines**
+## 5. Workflow Graph & Pipelines
 
 The **Workflow Graph** is the complete map of stages and allowed routing
 decisions. **Pipelines** are specific traversals through this graph.
@@ -126,7 +128,7 @@ Conceptually:
 * decision nodes may be deterministic or agent-driven
 * a pipeline that encounters no decisions is linear
 
-## **5.1 Workflow Graph**
+### 5.1 Workflow Graph
 
 A **Workflow Graph** is a directed acyclic graph (DAG) containing:
 
@@ -151,12 +153,13 @@ Constraints:
 
 Because the graph is a DAG, it can be statically validated, is guaranteed to
 terminate for well-formed pipelines, and is easier to debug and reason about.
+Routers may only select among pipelines explicitly defined in manifests; there is no implicit or self-directed routing.
 
 Retries, refinements, or "loop-like" behaviors are implemented at the **stage
 or pattern level** (for example, an agent stage that internally retries up to N
 times), not by creating cycles in the workflow graph itself.
 
-## **5.2 Stages**
+### 5.2 Stages
 
 A **Stage** represents one step in the workflow and follows a fixed lifecycle:
 
@@ -183,7 +186,7 @@ Stages may participate in:
 * decision flows (single in, multiple out via downstream Decision stage)
 * merge flows (multiple in, single out)
 
-## **5.3 Pipelines**
+### 5.3 Pipelines
 
 A **Pipeline** is the traversal of a Task through the workflow graph along a
 specific **acyclic path** (or branching tree that ultimately converges and
@@ -202,7 +205,7 @@ assigned to which stages and which optional branches are enabled).
 
 ---
 
-# **6. Routing**
+## 6. Routing
 
 The **Router** determines:
 
@@ -230,7 +233,7 @@ are recorded on the Task for inspection and debugging.
 
 ---
 
-# **7. Agent Runtime**
+## 7. Agent Runtime
 
 The Agent Runtime is responsible for:
 
@@ -245,7 +248,7 @@ The Agent Runtime is responsible for:
 
 ---
 
-# **8. Tool Runtime**
+## 8. Tool Runtime
 
 The Tool Runtime handles:
 
@@ -266,18 +269,18 @@ Tools allow agents to:
 * call external APIs
 
 Tools must follow strict schemas to avoid ambiguous behavior and pass through
-the security and permissions layer.
+the security and permissions layer. Tool execution is deterministic: agents can only request tools via structured `ToolPlan` JSON, and every tool enforces consent and workspace boundaries before running.
 
 ---
 
-# **9. Memory and Context**
+## 9. Memory and Context
 
 LLMs have no built-in memory.
 The engine constructs memory layers to supply context to agents.
 
-## **9.1 Context**
+### 9.1 Context
 
-Context = everything the agent sees when it runs:
+Context = everything the agent sees when it runs. The Context Assembler follows explicit, deterministic policies declared in manifests; it never adds data that was not requested by the configured context profile.
 
 * prompt template
 * system instructions
@@ -291,47 +294,47 @@ Context = everything the agent sees when it runs:
 * routing notes
 
 A Context Assembler component is responsible for collecting and packaging this
-information for each stage invocation.
+information for each stage invocation strictly according to the configured profile (no implicit Stage 4 heuristics).
 
-## **9.2 Memory Layers**
+### 9.2 Memory Layers
 
-### **Conversation Memory**
+#### Conversation Memory
 
 * recent messages
 * summarized older messages
 * structured state extracted from history
 
-### **Long-Term Knowledge Memory (RAG)**
+#### Long-Term Knowledge Memory (RAG)
 
 * vector database of documents, files, research, preferences
 * semantic retrieval
 * supports cross-task recall
 
-### **Agent State Memory**
+#### Agent State Memory
 
 * persistent JSON blob per agent
 * goals, partial results, reasoning structures
 * not user-visible
 
-### **Profile Memory**
+#### Profile Memory
 
 * user preferences
 * styles
 * long-running projects
 * saved contexts
 
-### **Tool/Environment Memory**
+#### Tool/Environment Memory
 
 * file modifications
 * code edits
 * environment queries
 
 Memory is retrieved per stage and inserted into the context batch according to
-pipeline and agent configuration.
+pipeline and agent configuration. These conceptual layers are realized via the task/project/global memory stores; do not assume a separate legacy subsystem exists.
 
 ---
 
-# **10. JSON Engine**
+## 10. JSON Engine
 
 The JSON Engine ensures reliability:
 
@@ -348,7 +351,7 @@ outputs structured and predictable.
 
 ---
 
-# **11. Telemetry and Event Bus**
+## 11. Telemetry and Event Bus
 
 Every significant action emits an Event:
 
@@ -375,7 +378,7 @@ The Event Bus is the observability backbone of the engine.
 
 ---
 
-# **12. Plugin and Hook System**
+## 12. Plugin and Hook System
 
 Plugins add custom functionality without modifying the core engine.
 
@@ -395,7 +398,7 @@ engine stays lightweight while plugins provide heavy customization.
 
 ---
 
-# **13. LLM Backend Interface**
+## 13. LLM Backend Interface
 
 The engine is backend-agnostic.
 An `LLMClient` interface defines standard methods:
@@ -419,7 +422,7 @@ reasoning and another for fast tool-style calls), configured via manifests.
 
 ---
 
-# **14. Security and Permissions**
+## 14. Security and Permissions
 
 All tools used by agents go through a permissions layer that requires explicit
 consent, with engine-level defaults and configurable per-project and per-agent
@@ -438,7 +441,7 @@ Security is both a manifest concern and a runtime enforcement concern.
 
 ---
 
-# **15. Summary**
+## 15. Summary
 
 The Agent Engine is a modular, backend-agnostic framework for building complex
 multi-agent LLM systems. It separates configuration from execution using

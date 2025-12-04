@@ -320,52 +320,6 @@ class TestMultiTierContextAssembly:
         # Last 2 should be from tail
         # This is a rough check - exact behavior depends on implementation
 
-    def test_backward_compatibility_with_legacy_store(self):
-        """Test that old ContextStore still works for backward compatibility."""
-        from agent_engine.runtime.context import ContextStore
-
-        # Create assembler with legacy store
-        legacy_store = ContextStore()
-        assembler = ContextAssembler(store=legacy_store)
-
-        # Add items to legacy store
-        item1 = ContextItem(
-            context_item_id="legacy-1",
-            kind="reasoning",
-            source="legacy",
-            timestamp=datetime.now().isoformat(),
-            tags=["legacy"],
-            importance=0.9,
-            token_cost=50,
-            payload={"text": "Legacy item"}
-        )
-        legacy_store.add(item1)
-
-        # Create task
-        task = Task(
-            task_id="task-legacy",
-            spec=TaskSpec(
-                task_spec_id="test",
-                request="Test",
-                mode=TaskMode.ANALYSIS_ONLY
-            ),
-            status=TaskStatus.PENDING,
-            pipeline_id="test",
-            metadata={}
-        )
-
-        # Build context should use legacy path
-        request = ContextRequest(
-            context_request_id="req",
-            budget_tokens=1000
-        )
-        package = assembler.build_context(task, request)
-
-        # Should get the legacy item
-        assert len(package.items) == 1
-        assert package.items[0].context_item_id == "legacy-1"
-
-
 class TestContextAssemblerHelpers:
     """Test helper methods of ContextAssembler."""
 
