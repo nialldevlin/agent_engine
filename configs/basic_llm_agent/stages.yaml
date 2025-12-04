@@ -1,0 +1,104 @@
+- stage_id: user_input
+  name: user_input
+  type: agent
+  entrypoint: true
+  terminal: false
+  agent_id: orchestrator
+  tool_id: null
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: fail
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}
+
+- stage_id: gather_context
+  name: gather_context
+  type: tool
+  entrypoint: false
+  terminal: false
+  agent_id: null
+  tool_id: gather_context
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: skip
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}
+
+- stage_id: interpretation
+  name: interpretation
+  type: agent
+  entrypoint: false
+  terminal: false
+  agent_id: orchestrator
+  tool_id: null
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: retry
+    max_retries: 1
+    fallback_stage_id: null
+  metadata: {}
+
+- stage_id: decomposition
+  name: decomposition
+  type: agent
+  entrypoint: false
+  terminal: false
+  agent_id: orchestrator
+  tool_id: null
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: fail
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}
+
+- stage_id: planning
+  name: planning
+  type: agent
+  entrypoint: false
+  terminal: false
+  agent_id: orchestrator
+  tool_id: null
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: fail
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}
+
+- stage_id: execution
+  name: execution
+  type: tool
+  entrypoint: false
+  terminal: false
+  agent_id: null
+  tool_id: execution
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: skip
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}
+
+- stage_id: results
+  name: results
+  type: agent
+  entrypoint: false
+  terminal: true
+  agent_id: orchestrator
+  tool_id: null
+  inputs_schema_id: null
+  outputs_schema_id: null
+  on_error:
+    policy: fail
+    max_retries: 0
+    fallback_stage_id: null
+  metadata: {}

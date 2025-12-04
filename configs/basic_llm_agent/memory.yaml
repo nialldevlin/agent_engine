@@ -1,0 +1,9 @@
+memory_config_id: basic_memory
+stores: {}
+compression_policy:
+  mode: balanced
+  compression_ratio_target: 0.5
+context_policy:
+  head_tail_preserve: 2
+  middle_compress: true
+metadata: {}

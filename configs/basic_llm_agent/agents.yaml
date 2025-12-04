@@ -1,0 +1,11 @@
+- agent_id: orchestrator
+  role: knight
+  profile: {}
+  manifest:
+    reasoning_steps: 3
+    tool_bias: balanced
+    verbosity: normal
+    tests_emphasis: medium
+  schema_id: null
+  version: "0.0.1"
+  metadata: {}

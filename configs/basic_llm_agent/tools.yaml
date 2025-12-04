@@ -1,0 +1,23 @@
+- tool_id: gather_context
+  kind: deterministic
+  name: gather_context
+  description: Collects workspace signals (files, notes).
+  inputs_schema_id: gather_context_input
+  outputs_schema_id: gather_context_output
+  capabilities:
+    - deterministic_safe
+  risk_level: low
+  metadata: {}
+  version: "0.0.1"
+
+- tool_id: execution
+  kind: deterministic
+  name: execution
+  description: Executes planned steps (stub).
+  inputs_schema_id: execution_input
+  outputs_schema_id: execution_output
+  capabilities:
+    - workspace_mutation
+  risk_level: medium
+  metadata: {}
+  version: "0.0.1"

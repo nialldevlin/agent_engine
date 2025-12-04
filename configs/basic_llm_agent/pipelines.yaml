@@ -1,0 +1,16 @@
+- pipeline_id: basic_pipeline
+  name: basic_pipeline
+  description: Linear pipeline from user input to results.
+  workflow_id: basic_workflow
+  start_stage_ids:
+    - user_input
+  end_stage_ids:
+    - results
+  allowed_modes:
+    - analysis_only
+    - implement
+    - review
+    - dry_run
+  fallback_end_stage_ids:
+    - results
+  metadata: {}

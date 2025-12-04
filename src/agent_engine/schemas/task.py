@@ -1,0 +1,71 @@
+"""Task and TaskSpec schemas."""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import Field
+
+from .base import SchemaBase, Severity
+from .errors import FailureSignature, EngineError
+from .memory import ContextFingerprint
+
+
+class TaskMode(str, Enum):
+    ANALYSIS_ONLY = "analysis_only"
+    IMPLEMENT = "implement"
+    REVIEW = "review"
+    DRY_RUN = "dry_run"
+
+
+class TaskPriority(str, Enum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+
+
+class TaskSpec(SchemaBase):
+    task_spec_id: str = Field(..., description="Stable ID for this task spec")
+    request: str = Field(..., description="Raw or normalized user ask")
+    mode: TaskMode = Field(default=TaskMode.ANALYSIS_ONLY)
+    priority: TaskPriority = Field(default=TaskPriority.NORMAL)
+    hints: List[str] = Field(default_factory=list)
+    files: List[str] = Field(default_factory=list)
+    overrides: List[str] = Field(default_factory=list, description="OverrideSpec IDs")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class StageExecutionRecord(SchemaBase):
+    output: Optional[Any] = Field(default=None)
+    error: Optional[EngineError] = Field(default=None)
+    started_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
+    completed_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
+
+
+class RoutingDecision(SchemaBase):
+    stage_id: str
+    decision: Optional[str] = Field(default=None)
+    agent_id: Optional[str] = Field(default=None)
+    timestamp: Optional[str] = Field(default=None)
+
+
+class Task(SchemaBase):
+    task_id: str
+    spec: TaskSpec
+    status: TaskStatus = Field(default=TaskStatus.PENDING)
+    pipeline_id: str
+    current_stage_id: Optional[str] = Field(default=None)
+    stage_results: Dict[str, StageExecutionRecord] = Field(default_factory=dict)
+    routing_trace: List[RoutingDecision] = Field(default_factory=list)
+    failure_signatures: List[FailureSignature] = Field(default_factory=list)
+    context_fingerprint: Optional[ContextFingerprint] = Field(default=None)
+    created_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
+    updated_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")

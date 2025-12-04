@@ -1,0 +1,29 @@
+workflow_id: basic_workflow
+stages:
+  - user_input
+  - gather_context
+  - interpretation
+  - decomposition
+  - planning
+  - execution
+  - results
+edges:
+  - from_stage_id: user_input
+    to_stage_id: gather_context
+    condition: null
+  - from_stage_id: gather_context
+    to_stage_id: interpretation
+    condition: null
+  - from_stage_id: interpretation
+    to_stage_id: decomposition
+    condition: null
+  - from_stage_id: decomposition
+    to_stage_id: planning
+    condition: null
+  - from_stage_id: planning
+    to_stage_id: execution
+    condition: null
+  - from_stage_id: execution
+    to_stage_id: results
+    condition: null
+invariants: {}

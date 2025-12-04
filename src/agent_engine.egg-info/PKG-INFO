@@ -1,0 +1,49 @@
+Metadata-Version: 2.4
+Name: agent-engine
+Version: 0.0.1
+Summary: Modular multi-agent LLM orchestration engine
+Author: Agent Engine Team
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.6
+Requires-Dist: pyyaml>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4; extra == "dev"
+Requires-Dist: pytest-cov>=4.1; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
+Requires-Dist: mypy>=1.9; extra == "dev"
+
+# Agent Engine
+
+Agent Engine is a manifest-driven framework for building multi-agent LLM systems. It turns YAML/JSON manifests into a runnable orchestration runtime with schemas, routing, memory, tool safety, and telemetry baked in, so apps stay declarative and testable.
+
+## Quickstart
+
+1. **Install deps (needs network)**  
+   `make install`
+2. **Run tests**  
+   `make test`
+3. **Lint/format/typecheck**  
+   `make lint` · `make format` · `make typecheck`
+
+## Run examples
+
+- Committee pattern: `examples/committee_manifest.yaml`
+- Supervisor pattern: `examples/supervisor_manifest.yaml`
+- Tool agent flow: `examples/tool_agent/manifest.yaml`
+
+Use `config_loader.load_engine_config(...)` to load a manifest and then run a pipeline via `agent_engine.runtime.run_task(...)` with your ToolRuntime handlers/LLM client wired in.
+
+## Configure your own project
+
+1. Define manifests (YAML/JSON) for agents, tools, stages, workflow, pipelines, and memory under a `configs/` folder.
+2. Load them with `config_loader.load_engine_config(...)` to get an `EngineConfig`.
+3. Provide tool handlers (or LLM peasants) to `ToolRuntime`, and an LLM client to `AgentRuntime`.
+4. Create a `TaskSpec`, let `Router` pick a pipeline, and execute via `PipelineExecutor` or the `run_task` helper.
+
+## Documentation
+
+- Architecture: `docs/canonical/AGENT_ENGINE_OVERVIEW.md` (authoritative).
+- Research basis: `docs/canonical/RESEARCH.md` and `docs/canonical/RESEARCH_UPDATED.md` (context, memory, routing, JSON).
+- Plans: `docs/operational/PLAN_AGENT_ENGINE_CODEX.md` (implementation checklist) and `docs/operational/PLAN_AGENT_ENGINE.md` (phase steps).
