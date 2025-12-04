@@ -1,6 +1,6 @@
 # SCHEMAS_OVERVIEW.md
 
-Contracts and data model blueprint for Agent Engine. These are language‑agnostic, JSON‑shaped definitions to guide implementation and manifest validation. They align with `AGENT_ENGINE_OVERVIEW.md` and `RESEARCH_UPDATED.md`. No runtime code is included in this phase.
+Contracts and data model blueprint for Agent Engine. These are language‑agnostic, JSON‑shaped definitions to guide implementation and manifest validation. They align with `AGENT_ENGINE_OVERVIEW.md` and `RESEARCH.md`. No runtime code is included in this phase.
 
 ## Modeling Notes
 

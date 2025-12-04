@@ -31,10 +31,10 @@ The Agent Engine is ~85% complete. Two parallel implementation plans bring it to
 - Context retrieval policies (agent-aware, task-aware)
 - Telemetry-based routing (MoA-style with fitness scoring)
 - Fallback matrix for structured failure handling
-- King Arthur lift/integration tasks (JSON engine, toolkit, overrides, manifest hygiene) coordinated via `legacy/king_arthur/INTEGRATION_PLAN.md` (deterministic manifest edits only; no legacy role resurrection)
+- **Optional:** King Arthur lift/integration tasks (JSON engine, toolkit, overrides, manifest hygiene) coordinated via `legacy/king_arthur/INTEGRATION_PLAN.md` (deterministic manifest edits only; no legacy role resurrection; **this is external to Agent Engine core**)
 - Post-mortem squire for root-cause analysis
-- Evolution system (deterministic scoring + manifest cloning workflow as defined in integration plan)
-- ReAct-style internal reasoning
+- **Optional/Advanced:** Evolution system (deterministic scoring + manifest cloning workflow; **research feature, not core engine requirement**)
+- **Optional/Advanced:** ReAct-style internal reasoning (plugin/pattern, not core)
 
 **Why Sonnet:** Requires architectural design, research understanding, complex integration
 
