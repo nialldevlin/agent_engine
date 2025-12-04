@@ -81,12 +81,12 @@ These tasks are **best suited for Sonnet + Haiku Minions** rather than Codex bec
 5. Fallback matrix implementation - RESEARCH §4.2
 6. Context paging/compression telemetry & debug trace - RESEARCH §§1.1-1.3
 
-**TIER 2 - Advanced Features (RESEARCH.md §3, 6-7):**
-7. ReAct-style internal reasoning support - RESEARCH §3.2
-8. Post-mortem analyst for root cause - RESEARCH §7.2
-9. Evolution system integration - RESEARCH §6.1
-10. Global vs project memory namespaces - RESEARCH §8.2
-11. UX/cost/carbon telemetry scaffolding - RESEARCH §9, Appendix A.5-A.6
+**TIER 2 - Advanced Extensions (implemented as optional modules on top of the core engine):**
+7. ReAct-style internal reasoning support - RESEARCH §3.2 (LLM application feature)
+8. Post-mortem analyst for root cause - RESEARCH §7.2 (LLM application feature)
+9. Evolution system integration - RESEARCH §6.1 (plug-in later; engine must expose telemetry hooks but not own evolution)
+10. Global vs project memory namespaces - RESEARCH §8.2 (engine already provides stores; policy modules live at application layer)
+11. UX/cost/carbon telemetry scaffolding - RESEARCH §9, Appendix A.5-A.6 (downstream analytics/modules)
 
 ---
 
