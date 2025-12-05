@@ -27,13 +27,12 @@ Agent Engine is a manifest-driven framework for building multi-agent LLM systems
 3. **Lint/format/typecheck**  
    `make lint` · `make format` · `make typecheck`
 
-## Run examples
+## Run the minimal example
 
-- Committee pattern: `examples/committee_manifest.yaml`
-- Supervisor pattern: `examples/supervisor_manifest.yaml`
-- Tool agent flow: `examples/tool_agent/manifest.yaml`
+- With Claude: `ANTHROPIC_API_KEY=... python3 run_example.py "Make a dino game"`
+- Without Claude: `python3 run_example.py "Make a dino game"` (uses a mock LLM to show the flow)
 
-Use `config_loader.load_engine_config(...)` to load a manifest and then run a pipeline via `agent_engine.runtime.run_task(...)` with your ToolRuntime handlers/LLM client wired in.
+The script loads the declarative workflow DAG from `configs/basic_llm_agent/`, calls the agent runtime, and prints the stage outputs. Extend it with your manifests/tool handlers/LLM client as needed.
 
 ## Configure your own project
 

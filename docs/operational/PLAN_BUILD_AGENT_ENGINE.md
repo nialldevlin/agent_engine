@@ -62,7 +62,7 @@ These areas are already complete or partially complete and must be **respected, 
 
 ---
 
-# 🛠 **Phase 0 — Salvage & Refactor Legacy Components (Engine-Safe Only)**
+# ✅ **Phase 0 — Salvage & Refactor Legacy Components (Engine-Safe Only) COMPLETE**
 
 **Objective:** Extract, rename, and refactor *generic, engine-agnostic* utilities from Arthur’s toolkit into proper Agent Engine modules.
 
@@ -130,7 +130,7 @@ These areas are already complete or partially complete and must be **respected, 
 
 ---
 
-# 🧱 **Phase 1 — Project Skeleton & Module Layout (Core Engine Only)**
+# ✅ **Phase 1 — Project Skeleton & Module Layout (Core Engine Only) COMPLETE**
 
 **Goal:** Generate the directory structure for a clean Agent Engine aligned with the overview.
 
@@ -165,7 +165,7 @@ This stage: skeleton + module stubs only.
 
 ---
 
-# 🔌 **Phase 2 — Config Loader, Schema Validation & Manifest System**
+# ✅ **Phase 2 — Config Loader, Schema Validation & Manifest System** COMPLETE
 
 **Goal:** Create the foundation for all configuration-driven behavior.
 
@@ -195,19 +195,20 @@ This stage: skeleton + module stubs only.
 * Tool capability checks
 * Agent/tool/pipeline referencing rules
 
-### 2.4 Task Persistence & Resumability
+### 2.4 Task Persistence & Resumability ✅
 
 Tasks must be reconstructible from persisted state:
 
-* **Task Serialization:** `to_dict()` / `from_dict()` methods on Task
-* **State Checkpointing:** Store task state at stage boundaries
-* **Resume Logic:** Ability to resume from last completed stage
-* **Integration with ProjectMemory:** Store task history for later retrieval
+* **Task Serialization:** ✅ `to_dict()` / `from_dict()` methods on Task
+* **State Checkpointing:** ✅ Store task state at stage boundaries
+* **Resume Logic:** ✅ Ability to resume from last completed stage
+* **Integration with ProjectMemory:** ✅ Store task history for later retrieval
 
-Implement:
-* `TaskManager.save_checkpoint(task_id)` - Serialize current state
-* `TaskManager.load_checkpoint(task_id)` - Restore task from checkpoint
-* `TaskManager.list_tasks(project_id)` - Query task history
+Implemented:
+* ✅ `TaskManager.save_checkpoint(task_id)` - Serialize current state
+* ✅ `TaskManager.load_checkpoint(task_id)` - Restore task from checkpoint
+* ✅ `TaskManager.list_tasks(project_id)` - Query task history
+* ✅ `TaskManager.get_task_metadata(task_id)` - Lightweight metadata inspection
 
 Storage backend: JSON files in `.agent_engine/tasks/{project_id}/{task_id}.json`
 

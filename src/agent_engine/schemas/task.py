@@ -69,3 +69,37 @@ class Task(SchemaBase):
     context_fingerprint: Optional[ContextFingerprint] = Field(default=None)
     created_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
     updated_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert Task to JSON-serializable dict.
+        
+        Uses Pydantic's model_dump with mode='json' to handle:
+        - Nested Pydantic models (TaskSpec, StageExecutionRecord, etc.)
+        - Enum conversion to strings
+        - Optional fields preserved as None
+        - Empty collections as {} or []
+        
+        Returns:
+            Dict suitable for JSON serialization with no information loss.
+        """
+        return self.model_dump(mode='json')
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> Task:
+        """Deserialize Task from dictionary.
+        
+        Uses Pydantic's model_validate to:
+        - Reconstruct nested objects
+        - Validate all fields against schema
+        - Raise ValidationError on schema violation
+        
+        Args:
+            data: Dictionary matching Task schema
+            
+        Returns:
+            Fully reconstructed Task instance
+            
+        Raises:
+            ValidationError: If data doesn't match Task schema
+        """
+        return cls.model_validate(data)
