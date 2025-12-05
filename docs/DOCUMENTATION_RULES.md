@@ -1,3 +1,5 @@
+# LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
+
 # Documentation Rules
 
 - **Plan naming**: every operational plan lives in `docs/operational/PLAN_<plan_name>.md`. Use uppercase snake case for `<plan_name>`.

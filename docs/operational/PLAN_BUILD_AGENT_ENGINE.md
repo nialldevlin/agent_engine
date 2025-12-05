@@ -1,3 +1,5 @@
+# LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
+
 # **PLAN_AGENT_ENGINE — Clean, Engine-First, GPT-Max/Claude-Ready**
 
 > **Purpose:** Produce a complete, production-ready Agent Engine as described in **AGENT_ENGINE_OVERVIEW.md**, using RESEARCH.md as design grounding and salvaging selected legacy utilities from king_arthur_orchestrator.

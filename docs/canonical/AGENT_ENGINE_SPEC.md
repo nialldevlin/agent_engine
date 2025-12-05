@@ -1,3 +1,5 @@
+# LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
+
 # Agent Engine — Specification & Completion Requirements
 
 ## 1. Purpose & Scope

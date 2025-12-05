@@ -1,3 +1,5 @@
+LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
+
 # Agent Engine Implementation Plans
 
 **Date:** 2025-12-04

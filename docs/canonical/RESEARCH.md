@@ -1,3 +1,5 @@
+# LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
+
 # Agent Engine – Consolidated Research Notes
 
 This document is the single source of research grounding for the Agent Engine orchestrator ("Agent Engine"). It replaces earlier files (`RESEARCH.md`, `RESEARCH_NOTES.md`, `RESEARCH_ALIGNMENT.md`, `PROMPT_WRAPPING.md`) and is meant to be stable enough that other plans and design docs can cite it directly.
