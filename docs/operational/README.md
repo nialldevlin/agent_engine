@@ -1,81 +1,30 @@
 # Agent Engine Implementation Plans
 
-**Date:** 2025-12-03
-**Status:** Active - Ready for Execution
+**Date:** 2025-12-04
+**Status:** Active — Phases 0–2 complete; ready for Phase 3
 
 ---
 
 ## Overview
 
-The Agent Engine is ~85% complete. Two parallel implementation plans bring it to production-ready status with full research-driven features.
+This repository has completed the foundational work for the Agent Engine and is ready to move into workflow/pipeline implementation (Phase 3). The core schemas, config loader, task persistence, and utility libraries are implemented and verified.
 
 **Current State:**
-- ✅ All core schemas implemented
-- ✅ Complete runtime (TaskManager, Router, PipelineExecutor, AgentRuntime, ToolRuntime)
-- ✅ Config loader, JSON Engine, Telemetry, Security framework
-- ✅ 23 passing tests
-- ✅ Working example (with minor bugs)
-- ⚠️ Missing: Research-driven enhancements, complete documentation, production hardening
+- ✅ Phases 0, 1, and 2 completed and verified
+- ✅ Project virtual environment and VS Code workspace files created
+- ✅ 360 tests passing (full test suite)
+- ✅ Task persistence (checkpointing, load, listing, metadata) implemented
+- ⚠️ Remaining work: Phase 3 (Workflow Graph & Pipeline Executor) and onward
 
 ---
 
-## The Two Plans
+## Plans (summary)
 
-### [PLAN_SONNET_MINION.md](./PLAN_SONNET_MINION.md)
-**Lead:** Sonnet + Haiku Minions
-**Focus:** Research-driven architectural enhancements
-**Effort:** 34-46 hours → 20-25 hours with parallelization
+- **PLAN_BUILD_AGENT_ENGINE.md** — Master implementation plan. Phases 0–2 are complete. Phase 3 (Workflow Graph & Pipeline Executor) is next.
+- **PHASE_2_IMPLEMENTATION_PLAN.md** — Task persistence & resumability. COMPLETED and verified.
+- **PHASE_2_SCHEMAS_OVERVIEW.md** — Schemas reference for Phase 2. Present and in sync with code.
 
-**What it covers:**
-- Multi-tier memory architecture (task/project/global)
-- Context retrieval policies (agent-aware, task-aware)
-- Telemetry-based routing (MoA-style with fitness scoring)
-- Fallback matrix for structured failure handling
-- **Optional:** King Arthur lift/integration tasks (JSON engine, toolkit, overrides, manifest hygiene) coordinated via `legacy/king_arthur/INTEGRATION_PLAN.md` (deterministic manifest edits only; no legacy role resurrection; **this is external to Agent Engine core**)
-- Post-mortem squire for root-cause analysis
-- **Optional/Advanced:** Evolution system (deterministic scoring + manifest cloning workflow; **research feature, not core engine requirement**)
-- **Optional/Advanced:** ReAct-style internal reasoning (plugin/pattern, not core)
-
-**Why Sonnet:** Requires architectural design, research understanding, complex integration
-
----
-
-### [PLAN_CODEX.md](./PLAN_CODEX.md)
-**Lead:** GPT Codex / Codex Max
-**Focus:** Systematic implementation, documentation, algorithms
-**Effort:** 24-33 hours → 13-19 hours with Codex Max (2x speedup!)
-
-**What it covers:**
-
-**Category A: Fix Example (URGENT - 3 hrs)**
-- Fix schema registration bug
-- Fix security gate blocking
-- Add review stage
-- Create E2E test
-
-**Category B: Documentation (2-3 hrs with Codex Max)**
-- Complete API reference
-- Complete config reference
-- Example documentation
-- Getting started guide
-
-**Category C: Algorithms (4-5 hrs with Codex Max)**
-- Prompt compression (LLMLingua-style)
-- Template management system
-- JSON error categorization & repair
-
-**Category D: Tests (3-4 hrs with Codex Max)**
-- Schema validation tests
-- Integration test suite
-- Benchmark suite skeleton
-- Security tests
-
-**Category E: Refactoring (2-4 hrs with Codex Max)**
-- Enhanced error handling
-- Structured output enforcement
-- CI/CD pipeline
-
-**Why Codex Max:** Systematic extraction, well-defined algorithms, consistent patterns
+Other planning artifacts and guides (Cline prompts, extraction summaries) are available in `docs/operational/` for audit and reference.
 
 ---
 
@@ -240,16 +189,17 @@ All requirements from the original unified plan are captured:
 
 ---
 
-## Archive
+## Archive & Completed Work
 
-Previous plans archived in `archive/`:
-- `UNIFIED_PRODUCTION_PLAN.md` - consolidated into these 2 plans
-- Other historical plans
+Completed plans and verification artifacts have been recorded under `docs/operational/`:
 
-**Current Active Plans:**
-- `PLAN_SONNET_MINION.md`
-- `PLAN_CODEX.md`
+- `PHASE_2_IMPLEMENTATION_PLAN.md` — COMPLETED
+- `EXTRACTION_SUMMARY.md` — Completed extraction & verification
+- `PLAN_BUILD_AGENT_ENGINE.md` — Master plan annotated with completion marks through Phase 2
+
+**Next Active Work:**
+- Implement **Phase 3 — Workflow Graph & Pipeline Executor**
 
 ---
 
-**Ready to execute!** 🚀
+**Ready to execute Phase 3!** 🚀
