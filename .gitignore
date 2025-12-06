@@ -16,3 +16,5 @@ htmlcov/
 
 # VS Code workspace settings (optional to keep or ignore)
 .vscode/
+
+.agent_engine/
