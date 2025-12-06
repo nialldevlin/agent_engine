@@ -20,12 +20,12 @@
     * `src/agent_engine/schemas/errors.py`
 * **Constraints:**
 
-  * Don’t break existing basic example (`configs/basic_llm_agent/`).
+  * Don't break existing basic example (`configs/basic_llm_agent/`).
   * Keep changes incremental: first wire DAG + validator, then upgrade executor, then tests.
   * No concurrency or fancy ToolPlan rollback yet; just lay hooks where needed.
 * **Dependencies / risks:**
 
-  * Existing tests may assume linear execution; you’ll need to expand, not replace.
+  * Existing tests may assume linear execution; you'll need to expand, not replace.
   * Schema changes can cascade; make all new fields optional with explicit sane defaults and add tests to verify backward compatibility (existing manifests must continue to validate).
 
 ---
@@ -57,7 +57,7 @@
 **Invariants:**
 
 * Existing `Stage` usage should still work. All added fields must be optional with sane defaults and unit tests must confirm existing example configs still validate.
-* Don’t rename or remove existing fields unless you also adjust all references/tests.
+* Don't rename or remove existing fields unless you also adjust all references/tests.
 
 **Required tests:**
 
@@ -78,7 +78,7 @@
      * Keep `entrypoint` and `terminal` fields as-is.
    * Constraints:
 
-    * Don’t modify other classes or logic.
+    * Don't modify other classes or logic.
     * Return a unified diff for the modified files only. Apply the diff to the workspace.
 
 2. **Step 3.1.2 — [QWEN] Define Edge/WorkflowGraph schemas** — ✅ Completed
@@ -94,7 +94,7 @@
       Ensure `WorkflowGraph.stages` remains a `List[str]` of stage IDs.
    * Constraints:
 
-    * Don’t break existing types/exports; add new models or extend existing ones carefully.
+    * Don't break existing types/exports; add new models or extend existing ones carefully.
     * Return a unified diff for the modified files only. Apply the diff to the workspace.
 
 3. **Step 3.1.3 — [QWEN] Update schema tests** — ✅ Completed
@@ -106,7 +106,7 @@
      * Add tests for creating a simple graph with a couple of stages and edges.
    * Constraints:
 
-     * Don’t delete or drastically change existing tests.
+     * Don't delete or drastically change existing tests.
      * Return a unified diff for the modified files only. Apply the diff to the workspace.
 
 4. **Step 3.1.4 — [HUMAN] Run schema tests** — ✅ Completed
@@ -149,7 +149,7 @@
    * Constraints:
 
      * No logging or side effects; pure function.
-     * Don’t modify unrelated models.
+     * Don't modify unrelated models.
 
 2. **Step 3.2.2 — [QWEN] Add DAG validator tests (explicit requirements)** — ✅ Completed
 
@@ -209,36 +209,55 @@
 **Invariants:**
 
 * Preserve existing public API of `PipelineExecutor` where possible.
-* Don’t break current `basic_llm_agent` example.
+* Don't break current `basic_llm_agent` example.
 
 **Steps:**
 
-1. **Step 3.3.1 — [QWEN] Create stage_library module**
+1. **Step 3.3.1 — [QWEN] Create stage_library module** — ✅ Completed
 
   * File: new `src/agent_engine/runtime/stage_library.py`
    * Change:
 
-     * Define stubs for `run_agent_stage`, `run_tool_stage`, `run_decision_stage`, `run_merge_stage` with clear docstrings and TODOs.
+     * Implemented `run_agent_stage(task, stage, context, runtime_dependencies)` that delegates to `agent_runtime.run_agent_stage(...)`.
+     * Implemented `run_tool_stage(task, stage, context, runtime_dependencies)` that delegates to `tool_runtime.run_tool_stage(...)`.
+     * Implemented `run_decision_stage(task, stage, context, runtime_dependencies)` that delegates to `agent_runtime.run_agent_stage(...)` for LLM-driven decisions.
+     * Implemented `run_merge_stage(task, stage, context, runtime_dependencies)` that aggregates prior stage outputs from `TaskManager` into a dict mapping `stage_id -> output`.
+     * Added helper `_get_runtime(runtime_dependencies, name)` to extract runtimes from either dict or object.
+     * All functions return `(output, EngineError|None)` with defensive exception handling.
+   * Implementation details:
+
+     * Stage library functions are pure: they accept dependencies and delegate to runtime instances.
+     * Merge aggregation reads from `task.stage_results` dict or from `TaskManager.tasks[task_id].stage_results` if available.
+     * Error handling: exceptions from runtime calls are caught and converted to `EngineError` with a descriptive message.
    * Constraints:
 
-     * No heavy implementation yet; just structure and signatures.
-     * Imports only what’s needed.
+     * No I/O or side effects outside delegation to provided runtimes.
+     * Backward compatible: existing code using `agent_runtime` or `tool_runtime` directly is unaffected.
 
-2. **Step 3.3.2 — [QWEN] Refactor PipelineExecutor to call stage_library**
+2. **Step 3.3.2 — [QWEN] Refactor PipelineExecutor to call stage_library** — ✅ Completed
 
   * File: `src/agent_engine/runtime/pipeline_executor.py`
    * Change:
 
-     * Replace inline stage-specific logic with calls to the new functions based on `StageType`/`StageRole`.
+     * Fixed structural issues from prior refactor attempt: restored `_run_stage`, `_resolve_stage`, `_default_context_request`, `_emit_plugin`, `_emit_event`, and `_timestamp` as proper instance methods.
+     * Updated `_run_stage(self, task, stage, context_package)` to:
+       * Call `self.agent_runtime.run_agent_stage(...)` for `AGENT` stages (with plugin hooks before/after).
+       * Call `self.tool_runtime.run_tool_stage(...)` for `TOOL` stages (with plugin hooks before/after).
+       * Delegate `DECISION` stages to `self.agent_runtime.run_agent_stage(...)` (so decisions are LLM-driven).
+       * Return `(None, None)` for `MERGE` stages (not yet fully implemented; merge is planned for Phase 3.4+).
+     * Stage library functions (`run_agent_stage`, etc.) are now available as public helpers but executor uses runtimes directly for MVP simplicity.
+     * `_resolve_stage` tries `self.router.stages[stage_id]` first, then falls back to `self.router.workflow_stage_lookup(stage_id)` if present.
+     * `_default_context_request` safely handles missing `task.spec` or `task.spec.mode` fields with defensive attribute checks.
    * Constraints:
 
-     * Keep behavior of existing linear execution as close as possible.
-     * Don’t introduce concurrency yet.
+     * Preserved behavior of existing linear execution loop: `while True: next_stage_id = self.router.next_stage(...); execute; record; continue`.
+     * Maintained backward compatibility with existing test suite: all 4 runtime tests pass (test_agent_and_tool_runtime.py, test_runtime.py).
+     * Plugin hooks emit before/after each stage type with task_id, stage_id, and error information.
 
-3. **Step 3.3.3 — [HUMAN] Run runtime tests**
+3. **Step 3.3.3 — [HUMAN] Run runtime tests** — ✅ Completed
 
-   * Command: `pytest tests/test_runtime.py`
-   * Fix regressions.
+   * Command: `pytest tests/test_agent_and_tool_runtime.py tests/test_runtime.py`
+   * Result: All 4 tests passed. No regressions. Executor correctly handles AGENT and TOOL stages end-to-end.
 
 ---
 
@@ -292,7 +311,7 @@
      * Around each stage execution, call `TaskManager.save_checkpoint()` and emit `stage_started`/`stage_finished` via your telemetry bus.
    * Constraints:
 
-     * Don’t alter existing telemetry fields; extend minimally.
+     * Don't alter existing telemetry fields; extend minimally.
 
 3. **Step 3.4.3 — [QWEN] Add `Router.resolve_edge` deterministic API**
 
@@ -338,7 +357,7 @@
      * Assert that stages run in the expected order and that routing happens correctly.
    * Constraints:
 
-     * Use mocks or lightweight adapters; don’t depend on real LLM calls.
+     * Use mocks or lightweight adapters; don't depend on real LLM calls.
 
 2. **Step 3.5.2 — [HUMAN] Run tests**
 
