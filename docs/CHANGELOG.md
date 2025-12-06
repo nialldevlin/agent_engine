@@ -2,6 +2,15 @@
 
 # Changelog
 
+## 2025-12-05
+- **Phase 3 Complete:** Implemented DAG-based workflow engine with full specification.
+  - Phase 3.1: Added `StageRole` enum and `role` field to `Stage`; enhanced `Edge` and `WorkflowGraph` schemas with optional fields.
+  - Phase 3.2: Implemented pure `validate_workflow_graph(...)` function for DAG validation (cycle detection, reachability, edge validation).
+  - Phase 3.3: Implemented `stage_library.py` with four stage runner functions (`run_agent_stage`, `run_tool_stage`, `run_decision_stage`, `run_merge_stage`); fixed `PipelineExecutor` structural issues and restored all instance methods.
+  - Phase 3.4: Added `Router.resolve_edge(...)` for deterministic decision routing; injected checkpoint saving via `TaskManager.save_checkpoint(...)` and enhanced telemetry events (`stage_started`, `stage_finished`, `checkpoint_error`).
+  - Phase 3.5: Added comprehensive DAG execution tests demonstrating decision-based routing and merge stage aggregation.
+  - Closed operational `PHASE_3_IMPLEMENTATION_BRIEF.md` into this changelog; all 10 tests passing (runtime, validators, DAG execution).
+
 ## 2025-12-04
 - Repository: closed out operational Phase 0–2 artifacts and consolidated active plans.
 - Deleted redundant operational plan and phase documents to reduce maintenance and surface current plan (`PLAN_BUILD_AGENT_ENGINE.md` now acts as master with phases closed through Phase 2).
@@ -14,3 +23,4 @@
 
 - Closed PLAN_CODEX after completion (see repo history for details) and removed outdated GETTING_STARTED and architecture pointer docs to prevent stale guidance.
 - Replaced legacy knight roles with neutral agent manifests, removed ContextStore fallback, and quarantined the King Arthur lift under `legacy/king_arthur/`.
+
