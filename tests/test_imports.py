@@ -1,4 +1,42 @@
-def test_import_agent_engine() -> None:
-    import agent_engine  # noqa: F401
+"""Ensure public API surface is limited to Engine and schemas."""
 
-    assert hasattr(agent_engine, "__version__")
+
+def test_engine_importable():
+    from agent_engine import Engine
+
+    assert Engine is not None
+
+
+def test_public_schema_exports():
+    import agent_engine
+
+    required = [
+        "Engine",
+        "Task",
+        "TaskSpec",
+        "TaskMode",
+        "AgentDefinition",
+        "ToolDefinition",
+        "WorkflowGraph",
+        "Edge",
+        "EdgeType",
+        "Pipeline",
+        "__version__",
+    ]
+    for name in required:
+        assert hasattr(agent_engine, name), f"Missing public export: {name}"
+
+
+def test_runtime_internals_not_exported():
+    import agent_engine
+
+    forbidden = [
+        "TaskManager",
+        "Router",
+        "PipelineExecutor",
+        "AgentRuntime",
+        "ToolRuntime",
+        "ContextAssembler",
+    ]
+    for name in forbidden:
+        assert not hasattr(agent_engine, name), f"Internal {name} should not be exported"

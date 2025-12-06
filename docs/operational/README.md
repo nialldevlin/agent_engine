@@ -1,207 +1,98 @@
 LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
 
-# Agent Engine Implementation Plans
+# Agent Engine – Operational Guide
 
-**Date:** 2025-12-04
-**Status:** Active — Phases 0–2 complete; ready for Phase 3
+## Quick Start
 
----
+### Installation
 
-## Overview
+```bash
+pip install -e .
+```
 
-This repository has completed the foundational work for the Agent Engine and is ready to move into workflow/pipeline implementation (Phase 3). The core schemas, config loader, task persistence, and utility libraries are implemented and verified.
+### Basic Usage
 
-**Current State:**
-- ✅ Phases 0, 1, and 2 completed and verified
-- ✅ Project virtual environment and VS Code workspace files created
-- ✅ 360 tests passing (full test suite)
-- ✅ Task persistence (checkpointing, load, listing, metadata) implemented
-- ⚠️ Remaining work: Phase 3 (Workflow Graph & Pipeline Executor) and onward
+```python
+from agent_engine import Engine
 
----
+# 1. Create the Engine from the configs directory
+engine = Engine.from_config_dir(
+    "configs/my_app",
+    llm_client=YourLLMClient()
+)
 
-## Plans (summary)
+# 2. Run a task
+result = engine.run_one("List Python files in src/", mode="implement")
 
-- **PLAN_BUILD_AGENT_ENGINE.md** — Master implementation plan. Phases 0–2 are complete. Phase 3 (Workflow Graph & Pipeline Executor) is next.
-- **PHASE_2_IMPLEMENTATION_PLAN.md** — Task persistence & resumability. COMPLETED and verified.
-- **PHASE_2_SCHEMAS_OVERVIEW.md** — Schemas reference for Phase 2. Present and in sync with code.
+# 3. Inspect results
+print(result.status)
+for stage_id, record in result.stage_results.items():
+    print(f"{stage_id}: {record.output}")
+print(f"Events emitted: {len(engine.telemetry.events)}")
+```
 
-Other planning artifacts and guides (Cline prompts, extraction summaries) are available in `docs/operational/` for audit and reference.
+Any real application should use `Engine` plus the schema types exported from `agent_engine` and should *not* import `agent_engine.runtime.*` directly.
 
----
+## Public API
 
-## Parallel Execution Strategy
+The Engine façade is the **only supported public entry point**. Applications, demos, and downstream services **must register tool handlers through `Engine.register_tool_handler`** and must not instantiate runtime components manually.
 
-Both plans can run **simultaneously** for maximum efficiency:
+### Engine Methods
 
-### Week 1: Foundations
-**Codex:** Category A (Fix Example) - 3 hrs
-**Sonnet:** Phase 1 (Memory) + Phase 4 (Fallback) - 10-13 hrs
-**Result:** Working example + memory architecture
+- `Engine.from_config_dir(config_dir: str, llm_client: LLMClient, *, telemetry: Optional[TelemetryBus] = None, plugins: Optional[PluginManager] = None) -> Engine`
+- `engine.create_task(input: str | TaskSpec, *, mode: str | TaskMode = "default") -> Task`
+- `engine.run_task(task: Task) -> Task`
+- `engine.run_one(input: str | TaskSpec, mode: str | TaskMode = "default") -> Task`
+- `engine.register_tool_handler(tool_id: str, handler: Callable[[Dict[str, Any]], Any]) -> None`
 
-### Week 2: Intelligence & Docs
-**Codex (Codex Max):** Category B (Docs) - 2-3 hrs ✨
-**Sonnet:** Phase 2 (Context) + Phase 3 (Routing) - 9-13 hrs
-**Result:** Complete docs + intelligent routing
+Running `from agent_engine import Engine` should always succeed, and runtime internals (for example `TaskManager`, `Router`, `PipelineExecutor`, `AgentRuntime`, `ToolRuntime`, `ContextAssembler`) are intentionally hidden from the package root.
 
-### Week 3: Advanced Features
-**Codex (Codex Max):** Categories C & D - 7-9 hrs ✨
-**Sonnet:** Phase 6 (Post-Mortem) + King Arthur integration follow-ups - 7-10 hrs
-**Result:** Algorithms + tests + post-mortem system + KA lift
+## Configuration Surfaces
 
-### Week 4: Polish & Evolution
-**Codex (Codex Max):** Category E (Refactoring) - 2-4 hrs ✨
-**Sonnet:** Phase 7 (Evolution) + Phase 8 (ReAct) - 8-10 hrs
-**Result:** Production-ready + evolution
+Agent Engine is entirely driven by manifests. When updating behavior, change the YAML/JSON files instead of touching runtime code:
 
-**Total Time:**
-- Sequential: ~58-79 hours
-- Parallel: ~3-4 weeks calendar time
-- With Codex Max optimization: ~47-64 hours actual work
+1. `agents.yaml` — Agent definitions (model, tools, context profiles)
+2. `tools.yaml` — Tool definitions (kind, schemas, permissions)
+3. `stages.yaml` — Stage definitions (agent/tool stages, error policies)
+4. `workflow.yaml` — Workflow graph (stages and edges)
+5. `pipelines.yaml` — Pipeline definitions (entry/exit, allowed modes, fallbacks)
+6. `memory.yaml` *(optional)* — Memory configuration (task/project/global stores, context policies)
+7. `plugins.yaml` *(optional)* — Plugin manifest surface
 
----
+All manifests are validated against the JSON schemas in `src/agent_engine/schemas/registry.py` and the Pydantic models in `src/agent_engine/schemas/`. Invalid manifests raise structured `EngineError` objects during `Engine.from_config_dir`.
 
-## Coverage Verification
+## Example Directory Structure
 
-### Critical Production Requirements ✅
+```
+my_agent_app/
+├── configs/
+│   ├── agents.yaml
+│   ├── tools.yaml
+│   ├── stages.yaml
+│   ├── workflow.yaml
+│   ├── pipelines.yaml
+│   └── memory.yaml
+├── src/
+│   └── my_app/
+│       └── cli.py
+├── tests/
+│   └── test_end_to_end.py
+├── pyproject.toml
+└── README.md
+```
 
-**Working Example:**
-- ✅ PLAN_CODEX Category A: Fixes all bugs, adds review stage, creates E2E test
+### Example Apps
 
-**Complete Documentation:**
-- ✅ PLAN_CODEX Category B: API reference, config reference, examples, getting started
+There is temporarily no canonical `examples/*` entry point because the engine is still shaping its runtime APIs. When an example returns, it must:
 
-**Production Hardening:**
-- ✅ PLAN_CODEX Category E: Error handling, structured outputs, CI/CD
-- ✅ PLAN_SONNET Phase 4: Fallback matrix
-- ✅ PLAN_CODEX Category D: Comprehensive tests
+- Instantiate `Engine` via `Engine.from_config_dir`
+- Use `engine.run_one`/`engine.create_task` + `engine.run_task`
+- Register deterministic tool handlers via `Engine.register_tool_handler`
+- Avoid direct imports from `agent_engine.runtime.*`
 
-**Research-Driven Features:**
-- ✅ PLAN_SONNET Phase 1: Multi-tier memory (RESEARCH §1.2)
-- ✅ PLAN_SONNET Phase 2: Context profiles (RESEARCH §2.1, §2.2)
-- ✅ PLAN_SONNET Phase 3: Telemetry routing (RESEARCH §4.1)
-- ✅ PLAN_CODEX Category C: Compression (RESEARCH §1.3)
-- ✅ PLAN_CODEX Category C: Templates (RESEARCH §5.1)
-- ✅ PLAN_CODEX Category C: JSON repair (RESEARCH §7.1)
-- ✅ KA Integration Plan: JSON/toolkit overrides + hygiene (RESEARCH §8.1)
-- ✅ PLAN_SONNET Phase 6: Post-mortem (RESEARCH §7.2)
-- ✅ PLAN_SONNET Phase 7: Evolution (RESEARCH §6.1)
-- ✅ PLAN_SONNET Phase 8: ReAct (RESEARCH §3.2)
+## Notes
 
-**Advanced Features:**
-- ✅ PLAN_CODEX Category D: Benchmarks (RESEARCH §6.2)
-- ✅ PLAN_CODEX Category D: Security tests
-
-### Nothing Missing ✅
-
-All requirements from the original unified plan are captured:
-- Example fixes → PLAN_CODEX Category A
-- Documentation → PLAN_CODEX Category B
-- Production hardening → PLAN_CODEX Category E + PLAN_SONNET Phase 4
-- Research features → Both plans comprehensively
-- Tests → PLAN_CODEX Category D
-- Advanced patterns → PLAN_SONNET Phases 6-8 + KA Integration Plan
-
----
-
-## Codex Max ROI Analysis
-
-**High-Value Tasks for Codex Max (Use Codex Max):**
-1. **API Reference** - 2 hrs → 30 min (4x speedup)
-2. **Config Reference** - 2 hrs → 30 min (4x speedup)
-3. **Prompt Compression** - 3-4 hrs → 1 hr (3x speedup)
-4. **Error Handling** - 2-3 hrs → 1 hr (2-3x speedup)
-5. **Test Generation** - 6-8 hrs → 3-4 hrs (2x speedup)
-
-**Total Savings: ~15 hours (45% reduction)**
-
-**Use Standard Codex or Haiku:**
-- Small bug fixes (too small for Max)
-- Example-specific docs (needs context)
-- Integration work (Sonnet handles)
-
----
-
-## Success Criteria
-
-### Phase 1 Complete (Example Working):
-✅ Example runs with all 8 stages (including review)
-✅ No schema errors
-✅ No security gate errors
-✅ E2E test passing
-
-### Phase 2 Complete (Documentation):
-✅ Complete API reference
-✅ Complete config reference
-✅ Example fully documented
-✅ New developers can use the engine
-
-### Phase 3 Complete (Production Ready):
-✅ Multi-tier memory operational
-✅ Intelligent routing with fitness
-✅ Fallback matrix handling failures
-✅ Test coverage >80%
-✅ CI/CD validating all PRs
-
-### Phase 4 Complete (Advanced Features):
-✅ Override system working
-✅ Post-mortems generated
-✅ Evolution cycle active
-✅ All RESEARCH.md checklists implemented
-
----
-
-## Getting Started
-
-1. **Review both plans:**
-   - [PLAN_SONNET_MINION.md](./PLAN_SONNET_MINION.md) for architecture work
-   - [PLAN_CODEX.md](./PLAN_CODEX.md) for systematic work
-
-2. **Choose execution mode:**
-   - **Parallel** (recommended): Run both plans simultaneously
-   - **Sequential**: Complete PLAN_CODEX first, then PLAN_SONNET
-   - **Custom**: Pick specific tasks from either plan
-
-3. **Start with PLAN_CODEX Category A** (URGENT):
-   - Fixes example bugs in ~3 hours
-   - Unblocks user adoption
-   - Enables testing other features
-
-4. **Use Codex Max strategically:**
-   - Documentation tasks (Category B)
-   - Algorithm implementation (Category C)
-   - Test generation (Category D)
-   - Systematic refactoring (Category E)
-
----
-
-## Coordination
-
-**Both plans can run in parallel safely.**
-
-**Potential conflicts:**
-- Both touch schemas → use feature branches
-- Both touch runtime → clear module boundaries
-- Sync on major changes before merge
-
-**Integration points:**
-- Codex provides docs for Sonnet's features
-- Codex provides tests for Sonnet's implementations
-- Regular integration testing
-
----
-
-## Archive & Completed Work
-
-Completed plans and verification artifacts have been recorded under `docs/operational/`:
-
-- `PHASE_2_IMPLEMENTATION_PLAN.md` — COMPLETED
-- `EXTRACTION_SUMMARY.md` — Completed extraction & verification
-- `PLAN_BUILD_AGENT_ENGINE.md` — Master plan annotated with completion marks through Phase 2
-
-**Next Active Work:**
-- Implement **Phase 3 — Workflow Graph & Pipeline Executor**
-
----
-
-**Ready to execute Phase 3!** 🚀
+- **No hard-coded behavior:** Agents, tools, and routing come from manifests.
+- **Safe for long-lived processes:** `Engine.run_one()` keeps state in `TaskManager`; no global mutation occurs.
+- **Structured errors:** Config/runtime failures surface as `EngineError`.
+- **Telemetry and plugins:** `TelemetryBus` and `PluginManager` are pluggable via the `Engine` constructor.

@@ -20,6 +20,14 @@ Each phase below is intended to be implementable via a **single Haiku / Copilot 
 
 **Goal:** Align the repo skeleton with the canonical docs, mark what’s “core engine vs extras”, and introduce a stable public façade without deeply changing behavior yet.
 
+### Status (2025-12-05)
+
+- ✅ `Engine` facade implemented with manifest validation, runtime wiring, tool handler registration, and public schema re-exports.
+- ✅ README, plan, and tests (`tests/test_imports.py`, `tests/test_basic_llm_agent_example.py`, `tests/test_runtime.py`) now document/publicly verify that only the Engine façade is used.
+- ✅ Tests: `pytest` (full suite) passes after the refactor.
+
+The prior `examples/basic_llm_agent` CLI example has been removed because it no longer reflects the unfinished API backend. A future canonical example will be reintroduced once the runtime APIs stabilize.
+
 ### Files to touch
 
 * `src/agent_engine/__init__.py`

@@ -11,6 +11,9 @@
   - Phase 3.5: Added comprehensive DAG execution tests demonstrating decision-based routing and merge stage aggregation.
   - Closed operational `PHASE_3_IMPLEMENTATION_BRIEF.md` into this changelog; all 10 tests passing (runtime, validators, DAG execution).
 
+## 2025-12-06
+- **Phase 0 Complete:** Engine façade now includes manifest loading, public API exports, and `register_tool_handler` (Step 8) so applications can plug in deterministic tools while the runtime stays encapsulated; README/plan docs were refreshed to describe the stable API, helper-based example tests continue to exercise Engine usage, and the `basic_llm_agent` CLI example was removed pending a future canonical version.
+
 ## 2025-12-04
 - Repository: closed out operational Phase 0–2 artifacts and consolidated active plans.
 - Deleted redundant operational plan and phase documents to reduce maintenance and surface current plan (`PLAN_BUILD_AGENT_ENGINE.md` now acts as master with phases closed through Phase 2).
@@ -23,4 +26,3 @@
 
 - Closed PLAN_CODEX after completion (see repo history for details) and removed outdated GETTING_STARTED and architecture pointer docs to prevent stale guidance.
 - Replaced legacy knight roles with neutral agent manifests, removed ContextStore fallback, and quarantined the King Arthur lift under `legacy/king_arthur/`.
-

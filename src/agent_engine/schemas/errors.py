@@ -21,6 +21,7 @@ class FailureCode(str, Enum):
 
 class EngineErrorCode(str, Enum):
     VALIDATION = "validation"
+    CONFIG = "config"
     ROUTING = "routing"
     TOOL = "tool"
     AGENT = "agent"

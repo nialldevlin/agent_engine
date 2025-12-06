@@ -120,7 +120,7 @@ class PipelineExecutor:
 
         Returns (output, error)
         """
-        if stage.type == StageType.AGENT:
+        if stage.type in (StageType.AGENT, StageType.FEEDBACK):
             # Agent runtime is expected to provide `run_agent_stage` returning (output, error)
             self._emit_plugin("before_agent", task_id=task.task_id, stage_id=stage.stage_id)
             output, error = self.agent_runtime.run_agent_stage(task, stage, context_package)
@@ -142,7 +142,7 @@ class PipelineExecutor:
             # Merge is a local aggregation step; not implemented in this MVP
             return None, None
 
-        # Unknown or TRANSFORM types: no-op for now
+        # Unknown or LINEAR types: no-op for now
         return None, None
 
     def _resolve_stage(self, stage_id: str) -> Stage:

@@ -31,7 +31,7 @@ def test_dag_execution_with_decision_routing():
         "transform_1": Stage(
             stage_id="transform_1",
             name="Transform",
-            type=StageType.TRANSFORM,
+            type=StageType.LINEAR,
             entrypoint=True,
         ),
         "decision_1": Stage(

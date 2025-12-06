@@ -1,33 +1,29 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
-from agent_engine.config_loader import load_engine_config, EngineConfig
-from agent_engine.runtime.task_manager import TaskManager
-from agent_engine.runtime.router import Router
-from agent_engine.runtime.context import ContextAssembler
-from agent_engine.runtime.agent_runtime import AgentRuntime
-from agent_engine.runtime.tool_runtime import ToolRuntime
-from agent_engine.runtime.pipeline_executor import PipelineExecutor
-from agent_engine.runtime.llm_client import LLMClient
-from agent_engine.schemas import Task, TaskSpec, TaskMode
-from agent_engine.telemetry import TelemetryBus
+from typing import Any, Callable, Dict, Optional
+
+from agent_engine.config_loader import EngineConfig, load_engine_config
 from agent_engine.plugins import PluginManager
+from agent_engine.runtime.agent_runtime import AgentRuntime
+from agent_engine.runtime.context import ContextAssembler
+from agent_engine.runtime.pipeline_executor import PipelineExecutor
+from agent_engine.runtime.router import Router
+from agent_engine.runtime.task_manager import TaskManager
+from agent_engine.runtime.tool_runtime import ToolRuntime
+from agent_engine.runtime.llm_client import LLMClient
+from agent_engine.schemas import Task, TaskMode, TaskSpec
+from agent_engine.telemetry import TelemetryBus
+
 
 class Engine:
-    """Agent Engine orchestrator façade.
-    
-    The Engine is the single public entry point for running manifest-driven
-    multi-agent workflows. It loads configurations, manages task lifecycle,
-    and executes workflows through a pipeline of agents and tools.
-    
-    Example apps should ONLY use Engine and public schemas; do not import
-    runtime.* modules directly.
-    
-    Attributes:
-        config (EngineConfig): Loaded configuration (agents, tools, workflow, etc.)
-        llm_client (LLMClient): LLM backend adapter
-        telemetry (TelemetryBus): Event telemetry bus
-        plugins (PluginManager): Optional plugin system
+    """Facade that runs manifest-driven Agent Engine workloads.
+
+    Example applications must use Engine and public schemas only; runtime internals (router,
+    task manager, pipeline executor, etc.) must not be imported directly.
     """
+
+    _REQUIRED_MANIFESTS = ("agents", "tools", "stages", "workflow", "pipelines")
 
     @classmethod
     def from_config_dir(
@@ -36,45 +32,35 @@ class Engine:
         llm_client: LLMClient,
         *,
         telemetry: Optional[TelemetryBus] = None,
-        plugins: Optional[PluginManager] = None
+        plugins: Optional[PluginManager] = None,
     ) -> Engine:
-        """Create Engine from a configuration directory.
-        
-        The config_dir must contain YAML/JSON manifests:
-        - agents.yaml: Agent definitions
-        - tools.yaml: Tool definitions
-        - stages.yaml: Stage definitions
-        - workflow.yaml: Workflow graph (DAG)
-        - pipelines.yaml: Pipeline definitions
-        - memory.yaml: Memory configuration (optional)
-        
+        """Create an Engine from a directory of YAML/JSON manifests.
+
         Args:
-            config_dir: Path to directory containing manifests
-            llm_client: LLM backend client implementing LLMClient interface
-            telemetry: Optional telemetry bus for events/logging
-            plugins: Optional plugin manager for hooks
-            
+            config_dir: Directory containing the required manifests.
+            llm_client: Concrete LLM client implementation.
+            telemetry: Optional telemetry bus.
+            plugins: Optional plugin manager for runtime hooks.
+
         Returns:
-            Configured Engine instance
-            
+            Configured Engine instance.
+
         Raises:
-            SystemExit or Exception: If config loading fails
-            
-        Example:
-            >>> from agent_engine import Engine
-            >>> engine = Engine.from_config_dir(
-            ...     "configs/my_app",
-            ...     llm_client=MyLLMClient()
-            ... )
+            FileNotFoundError: If a required manifest cannot be found.
+            RuntimeError: If manifest validation fails.
         """
-        manifest_dict = cls._build_manifest_dict(config_dir)
-        config = load_engine_config(manifest_dict)
-        
+        base_dir = Path(config_dir).expanduser().resolve()
+        manifest_paths = cls._collect_manifest_paths(base_dir)
+        config, error = load_engine_config(manifest_paths)
+        if error:
+            raise RuntimeError(f"Failed to load engine config: {error.message}")
+        if config is None:
+            raise RuntimeError("Engine configuration factory returned no config.")
         return cls(
             config=config,
             llm_client=llm_client,
-            telemetry=telemetry or TelemetryBus(),
-            plugins=plugins
+            telemetry=telemetry,
+            plugins=plugins,
         )
 
     def __init__(
@@ -82,112 +68,115 @@ class Engine:
         config: EngineConfig,
         llm_client: LLMClient,
         telemetry: Optional[TelemetryBus] = None,
-        plugins: Optional[PluginManager] = None
+        plugins: Optional[PluginManager] = None,
+        *,
+        task_manager: Optional[TaskManager] = None,
+        router: Optional[Router] = None,
+        context_assembler: Optional[ContextAssembler] = None,
+        agent_runtime: Optional[AgentRuntime] = None,
+        tool_runtime: Optional[ToolRuntime] = None,
+        pipeline_executor: Optional[PipelineExecutor] = None,
     ):
-        # Store config and clients
+        """Initialize the Engine with resolved runtime components."""
         self.config = config
         self.llm_client = llm_client
         self.telemetry = telemetry or TelemetryBus()
         self.plugins = plugins
-        
-        # Initialize runtime components:
-        self.task_manager = TaskManager(config=self.config)
-        self.router = Router(workflow=self.config.workflow, pipelines=self.config.pipelines, stages=self.config.stages)
-        self.context_assembler = ContextAssembler(memory_config=self.config.memory)
-        self.agent_runtime = AgentRuntime(llm_client=self.llm_client)
-        self.tool_runtime = ToolRuntime(tools=self.config.tools, tool_handlers={})
-        self.pipeline_executor = PipelineExecutor(telemetry=self.telemetry, plugins=self.plugins)
 
-    def create_task(
-        self,
-        input: str | TaskSpec,
-        *,
-        mode: str | TaskMode = "default"
-    ) -> Task:
-        """Create a new Task from user input.
-        
-        Args:
-            input: Either a raw string request or a fully-formed TaskSpec
-            mode: Execution mode (analysis_only, implement, review, dry_run)
-                  Defaults to "analysis_only" if "default" is passed
-                  
-        Returns:
-            Task object ready to execute
-            
-        Example:
-            >>> task = engine.create_task("List all Python files", mode="implement")
-        """
-        if isinstance(input, str):
-            task_spec_id = self.config.auto_generate_task_spec_id()
-            request = input
-        else:
-            task_spec_id = input.task_spec_id
-            request = input.request
-        
-        if isinstance(mode, str):
-            mode_enum = TaskMode[mode.upper()]
-        else:
-            mode_enum = mode
-
-        pipeline_id = self.router.choose_pipeline(task_spec=task_spec_id)
-        
-        task = self.task_manager.create_task(
-            spec=task_spec_id,
-            request=request,
-            mode=mode_enum,
-            pipeline_id=pipeline_id
+        self.task_manager = task_manager or TaskManager()
+        self.router = router or Router(
+            workflow=config.workflow, pipelines=config.pipelines, stages=config.stages
         )
-        
-        return task
+        self.context_assembler = context_assembler or ContextAssembler(memory_config=config.memory)
+        self.agent_runtime = agent_runtime or AgentRuntime(llm_client=self.llm_client)
+        self.tool_runtime = tool_runtime or ToolRuntime(
+            tools=config.tools,
+            llm_client=self.llm_client,
+        )
+        self.pipeline_executor = pipeline_executor or PipelineExecutor(
+            task_manager=self.task_manager,
+            router=self.router,
+            context_assembler=self.context_assembler,
+            agent_runtime=self.agent_runtime,
+            tool_runtime=self.tool_runtime,
+            telemetry=self.telemetry,
+            plugins=self.plugins,
+        )
+
+    def create_task(self, input: str | TaskSpec, *, mode: str | TaskMode = "default") -> Task:
+        """Create a Task from either a string request or a full TaskSpec.
+
+        Args:
+            input: User request or pre-built TaskSpec.
+            mode: Optional execution mode override; defaults to ``analysis_only``.
+
+        Returns:
+            Task instance that is ready for execution.
+        """
+        mode_enum = self._resolve_mode(mode)
+        if isinstance(input, TaskSpec):
+            task_spec = input
+            if mode_enum != TaskMode.ANALYSIS_ONLY or mode != "default":
+                task_spec = task_spec.model_copy(update={"mode": mode_enum})
+        else:
+            task_spec = TaskSpec(
+                task_spec_id=_generate_task_spec_id(),
+                request=input,
+                mode=mode_enum,
+            )
+        pipeline = self.router.choose_pipeline(task_spec=task_spec)
+        return self.task_manager.create_task(spec=task_spec, pipeline_id=pipeline.pipeline_id)
 
     def run_task(self, task: Task) -> Task:
-        """Execute a Task through its configured pipeline.
-        
-        Args:
-            task: Task object (from create_task)
-            
-        Returns:
-            Updated Task with results, status, and routing trace
-            
-        Example:
-            >>> task = engine.create_task("Analyze README.md")
-            >>> result = engine.run_task(task)
-            >>> print(result.status)
-        """
+        """Run a Task through its configured pipeline."""
+        if not task.pipeline_id:
+            raise ValueError("Task must have a pipeline_id before execution.")
         return self.pipeline_executor.run(task=task, pipeline_id=task.pipeline_id)
 
-    def run_one(
-        self,
-        input: str | TaskSpec,
-        mode: str | TaskMode = "default"
-    ) -> Task:
-        """Convenience method: create and run a task in one call.
-        
-        Equivalent to:
-            task = engine.create_task(input, mode=mode)
-            return engine.run_task(task)
-            
-        Args:
-            input: Either a raw string request or TaskSpec
-            mode: Execution mode
-            
-        Returns:
-            Completed Task with results
-            
-        Example:
-            >>> result = engine.run_one("Fix the broken test")
-        """
+    def run_one(self, input: str | TaskSpec, mode: str | TaskMode = "default") -> Task:
+        """Convenience helper that creates and runs a task in one call."""
         task = self.create_task(input, mode=mode)
         return self.run_task(task)
 
+    def register_tool_handler(self, tool_id: str, handler: Callable[[Dict[str, Any]], Any]) -> None:
+        """Register a deterministic tool handler for the given tool_id."""
+        if tool_id not in self.config.tools:
+            raise ValueError(f"Unknown tool_id: {tool_id}")
+        self.tool_runtime.tool_handlers[tool_id] = handler
+
+    @staticmethod
+    def _resolve_mode(mode: str | TaskMode) -> TaskMode:
+        if isinstance(mode, TaskMode):
+            return mode
+        normalized = mode.lower()
+        if normalized == "default":
+            return TaskMode.ANALYSIS_ONLY
+        try:
+            return TaskMode(normalized)
+        except ValueError as exc:
+            raise ValueError(f"Unknown TaskMode: {mode}") from exc
+
     @classmethod
-    def _build_manifest_dict(cls, config_dir: str) -> dict:
-        """Build manifest dictionary from config directory."""
-        manifest_dict = {}
-        
-        for path in Path(config_dir).glob("**/*.yaml"):
-            with open(path, 'r') as f:
-                content = f.read()
-                manifest_dict[path.stem] = yaml.safe_load(content)
-        
-        return manifest_dict
+    def _collect_manifest_paths(cls, base_dir: Path) -> Dict[str, Optional[Path]]:
+        if not base_dir.is_dir():
+            raise FileNotFoundError(f"Config directory does not exist: {base_dir}")
+        result: Dict[str, Optional[Path]] = {}
+        for name in (*cls._REQUIRED_MANIFESTS, "memory"):
+            result[name] = cls._find_manifest(base_dir, name)
+            if name in cls._REQUIRED_MANIFESTS and result[name] is None:
+                raise FileNotFoundError(f"Required manifest '{name}' missing in {base_dir}")
+        return result
+
+    @staticmethod
+    def _find_manifest(base_dir: Path, stem: str) -> Optional[Path]:
+        for ext in (".yaml", ".yml", ".json"):
+            candidate = base_dir / f"{stem}{ext}"
+            if candidate.exists():
+                return candidate
+        return None
+
+
+def _generate_task_spec_id() -> str:
+    from uuid import uuid4
+
+    return f"spec-{uuid4().hex[:8]}"

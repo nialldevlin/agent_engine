@@ -27,8 +27,10 @@ def _generate_task_id(spec: TaskSpec) -> str:
     return f"task-{spec.task_spec_id}-{uuid4().hex[:8]}"
 
 
-from zoneinfo import ZoneInfo
-return datetime.now(ZoneInfo('UTC')).isoformat()
+def _now_iso() -> str:
+    from zoneinfo import ZoneInfo
+
+    return datetime.now(ZoneInfo("UTC")).isoformat()
 
 
 def _extract_project_id(task_id: str) -> str:

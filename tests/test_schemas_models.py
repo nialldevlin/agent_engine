@@ -1,9 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
+from agent_engine.json_engine import validate
 from agent_engine.schemas import (
     AgentDefinition,
     AgentRole,
+    Edge,
+    EdgeType,
     EngineError,
     EngineErrorCode,
     EngineErrorSource,
@@ -77,3 +80,23 @@ def test_schema_registry_lookup() -> None:
     assert schema["title"] == "TaskSpec"
     with pytest.raises(KeyError):
         get_schema_json("nonexistent")
+
+
+def test_stage_round_trip_validation() -> None:
+    stage = Stage(stage_id="s-linear", name="Linear", type=StageType.LINEAR, terminal=False)
+    payload = stage.model_dump()
+    restored, err = validate("stage", payload)
+    assert err is None
+    assert restored.stage_id == stage.stage_id
+
+
+def test_workflow_round_trip_validation() -> None:
+    graph = WorkflowGraph(
+        workflow_id="wf2",
+        stages=["start", "end"],
+        edges=[Edge(from_stage_id="start", to_stage_id="end", edge_type=EdgeType.NORMAL)],
+    )
+    payload = graph.model_dump()
+    restored, err = validate("workflow_graph", payload)
+    assert err is None
+    assert restored.workflow_id == "wf2"

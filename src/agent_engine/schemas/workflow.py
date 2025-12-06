@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import Field
 
 from .base import SchemaBase
+from .stage import Stage, StageType
+
+
+class EdgeType(str, Enum):
+    """Edge semantics (normal flow, conditional routing, or error/fallback)."""
+
+    NORMAL = "normal"
+    CONDITIONAL = "conditional"
+    ERROR = "error"
+    FALLBACK = "fallback"
 
 
 class Edge(SchemaBase):
     from_stage_id: str
     to_stage_id: str
-    condition: Optional[str] = Field(default=None, description="Tag or expression")
-    edge_id: Optional[str] = None
-    edge_type: Optional[str] = None
+    condition: Optional[str] = Field(default=None, description="Tag or expression for decision routing")
+    edge_id: Optional[str] = Field(default=None)
+    edge_type: EdgeType = Field(default=EdgeType.NORMAL, description="Routing semantics for this edge")
 
 
 class WorkflowGraph(SchemaBase):
@@ -37,7 +48,7 @@ class Pipeline(SchemaBase):
     metadata: Dict[str, object] = Field(default_factory=dict)
 
 
-def validate_workflow_graph(graph: WorkflowGraph) -> None:
+def validate_workflow_graph(graph: WorkflowGraph, *, stages: Optional[Dict[str, "Stage"]] = None) -> None:
     """Validate a WorkflowGraph for basic DAG invariants.
 
     Raises ValueError with a clear message on validation failure.
@@ -55,6 +66,12 @@ def validate_workflow_graph(graph: WorkflowGraph) -> None:
     # Validate edges reference known stages
     adj: Dict[str, List[str]] = {s: [] for s in graph.stages}
     incoming_count: Dict[str, int] = {s: 0 for s in graph.stages}
+    stage_lookup: Optional[Dict[str, Stage]] = None
+    if stages is not None:
+        missing = stage_set - set(stages.keys())
+        if missing:
+            raise ValueError(f"Workflow references undefined stage metadata: {sorted(list(missing))}")
+        stage_lookup = {stage_id: stages[stage_id] for stage_id in graph.stages}
     for e in graph.edges:
         if e.from_stage_id not in stage_set:
             raise ValueError(f"Edge.from_stage_id references unknown stage: {e.from_stage_id}")
@@ -62,6 +79,12 @@ def validate_workflow_graph(graph: WorkflowGraph) -> None:
             raise ValueError(f"Edge.to_stage_id references unknown stage: {e.to_stage_id}")
         adj[e.from_stage_id].append(e.to_stage_id)
         incoming_count[e.to_stage_id] = incoming_count.get(e.to_stage_id, 0) + 1
+        if stage_lookup and e.edge_type == EdgeType.CONDITIONAL:
+            from_stage = stage_lookup.get(e.from_stage_id)
+            if from_stage and from_stage.type != StageType.DECISION:
+                raise ValueError(
+                    f"Conditional edge {e.from_stage_id}->{e.to_stage_id} must originate from a decision stage"
+                )
 
     # Cycle detection via DFS (run before start/end checks so cycles are detected even
     # when no node has zero incoming edges).
@@ -119,6 +142,18 @@ def validate_workflow_graph(graph: WorkflowGraph) -> None:
         dfs_reach(s, seen)
         if not any(end in seen for end in end_ids):
             raise ValueError(f"Start stage '{s}' cannot reach any terminal stage: {end_ids}")
+
+    if stage_lookup:
+        for stage_id, stage in stage_lookup.items():
+            inbound = incoming_count.get(stage_id, 0)
+            outbound = len(adj.get(stage_id, []))
+            if stage.type == StageType.MERGE:
+                if inbound < 2:
+                    raise ValueError(f"Merge stage '{stage_id}' must have at least two inbound edges")
+                if not stage.terminal and outbound != 1:
+                    raise ValueError(f"Merge stage '{stage_id}' must have exactly one outbound edge unless terminal")
+            if stage.type == StageType.DECISION and outbound < 2:
+                raise ValueError(f"Decision stage '{stage_id}' must have at least two outgoing edges")
 
     # All checks passed
     return None

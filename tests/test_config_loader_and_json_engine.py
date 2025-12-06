@@ -5,12 +5,12 @@ import pytest
 from agent_engine.config_loader import EngineConfig, load_engine_config
 from agent_engine.json_engine import repair_and_validate, validate
 from agent_engine.schemas import (
+    EngineError,
     EngineErrorCode,
     EngineErrorSource,
-    EngineError,
     StageType,
-    TaskSpec,
     TaskMode,
+    TaskSpec,
     ToolCapability,
     ToolDefinition,
     ToolKind,
@@ -112,7 +112,7 @@ def test_config_loader_unknown_stage(tmp_path: Path) -> None:
 
     assert config is None
     assert isinstance(err, EngineError)
-    assert err.code == EngineErrorCode.VALIDATION
+    assert err.code == EngineErrorCode.CONFIG
     assert err.source == EngineErrorSource.CONFIG_LOADER
 
 

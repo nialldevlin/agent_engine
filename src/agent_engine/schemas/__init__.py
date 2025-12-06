@@ -37,7 +37,7 @@ from .tool import (
     ToolStepKind,
 )
 from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
-from .workflow import Edge, Pipeline, WorkflowGraph
+from .workflow import Edge, EdgeType, Pipeline, WorkflowGraph
 
 __all__ = [
     "AgentDefinition",
@@ -92,6 +92,7 @@ __all__ = [
     "ExecutionInput",
     "ExecutionOutput",
     "Edge",
+    "EdgeType",
     "Pipeline",
     "WorkflowGraph",
 ]
