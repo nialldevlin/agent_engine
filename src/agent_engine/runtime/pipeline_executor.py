@@ -51,13 +51,20 @@ class PipelineExecutor:
             started_at = self._timestamp()
             self._emit_plugin("before_stage", task_id=task.task_id, stage_id=stage.stage_id)
             self._emit_event("stage", {"state": "start", "stage_id": stage.stage_id})
+            self._emit_event("stage_started", {"stage_id": stage.stage_id, "stage_type": stage.type.value, "task_id": task.task_id})
             output, error = self._run_stage(task, stage, ctx)
             self._emit_plugin("after_stage", task_id=task.task_id, stage_id=stage.stage_id, error=error)
             self._emit_event("stage", {"state": "end", "stage_id": stage.stage_id, "error": bool(error)})
+            self._emit_event("stage_finished", {"stage_id": stage.stage_id, "stage_type": stage.type.value, "task_id": task.task_id, "error": bool(error)})
 
             # Record results and routing
             self.task_manager.record_stage_result(task, stage.stage_id, output=output, error=error, started_at=started_at)
             self.task_manager.append_routing(task, stage.stage_id, decision=None, agent_id=stage.agent_id)
+            
+            # Save checkpoint after stage execution
+            checkpoint_error = self.task_manager.save_checkpoint(task.task_id)
+            if checkpoint_error:
+                self._emit_event("checkpoint_error", {"stage_id": stage.stage_id, "task_id": task.task_id, "error": checkpoint_error.message})
             if output is not None and hasattr(self.context_assembler, "store"):
                 try:
                     item = ContextItem(

@@ -1,0 +1,77 @@
+{
+  "task_id": "task-test_spec-e564b8db",
+  "spec": {
+    "task_spec_id": "test_spec",
+    "request": "Test request",
+    "mode": "analysis_only",
+    "priority": "normal",
+    "hints": [],
+    "files": [],
+    "overrides": [],
+    "metadata": {}
+  },
+  "status": "running",
+  "pipeline_id": "test_dag",
+  "current_stage_id": "merge_1",
+  "stage_results": {
+    "transform_1": {
+      "output": null,
+      "error": null,
+      "started_at": "2025-12-06T02:45:18.337698Z",
+      "completed_at": "2025-12-06T02:45:18.337698Z"
+    },
+    "decision_1": {
+      "output": {
+        "condition": "left"
+      },
+      "error": null,
+      "started_at": "2025-12-06T02:45:18.340203Z",
+      "completed_at": "2025-12-06T02:45:18.341210Z"
+    },
+    "left_branch": {
+      "output": {
+        "branch": "left",
+        "result": "left_result"
+      },
+      "error": null,
+      "started_at": "2025-12-06T02:45:18.342167Z",
+      "completed_at": "2025-12-06T02:45:18.343398Z"
+    },
+    "merge_1": {
+      "output": null,
+      "error": null,
+      "started_at": "2025-12-06T02:45:18.344398Z",
+      "completed_at": "2025-12-06T02:45:18.344398Z"
+    }
+  },
+  "routing_trace": [
+    {
+      "stage_id": "transform_1",
+      "decision": null,
+      "agent_id": null,
+      "timestamp": "2025-12-06T02:45:18.338695Z"
+    },
+    {
+      "stage_id": "decision_1",
+      "decision": null,
+      "agent_id": null,
+      "timestamp": "2025-12-06T02:45:18.341210Z"
+    },
+    {
+      "stage_id": "left_branch",
+      "decision": null,
+      "agent_id": null,
+      "timestamp": "2025-12-06T02:45:18.343398Z"
+    },
+    {
+      "stage_id": "merge_1",
+      "decision": null,
+      "agent_id": null,
+      "timestamp": "2025-12-06T02:45:18.344398Z"
+    }
+  ],
+  "failure_signatures": [],
+  "context_fingerprint": null,
+  "created_at": "2025-12-06T02:45:18.336190Z",
+  "updated_at": "2025-12-06T02:45:18.344398Z"
+}

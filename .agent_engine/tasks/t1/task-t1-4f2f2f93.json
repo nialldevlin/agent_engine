@@ -1,0 +1,59 @@
+{
+  "task_id": "task-t1-4f2f2f93",
+  "spec": {
+    "task_spec_id": "t1",
+    "request": "do",
+    "mode": "analysis_only",
+    "priority": "normal",
+    "hints": [],
+    "files": [],
+    "overrides": [],
+    "metadata": {}
+  },
+  "status": "running",
+  "pipeline_id": "p1",
+  "current_stage_id": "s2",
+  "stage_results": {
+    "s1": {
+      "output": {
+        "template_version": "v1",
+        "agent_stage": "s1",
+        "task_mode": "analysis_only",
+        "task_request": "do",
+        "context": [],
+        "tools": [],
+        "schema_id": null
+      },
+      "error": null,
+      "started_at": "2025-12-06T02:39:14.204929Z",
+      "completed_at": "2025-12-06T02:39:14.204929Z"
+    },
+    "s2": {
+      "output": {
+        "tool_stage": "s2",
+        "task": "task-t1-4f2f2f93"
+      },
+      "error": null,
+      "started_at": "2025-12-06T02:39:14.208980Z",
+      "completed_at": "2025-12-06T02:39:14.208980Z"
+    }
+  },
+  "routing_trace": [
+    {
+      "stage_id": "s1",
+      "decision": null,
+      "agent_id": null,
+      "timestamp": "2025-12-06T02:39:14.204929Z"
+    },
+    {
+      "stage_id": "s2",
+      "decision": null,
+      "agent_id": null,
+      "timestamp": "2025-12-06T02:39:14.208980Z"
+    }
+  ],
+  "failure_signatures": [],
+  "context_fingerprint": null,
+  "created_at": "2025-12-06T02:39:14.204929Z",
+  "updated_at": "2025-12-06T02:39:14.208980Z"
+}
