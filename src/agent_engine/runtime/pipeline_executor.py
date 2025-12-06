@@ -108,30 +108,45 @@ class PipelineExecutor:
             current_stage_id = stage.stage_id if not error else current_stage_id
 
         return task
-
     def _run_stage(self, task: Task, stage: Stage, context_package):
+        """Execute a single stage by delegating to the appropriate runtime.
+
+        Returns (output, error)
+        """
         if stage.type == StageType.AGENT:
+            # Agent runtime is expected to provide `run_agent_stage` returning (output, error)
             self._emit_plugin("before_agent", task_id=task.task_id, stage_id=stage.stage_id)
             output, error = self.agent_runtime.run_agent_stage(task, stage, context_package)
             self._emit_plugin("after_agent", task_id=task.task_id, stage_id=stage.stage_id, error=error)
             return output, error
+
         if stage.type == StageType.TOOL:
             self._emit_plugin("before_tool", task_id=task.task_id, stage_id=stage.stage_id)
             output, error = self.tool_runtime.run_tool_stage(task, stage, context_package)
             self._emit_plugin("after_tool", task_id=task.task_id, stage_id=stage.stage_id, error=error)
             return output, error
-        # For merge/decision/transform, no-op placeholder
+
+        if stage.type == StageType.DECISION:
+            # Decision stages may be implemented by agent runtime or custom logic; default to agent runtime
+            output, error = self.agent_runtime.run_agent_stage(task, stage, context_package)
+            return output, error
+
+        if stage.type == StageType.MERGE:
+            # Merge is a local aggregation step; not implemented in this MVP
+            return None, None
+
+        # Unknown or TRANSFORM types: no-op for now
         return None, None
 
     def _resolve_stage(self, stage_id: str) -> Stage:
-        for stage in self.router.workflow.stages:
-            if isinstance(stage, str):
-                # If workflow uses IDs only, skip resolution; actual Stage lookup should be external
-                break
-        # The router stores IDs; here we expect stages to be stored elsewhere.
-        # To keep executor functional, build a minimal Stage placeholder if not present.
-        # In practice, stages are passed via EngineConfig.
-        return self.router.workflow_stage_lookup(stage_id)
+        # If the Router was initialized with a stages mapping, use it
+        try:
+            return self.router.stages[stage_id]
+        except Exception:
+            # Fallback: attempt to ask router to resolve (some routers may provide helper)
+            if hasattr(self.router, "workflow_stage_lookup"):
+                return self.router.workflow_stage_lookup(stage_id)
+            raise
 
     def _default_context_request(self, task: Task):
         from agent_engine.schemas import ContextRequest
@@ -141,7 +156,7 @@ class PipelineExecutor:
             budget_tokens=0,
             domains=[],
             history_types=[],
-            mode=task.spec.mode.value,
+            mode=task.spec.mode.value if getattr(task, "spec", None) and getattr(task.spec, "mode", None) else None,
             agent_profile=None,
         )
 

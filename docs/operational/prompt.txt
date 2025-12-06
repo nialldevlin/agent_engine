@@ -1,3 +1,117 @@
-LLM NOTICE: Do not read or modify this file unless explicitly instructed by the user.
+1. Global requirements for any Cline Act-mode step (Qwen 2.5-Coder 7B)
 
+Every [QWEN] step in the implementation brief should explicitly include:
 
+Exact files to open/edit
+
+List each file with full path and whether it is:
+
+“modify existing”
+
+“create new”
+
+Example:
+
+src/agent_engine/schemas/stage.py (modify)
+
+src/agent_engine/schemas/workflow.py (create)
+
+Goal of the step in one sentence
+
+Very concrete, implementation-level:
+
+E.g. “Add a DAG validator that checks for cycles and unreachable nodes on WorkflowGraph.”
+
+Existing types / APIs Qwen must not break
+
+Name the relevant classes, functions, and enums that must remain compatible:
+
+e.g. Stage, StageType, Task, Tool, PipelineExecutor, Router, TaskManager, Context.
+
+Clarify if new fields must be optional with defaults to avoid breaking callers.
+
+New types / fields / functions and their signatures
+
+For each new element, specify:
+
+Name
+
+Kind (class / dataclass / Enum / function)
+
+Key fields/arguments and their types
+
+Return type / behavior
+
+Example:
+
+class Edge(BaseModel): from_stage_id: str; to_stage_id: str; condition: Optional[str] = None; edge_type: Literal["normal","error","conditional"] = "normal"
+
+Invariants and constraints Qwen must enforce
+
+Mention any correctness rules that the code must uphold, such as:
+
+Graph must be a DAG (no cycles).
+
+All edges point to existing stage IDs.
+
+Every workflow has at least one entry and one terminal stage.
+
+No change to how existing code interprets StageType unless explicitly requested.
+
+Executor must not introduce loops in the graph; loop-like behavior stays inside a stage pipeline.
+
+Context files that must be read, not changed
+
+For each step, list read-only context files (e.g., specs and other schemas):
+
+AGENT_ENGINE_OVERVIEW.md
+
+AGENT_ENGINE_SPEC.md
+
+RESEARCH.md
+
+Related runtime/schemas files that inform behavior but shouldn’t be heavily refactored in this step.
+
+Tell Qwen to read and follow these, not rewrite them.
+
+Testing requirements
+
+Name the test file(s) to update or create.
+
+For each test, describe:
+
+The scenario(s) to cover.
+
+The expected behavior (pass/fail conditions).
+
+Include the exact pytest command you will run so it knows what must pass.
+
+Backward compatibility and scope limits
+
+Explicitly say:
+
+“Do not change public APIs outside the files and symbols listed above.”
+
+“Do not introduce new dependencies or architecture changes.”
+
+“Do not modify unrelated parts of the codebase or tests.”
+
+If something is allowed to change (e.g., internal helper signatures), state that.
+
+Style / structure expectations
+
+E.g.:
+
+Use existing patterns for Pydantic models / dataclasses.
+
+Follow current naming style for enums and runtime helpers.
+
+Avoid TODOs and dead code.
+
+Keep new logic small and composable, not monolithic.
+
+Short summary of how this step fits Phase 3
+
+One line connecting to the bigger plan:
+
+“This step wires the executor to the DAG so it can traverse stages according to WorkflowGraph.”

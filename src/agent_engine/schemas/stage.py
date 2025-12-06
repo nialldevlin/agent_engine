@@ -25,10 +25,17 @@ class OnErrorPolicy(str, Enum):
     FALLBACK_STAGE = "fallback_stage"
 
 
+
+class StageRole(str, Enum):
+    TRANSFORM = "transform"
+    DECISION = "decision"
+    MERGE = "merge"
+
 class Stage(SchemaBase):
     stage_id: str
     name: str
     type: StageType
+    role: StageRole = Field(default=StageRole.TRANSFORM)
     entrypoint: bool = Field(default=False)
     terminal: bool = Field(default=False)
     agent_id: Optional[str] = Field(default=None)

@@ -215,10 +215,30 @@ Implemented:
 Storage backend: JSON files in `.agent_engine/tasks/{project_id}/{task_id}.json`
 
 ---
-
 # 🔀 **Phase 3 — Workflow Graph & Pipeline Executor**
 
 **Goal:** Implement the DAG-based workflow engine as described in the overview.
+
+### 3.0 Router & Pipeline Selection
+
+The Router is a first-class component that selects which pipeline template to
+run for a Task, assigns agents (primary + backups), and resolves conditional
+edges at runtime. The Pipeline Executor uses the Router to drive high-level
+routing decisions; Decision stages produce structured decision artifacts that
+the Router evaluates against outgoing edge conditions.
+
+Router responsibilities:
+- `select_pipeline(task_spec) -> pipeline_id` — pick pipeline template
+- `assign_agents(pipeline, task) -> mapping[node_id] = agent_variant` — choose agent variants
+- `resolve_edge(task, node, decision_output) -> edge_id` — deterministically pick next edge
+- emit routing events and append a routing trace to the Task record
+
+Router constraints:
+- Must be manifest-driven and pluggable
+- Must record its decisions (trace) on the Task for debugging and telemetry
+- Must consult `FailureSignature` fallback matrix when errors occur
+
+Note: Decision stage outputs MUST be typed JSON that reference condition keys or normalized edge names; the Router performs safe evaluation only against declared condition expressions (see `Edge Condition Schema` below).
 
 ### 3.1 Graph Representation
 
@@ -251,6 +271,8 @@ A stage's *role* determines its connectivity in the DAG.
   * Allowed transitions based on type
   * Schema-conforming
 
+The validator runs at manifest/load time and raises clear validation errors for invalid graphs.
+
 ### 3.3 Pipeline Executor
 
 * Stage execution loop
@@ -260,38 +282,171 @@ A stage's *role* determines its connectivity in the DAG.
 
 This produces the core execution model of Agent Engine.
 
+Executor operational rules:
+- At the start and end of each stage the executor MUST call `TaskManager.save_checkpoint(task_id)` so tasks are resumable from the last completed stage.
+- Before executing a stage the executor MUST emit a `stage_started` event; on completion emit `stage_finished` with full telemetry payload (see Telemetry fields below).
+- On Decision stages the executor must persist the decision artifact and call `Router.resolve_edge()` to determine the outgoing edge.
+- On runtime exceptions the executor must map the exception to a `FailureSignature`, consult the fallback matrix, and follow any configured error/fallback edges automatically.
+- The executor must support configurable concurrency for branch execution and respect merge policies when joining branches.
+
 ### 3.4 Stage Function Library
 
 Each stage type requires a defined execution pipeline. Implement:
 
-**Agent Stage Pipeline:**
-1. Load context (from ContextAssembler)
-2. Build prompt (system + user + context)
-3. Call LLM (via LLM Adapter)
-4. Validate JSON output (via JSON Engine)
-5. Store result
-6. Emit telemetry
+**Agent Stage Pipeline (recommended lifecycle):**
+1. Prepare input: assemble context (from ContextAssembler via `build_context(task, node, profile)`) and apply HEAD/TAIL + compression as required
+2. Emit `stage_started` event (telemetry start)
+3. Build prompt (system + user + context)
+4. Call LLM (via LLM Adapter)
+5. Validate JSON output (via JSON Engine); apply repair strategies or mark failure
+6. Store result into Task record
+7. Call `TaskManager.save_checkpoint()`
+8. Emit `stage_finished` event (telemetry end)
+
+Notes:
+- The executor also emits `agent_call`/`agent_response` events inside this sequence with token usage and model metadata.
+
+Plugin hook points (must be available to plugins):
+- `before_task` / `after_task`
+- `before_stage` / `after_stage`
+- `before_agent_call` / `after_agent_call`
+- `before_tool_call` / `after_tool_call`
+- `on_stage_error`
+
+Telemetry requirements (Agent & Tool stages):
+- `event_type` (e.g., `agent_call`, `tool_call`, `stage_started`, `stage_finished`)
+- `timestamp` (ISO8601)
+- `task_id`
+- `node_id`
+- `stage_name`
+- `latency_ms`
+- `model` (for agent calls)
+- `token_usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`)
+- `cost_usd` (optional)
+- `success` (bool)
+- `failure_signature` (if error)
+- `context_fingerprint` (hash/summary of context used)
+- `compression_ratio` (if any compression applied)
+
+Context paging telemetry MUST record which sources were included (task_store, project_store, global_store) and any summaries used.
 
 **Tool Stage Pipeline:**
-1. Validate inputs (against tool schema)
-2. Check permissions (via Security)
+1. Prepare input: validate inputs (against tool schema) and apply permissions
+2. Emit `stage_started` event
 3. Execute tool (handler dispatch)
 4. Validate outputs (against tool schema)
-5. Store result
-6. Emit telemetry
+5. Store result into Task record
+6. Call `TaskManager.save_checkpoint()`
+7. Emit `stage_finished` event
+
+Tool notes:
+- For `ToolPlan`-driven execution see `3.7 ToolPlan Execution & Rollback`.
 
 **Decision Stage Pipeline:**
-1. Evaluate decision logic (from stage config or agent output)
-2. Select outgoing edge(s)
-3. Return next stage(s)
+1. Prepare input (include decision-specific context)
+2. Emit `stage_started`
+3. Evaluate decision logic (from stage config or agent output)
+4. Persist decision artifact on Task
+5. Call `Router.resolve_edge(task, node, decision_output)`
+6. Call `TaskManager.save_checkpoint()`
+7. Emit `stage_finished`
 
 **Merge Stage Pipeline:**
-1. Wait for all incoming stages (if synchronous merge)
+1. Wait for incoming branch results per merge policy
 2. Aggregate inputs (as configured)
-3. Continue to next stage
+3. Store aggregated result and checkpoint
+4. Emit `stage_finished`
 
 Create `stage_library.py` with functions for each pipeline.
 Map stage type → pipeline function in Pipeline Executor.
+
+### 3.5 Context Assembly
+
+Context Assembly is a mandatory pre-stage operation for Agent stages. The ContextAssembler must be manifest-driven and follow `ContextProfile`s declared in manifests.
+
+Requirements:
+- `ContextProfile` fields: `name`, `max_tokens`, `retrieval_policy`, `sources` (task_store, project_store, global_store), `compression_mode` (CHEAP|BALANCED|MAX_QUALITY).
+- HEAD/TAIL policy: always include system wrapper and the most recent N turns (TAIL). Compress or summarize middle history when token budgets are tight.
+- `ContextRequest` produced by `ContextPolicy(task_spec, mode, agent_profile)` must include: `domains`, `files`, `history_types`, and `token_budget`.
+- The ContextAssembler must log a `context_paging` telemetry object for each agent call containing: `included_sources`, `items_count`, `total_tokens`, `compression_ratio`, `fingerprint`.
+
+Implementation notes:
+- The ContextAssembler should expose a `build_context(task, node, profile) -> ContextPackage` function used by Agent Stage pipelines.
+- Compression/summarization may be delegated to an assistant adapter but must be recorded in telemetry and reversible for debugging (store summaries alongside originals in the Task record).
+
+### 3.6 Edge Condition Schema (brief)
+
+Edges that include conditions MUST express them as a manifest-declared structured condition, not arbitrary code. A simple example schema:
+
+```
+{ "condition_type": "match_key", "key": "decision.outcome", "op": "eq", "value": "approved" }
+```
+
+The engine will provide a safe evaluator that can compare scalar values, check membership in lists, and evaluate numeric ranges. Agent-driven decisions must return a JSON object with explicit keys referenced by edge conditions.
+
+### 3.7 ToolPlan Execution & Rollback
+
+Tool execution for agent-driven workflows must follow a deterministic `ToolPlan` contract.
+
+`ToolPlan` schema (summary):
+```
+{ "steps": [ { "id": "s1", "tool_id": "write_file", "inputs": {...}, "reason": "apply patch", "kind": "workspace_mutation" } ] }
+```
+
+Executor behavior:
+- When an Agent Stage returns a `ToolPlan`, the Pipeline Executor must validate the `ToolPlan` against declared tool schemas before execution.
+- Execute each step sequentially (or as configured), saving a checkpoint after each step via `TaskManager.save_checkpoint()`.
+- Log every tool call as telemetry (tool_id, inputs (redacted per policy), result summary, latency_ms, success).
+- For `workspace_mutation` steps, the engine must support rollback hooks. Tools that mutate state must declare compensating actions or allow snapshot/restore semantics. The executor must attempt rollback on catastrophic failure and record rollback outcome in telemetry.
+
+Security & safety:
+- Tools without explicit `workspace_mutation` capability must not alter persistent state.
+- The executor must enforce per-tool permission constraints from manifests before invocation.
+
+### 3.8 Failure Signatures & Fallback Matrix
+
+All failures in the pipeline must map to a `FailureSignature` and be recorded in telemetry. Example `FailureSignature` fields:
+- `code` (e.g., `json_parse_error`, `tool_crash`, `permission_denied`, `timeout`)
+- `stage_id`
+- `severity` (`info`|`warning`|`error`|`critical`)
+- `short_tag` (machine-friendly tag)
+- `message`
+
+Fallback matrix:
+- A manifest-configurable matrix maps `FailureSignature.short_tag` → action. Actions include: `retry_same_agent`, `switch_agent_variant`, `follow_error_edge`, `escalate_to_human`, `abort`.
+- The Router/Executor consults the matrix when a stage fails. The chosen action is executed (e.g., retry with backoff), and the outcome is appended to the Task routing trace and telemetry.
+
+Post-mortem:
+- For `critical` failures, create a compact post-mortem artifact attached to the Task containing the plan, tool logs, failure signature, and suggested remediation tags.
+
+### 3.9 Concurrency & Merge Policies
+
+Execution model:
+- The Pipeline Executor should support two execution modes configurable per pipeline: `synchronous` (single-threaded step-by-step) and `concurrent` (parallel branch execution with join rules).
+
+Merge policies (configurable on Merge nodes):
+- `wait_for_all` — wait for all incoming branches to complete
+- `quorum` — require N of M branches succeed (specify `min_successes`)
+- `first_success` — proceed on first successful branch; cancel remaining
+
+Failure handling in branches:
+- If a branch fails under `wait_for_all`, the merge policy may: include failure as input, follow an error-edge, or consult fallback matrix.
+- Branch cancellation must be cooperative; executor should attempt to stop running work and record cancellation telemetry.
+
+Resource & locking considerations:
+- Document that concurrent execution may require locking for shared resources (files, DB rows). Tools should be designed to be idempotent where possible.
+
+### 3.10 Expanded Testing & Examples (details)
+
+Tests for Phase 3 must be automated and include:
+- Unit tests for DAG validator and safe condition evaluator
+- Integration tests for Pipeline Executor with mocked LLM adapter and mocked tools verifying: routing decisions, `TaskManager` checkpoints, telemetry emitted, and fallback actions
+- Concurrency tests for the executor covering merge policies and branch cancellations
+- E2E example test using `configs/basic_llm_agent` that runs a representative DAG with deterministic mock adapters and asserts final Task state and telemetry presence
+
+Provide simple mock adapters in `tests/mocks/`:
+- `mock_llm_adapter` — returns deterministic JSON responses
+- `mock_tool_adapter` — deterministic tool results, configurable to fail for testing fallback
 
 ---
 
