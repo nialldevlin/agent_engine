@@ -1,3 +1,5 @@
+### LLM NOTICE: Do not read or modify this file unless explicitly instructed by the user.
+
 You are helping design an implementation plan for a software project called Agent Engine.
 
 I will paste:
