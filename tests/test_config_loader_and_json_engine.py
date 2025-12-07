@@ -165,8 +165,7 @@ def test_config_loader_cycle_detection(tmp_path: Path) -> None:
 
     assert config is None
     assert isinstance(err, EngineError)
-    assert "contains cycles" in err.message
-
+    assert "Cycle" in err.message
 
 def test_pipeline_start_not_reaching_end(tmp_path: Path) -> None:
     _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])

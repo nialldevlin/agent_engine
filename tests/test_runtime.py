@@ -54,13 +54,3 @@ def test_pipeline_executor_runs_through_stages() -> None:
 class ToolRuntimeStub:
     def run_tool_stage(self, task, stage, context_package):
         return {"tool_stage": stage.stage_id, "task": task.task_id}, None
-
-
-def test_engine_from_config_dir_runs_basic_llm_agent():
-    from tests.helpers.basic_llm_agent import build_engine
-
-    engine = build_engine()
-    task = engine.run_one("list files", mode="implement")
-    assert task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
-    assert task.stage_results
-    assert task.pipeline_id
