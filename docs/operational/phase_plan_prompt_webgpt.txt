@@ -1,0 +1,112 @@
+You are helping design an implementation plan for a software project called Agent Engine.
+
+I will paste:
+- The overall build plan (PLAN_BUILD_AGENT_ENGINE) or the specific phase description.
+- Any relevant design/spec docs and code snippets needed for this phase.
+
+You do NOT have file system access, so your entire response will be the contents of a single Markdown file. I will copy it into my repo as-is.
+
+------------------------------------------------------------
+GOAL
+
+Create a phase-specific IMPLEMENTATION PLAN in Markdown for:
+
+- Phase: <PHASE_ID> — <PHASE_TITLE>
+
+This plan will later be executed by LLM agents (Qwen2.5-coder 7B and Claude Haiku) in Cline ACT mode. Each LLM step must be a fully self-contained, copy-pasteable prompt that does not rely on “go read X file” instructions.
+
+------------------------------------------------------------
+WHAT YOU SHOULD ASSUME
+
+- I will provide all relevant context (phase description, design notes, code excerpts) BEFORE this prompt.
+- You can reference that pasted content directly, but you cannot open new files.
+- If you believe the pasted context is insufficient, you must say so clearly.
+
+If critical information is missing or contradictory:
+- Output ONLY a short list of clarifying questions.
+- Do NOT attempt to write an implementation plan in that case.
+
+------------------------------------------------------------
+STRUCTURE OF THE MARKDOWN YOU OUTPUT
+
+Your ENTIRE response should be a single Markdown document with this structure:
+
+# Phase <PHASE_ID>: <PHASE_TITLE>
+
+## Overview
+- 1–3 short paragraphs describing:
+  - What this phase implements for Agent Engine.
+  - Which modules it affects (schemas, runtime, config, etc.).
+  - Important constraints coming from the spec/plan.
+
+## Assumptions and Dependencies
+- Bullet list of assumptions you are making based on the pasted context.
+- Dependencies on previous phases and what they must have implemented.
+
+## Success Criteria
+- Bullet list of precise, checkable conditions that define “done” for this phase, e.g.:
+  - Which APIs must exist (classes, functions, fields).
+  - Which behaviors must hold.
+  - What tests (existing or new) must pass.
+
+## Step-by-Step Implementation Plan
+
+Create a numbered list of steps: Step 1, Step 2, Step 3, …
+
+For each step:
+
+- Prefix with one of:
+  - `[HUMAN]`
+  - `[LLM – QWEN]`
+  - `[LLM – HAIKU]`
+
+- Then provide these subsections:
+
+  **Purpose**  
+  - 1–2 sentences on what this step accomplishes.
+
+  **When to run**  
+  - Where in the sequence this step fits.
+
+  **Complexity & model choice**  
+  - For LLM steps, explain briefly why QWEN (small, focused edits) or HAIKU (larger or cross-cutting changes).
+
+  **Inputs/context to include in the ACT prompt (for LLM steps)**  
+  - List of file paths and code/doc snippets that should be pasted into the ACT mode prompt.
+  - Summaries of any long docs that need to be included as bullet points rather than asking the LLM to “go read” them.
+
+  **Exact implementation requirements**  
+  - Very concrete instructions for what the LLM should implement:
+    - Names and signatures of new/modified functions/classes.
+    - Fields/types to add to schemas.
+    - Relationships to existing components.
+    - Invariants that must hold and must NOT be broken.
+
+  **Expected result**  
+  - What should exist or be changed once the step is complete.
+  - Which tests should be added/updated and expected to pass.
+
+  **Act-mode prompt (for LLM steps only)**  
+  - A ready-to-paste prompt for Cline ACT mode.
+  - It must:
+    - Be fully self-contained.
+    - Explicitly mention which model to use (Qwen2.5-coder 7B or Claude Haiku).
+    - List the files whose contents will be pasted.
+    - Restate all critical constraints and invariants.
+    - Instruct the LLM NOT to touch anything outside the listed files.
+
+------------------------------------------------------------
+GLOBAL STYLE RULES
+
+- Keep everything concrete and directive, not exploratory.
+- Avoid vague goals like “refactor as needed” or “improve design”.
+- Prefer breaking big changes into multiple smaller LLM steps so that each ACT run:
+  - Focuses on a small set of files.
+  - Has a clear, bounded scope.
+
+------------------------------------------------------------
+OUTPUT FORMAT
+
+- Do NOT include any explanation outside the Markdown document.
+- Do NOT add prose before or after the Markdown.
+- Your entire response should be valid Markdown content for the implementation plan file.

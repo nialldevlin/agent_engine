@@ -1,0 +1,134 @@
+You are assisting with a software engineering task for the Agent Engine project, running in Cline PLAN mode.
+
+Your job is to create a **phase-specific implementation plan** in Markdown for a single phase of PLAN_BUILD_AGENT_ENGINE. This plan will later be executed by Cline ACT mode using Qwen2.5-coder 7B and/or Claude Haiku.
+
+Goal:
+Create a detailed, procedural IMPLEMENTATION PLAN in a Markdown file for:
+- Phase: <PHASE_ID> — <PHASE_TITLE>
+
+Inputs available in the workspace:
+- Overall build plan: <PATH_TO_PLAN_BUILD_AGENT_ENGINE_MD>
+- Relevant design/spec docs (if present):
+  - <PATH_TO_AGENT_ENGINE_OVERVIEW_MD>
+  - <PATH_TO_AGENT_ENGINE_SPEC_MD>
+  - <PATH_TO_RESEARCH_MD>
+  - Any other clearly-related docs under ./docs
+- Current codebase under ./src/agent_engine and tests under ./tests
+
+Target output file:
+- Create or overwrite: <OUTPUT_MD_PATH>
+  (Example: docs/operational/PHASE_<PHASE_ID>_IMPLEMENTATION_PLAN.md)
+
+------------------------------------------------------------
+BEFORE YOU WRITE THE PLAN
+
+1. Read the overall build plan and locate the definition of <PHASE_ID>.
+2. Read only the **minimal** additional files you need to understand what this phase must implement.
+3. If critical information is missing or contradictory, DO NOT guess.
+   - In that case, output ONLY a short list of clarifying questions and STOP
+   - Do NOT create or modify any files in that case.
+
+If the information is sufficient, continue.
+
+------------------------------------------------------------
+STRUCTURE OF THE IMPLEMENTATION PLAN (.md FILE)
+
+Write the Markdown file at <OUTPUT_MD_PATH> with EXACTLY this structure:
+
+# Phase <PHASE_ID>: <PHASE_TITLE>
+
+## Overview
+- 1–3 short paragraphs describing:
+  - What this phase accomplishes in the context of Agent Engine.
+  - Which subsystems it touches (schemas, runtime, config, etc.).
+  - Any important constraints inherited from the spec / research.
+
+## Assumptions and Dependencies
+- Bullet list of explicit assumptions this plan relies on.
+- List of dependencies on earlier phases (if any) and what they must already provide.
+
+## Success Criteria
+- Bullet list of precise, observable conditions that must be true when this phase is complete.
+- Include at least:
+  - Required tests that should exist and pass (by name if known, otherwise describe).
+  - Expected public API shape (classes/functions/fields) relevant to this phase.
+  - Any invariants that must remain true.
+
+## Step-by-Step Implementation Plan
+
+Create a numbered list of steps: Step 1, Step 2, Step 3, …
+
+For EACH step:
+
+- Start the step with a tag to indicate who performs it:
+  - `[HUMAN]` for steps that require human judgment, running tests, updating docs, or reviewing behavior.
+  - `[LLM – QWEN]` for LLM agent steps intended for Qwen2.5-coder 7B in Cline ACT mode.
+  - `[LLM – HAIKU]` for LLM agent steps intended for Claude Haiku in Cline ACT mode.
+
+- Under that step, include the following fields:
+
+  **Purpose**  
+  - 1–2 sentences describing what this step accomplishes.
+
+  **When to run**  
+  - Where this step sits in the sequence (e.g., “after Step 3”, “only after tests from Step 5 pass”).
+
+  **Complexity & model choice**  
+  - Brief justification for using HUMAN / QWEN / HAIKU.
+  - For LLM steps:
+    - Use QWEN when the change is small and focused:
+      - Single file, or a few small files (≤ 5) with simple, localized edits.
+    - Use HAIKU for:
+      - Cross-cutting changes, larger refactors, or multi-file edits that may span many lines.
+
+  **Inputs/context to provide to the LLM (for LLM steps)**  
+  - A concrete list of file paths and sections that MUST be included in the ACT mode prompt.
+  - Summaries of any relevant sections in long docs so the ACT prompt does NOT have to reference big files indirectly.
+  - Example:
+    - `@/docs/canonical/AGENT_ENGINE_SPEC.md` — summarized in 3–5 bullet points relevant to this step.
+    - `@/src/agent_engine/schemas/stage.py`
+    - `@/tests/test_stage_schemas.py`
+
+  **Exact implementation requirements**  
+  - Very concrete, unambiguous instructions:
+    - Exact classes/functions to create or modify, with signatures.
+    - Fields to add/remove, enums to extend, invariants to preserve.
+    - Relationships between new and existing components.
+  - Avoid vague language such as “clean up”, “improve”, or “refactor as needed”.
+  - If behavior must NOT change, state that explicitly.
+
+  **Expected result**  
+  - What files should exist or be modified.
+  - What behavior should be true after the step completes.
+  - Any tests that should be added or updated.
+
+  **Act-mode prompt (for LLM steps only)**  
+  - Provide a ready-to-paste prompt for Cline ACT mode.
+  - This prompt MUST be:
+    - Fully self-contained (no “go read PLAN_BUILD_AGENT_ENGINE.md”; summarize relevant content inline).
+    - Scoped to a small, explicit set of files.
+    - Clear about the model choice, e.g.:
+      - “Use Qwen2.5-coder 7B for this step” or
+      - “Use Claude Haiku for this step due to multi-file changes”.
+  - The prompt should:
+    - Describe the goal.
+    - List the files to open and modify.
+    - Restate all critical invariants and constraints.
+    - Say “Do NOT modify any other files.”
+
+------------------------------------------------------------
+GLOBAL RULES
+
+- In PLAN mode, DO NOT modify production code or tests directly.
+  - Your only file write should be to <OUTPUT_MD_PATH>.
+- Keep each LLM step small enough that it can be executed in a single ACT mode run without scanning the entire repo.
+- Where a change might be risky, split it into multiple smaller LLM steps rather than one big one.
+- Prefer adding explicit tests in this phase over relying on manual verification alone.
+
+------------------------------------------------------------
+OUTPUT
+
+- Write the implementation plan to <OUTPUT_MD_PATH> following the structure above.
+- In your console output (not in the file), briefly summarize:
+  - Number of steps.
+  - Count of HUMAN vs [LLM – QWEN] vs [LLM – HAIKU] steps.
