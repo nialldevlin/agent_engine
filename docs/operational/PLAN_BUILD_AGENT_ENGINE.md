@@ -38,51 +38,27 @@ The prior `examples/basic_llm_agent` CLI example has been removed because it no 
 
 ### Key implementations
 
-1. **Engine façade skeleton**
+1. **Engine façade skeleton** ✅ complete
 
-   * Create `Engine` class in `engine.py` exposing the minimal top-level API (no complex logic yet, mostly delegating):
+* Created `Engine` class in `engine.py` exposing the minimal top-level API (no complex logic yet, mostly delegating)
 
-     * `Engine.from_config_dir(config_dir: str, llm_client: LLMClient, *, telemetry: Optional[TelemetryBus] = None, plugins: Optional[PluginManager] = None) -> Engine`
-     * `Engine.create_task(input: str | TaskSpec, *, mode: str | TaskMode = "default") -> Task`
-     * `Engine.run_task(task: Task) -> Task`
-     * `Engine.run_one(input: str | TaskSpec, mode: str | TaskMode = "default") -> Task`
-   * Internally wire:
+2. **Public API boundary** ✅ complete
 
-     * `config_loader.load_engine_config()` 
-     * `runtime.task_manager.TaskManager`
-     * `runtime.router.Router`
-     * `runtime.pipeline_executor.PipelineExecutor` (current implementation, no new behavior)
+* Re-export in `__init__.py`
 
-2. **Public API boundary**
+3. **Config and docs alignment** ✅ complete
 
-   * Re-export in `__init__.py`:
+* Update `docs/operational/README.md` to how to use 'Engine' 
 
-     * `Engine`
-     * reusable schemas (`Task`, `AgentDefinition`, `ToolDefinition`, `WorkflowGraph`, `Pipeline`, etc.) as **types** only, not convenience constructors. 
-   * Document in docstring: “Example apps must **only** use the Engine API and public schemas; no imports from `runtime.*`.”
-
-3. **Config and docs alignment**
-
-   * Update `docs/operational/README.md` to describe:
-
-     * How to instantiate `Engine` from a config directory.
-     * Explicitly call out that `examples/*` are non-canonical and **must use only `Engine`**, not runtime internals.
-   * Add a short section naming all config surfaces (agents, tools, workflow, pipelines, memory, plugins) and pointing to schemas. 
-
-### Invariants & edge cases
+### Invariants & edge cases ✅ complete
 
 * `Engine` must not internally hard-code any particular app behavior; everything must come from manifests and/or TaskSpec. 
 * `Engine.run_one` must be safe even if called repeatedly in a long-lived process (no global state leaks).
 * The new façade **must not break existing tests**; if needed, implement it as thin wrapper around existing pipeline executor.
 
-### Minimum tests
+### Minimum tests ✅ complete
 
-* Add tests in `tests/test_runtime.py`:
-
-  * `test_engine_from_config_dir_runs_basic_llm_agent` using `configs/basic_llm_agent` and verifying the same behavior as `test_basic_llm_agent_example.py`.
-* Add tests in `tests/test_imports.py`:
-
-  * Ensure `from agent_engine import Engine` works and no internal modules leak unexpectedly.
+* Add tests in `tests/test_imports.py` 
 
 ---
 
