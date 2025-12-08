@@ -100,3 +100,87 @@ def test_workflow_round_trip_validation() -> None:
     restored, err = validate("workflow_graph", payload)
     assert err is None
     assert restored.workflow_id == "wf2"
+
+
+def test_tool_plan_round_trip() -> None:
+    """Test ToolPlan schema round-trip serialization."""
+    from agent_engine.schemas import ToolPlan, ToolStep, ToolStepKind
+
+    tool_plan = ToolPlan(
+        tool_plan_id="tp-1",
+        steps=[
+            ToolStep(step_id="s1", tool_id="t1", inputs={"path": "/tmp/file.txt"}, kind=ToolStepKind.READ)
+        ],
+    )
+    payload = tool_plan.model_dump()
+    restored, err = validate("tool_plan", payload)
+    assert err is None
+    assert restored.tool_plan_id == "tp-1"
+    assert len(restored.steps) == 1
+    assert restored.steps[0].kind == ToolStepKind.READ
+
+
+def test_override_spec_round_trip() -> None:
+    """Test OverrideSpec schema round-trip serialization with payloads."""
+    from agent_engine.schemas import OverrideKind, OverrideScope, OverrideSeverity, OverrideSpec
+
+    override = OverrideSpec(
+        override_id="override-1",
+        kind=OverrideKind.SAFETY,
+        scope=OverrideScope.TASK,
+        severity=OverrideSeverity.ENFORCE,
+        payload={"mode": "analysis_only"},
+    )
+    payload = override.model_dump()
+    restored, err = validate("override_spec", payload)
+    assert err is None
+    assert restored.override_id == "override-1"
+    assert restored.payload["mode"] == "analysis_only"
+
+
+def test_event_round_trip() -> None:
+    """Test Event schema round-trip serialization."""
+    from agent_engine.schemas import Event, EventType
+
+    event = Event(
+        event_id="evt-1",
+        task_id="task-1",
+        stage_id="stage-1",
+        type=EventType.AGENT,
+        payload={"model": "gpt-4", "tokens": 150},
+    )
+    payload = event.model_dump()
+    restored, err = validate("event", payload)
+    assert err is None
+    assert restored.type == EventType.AGENT
+    assert restored.payload["tokens"] == 150
+
+
+def test_task_mode_safe_modes() -> None:
+    """Test TaskMode safe-mode values."""
+    from agent_engine.schemas import TaskMode
+
+    assert TaskMode.ANALYSIS_ONLY.value == "analysis_only"
+    assert TaskMode.DRY_RUN.value == "dry_run"
+    assert TaskMode.IMPLEMENT.value == "implement"
+    assert TaskMode.REVIEW.value == "review"
+
+
+def test_pipeline_round_trip() -> None:
+    """Test Pipeline schema round-trip serialization."""
+    from agent_engine.schemas import Pipeline
+
+    pipeline = Pipeline(
+        pipeline_id="pipe-1",
+        name="main",
+        description="Main pipeline",
+        workflow_id="wf1",
+        start_stage_ids=["start"],
+        end_stage_ids=["end"],
+        allowed_modes=["analysis_only", "implement"],
+    )
+    payload = pipeline.model_dump()
+    restored, err = validate("pipeline", payload)
+    assert err is None
+    assert restored.pipeline_id == "pipe-1"
+    assert "analysis_only" in restored.allowed_modes

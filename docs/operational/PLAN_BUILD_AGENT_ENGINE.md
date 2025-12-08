@@ -1,18 +1,32 @@
-## PLAN_BUILD_AGENT_ENGINE v2
+## PLAN_BUILD_AGENT_ENGINE v2.1
 
 *(Aligned with AGENT_ENGINE_OVERVIEW, AGENT_ENGINE_SPEC, RESEARCH, and current repo state)*
 
 ### Assumptions
 
-* Canonical behavior is defined by **AGENT_ENGINE_OVERVIEW.md**, **AGENT_ENGINE_SPEC.md**, and **RESEARCH.md**; any conflicts MUST resolve in favor of those docs.   
-* Many core schemas and config loader are already solid; we **refine and wire**, not reboot the world. 
+* Canonical behavior is defined by **AGENT_ENGINE_OVERVIEW.md**, **AGENT_ENGINE_SPEC.md**, and **RESEARCH.md**; any conflicts MUST resolve in favor of those docs.
+* Many core schemas and config loader are already solid; we **refine and wire**, not reboot the world.
 
-Each phase below is intended to be implementable via a **single Haiku / Copilot “Act Mode” prompt**. For each phase you’ll feed:
+Each phase below is intended to be implementable via a **single Haiku / Copilot "Act Mode" prompt** (subject to implementation status below). For each phase you'll feed:
 
-* This phase’s section
+* This phase's section
 * The canonical docs
 * The status report
-* The relevant files listed under “Files to touch”
+* The relevant files listed under "Files to touch"
+
+---
+
+## Implementation Status Markers
+
+Each phase is marked with one of three statuses:
+
+* **🟢 HAIKU READY** – Implementation details are clear; Haiku can execute with these specs.
+* **🔵 SONNET DESIGN** – Requires architectural/algorithmic design first; Sonnet designs, then Haiku implements.
+* **🟡 NEEDS INFO** – Missing implementation details or dependencies; cannot proceed until clarified.
+
+Phases are also grouped by implementation tier:
+* **Core Engine Phases** (0-7, 10-11) – Must be complete for spec compliance.
+* **Optional Phases** (12, N+) – Nice-to-have patterns and advanced features.
 
 ---
 
@@ -64,9 +78,16 @@ The prior `examples/basic_llm_agent` CLI example has been removed because it no 
 
 ## Phase 1 – Core Schemas, DAG Model, and Manifest System Finalization
 
+**Status: 🟢 HAIKU READY** (schemas largely exist; mechanical refinement & wiring)
+
 **Goal:** Lock down the core data model (Task, Stage, Workflow, Node/Edge) and manifest validation such that later phases can safely rely on them.
 
-Most of this exists and is salvageable; we are tightening behavior and documenting invariants. 
+Most of this exists and is salvageable; we are tightening behavior and documenting invariants. This phase is critical and must be completed before most other phases can proceed.
+
+### References
+* AGENT_ENGINE_OVERVIEW §5 (Workflow Graph & Pipelines)
+* AGENT_ENGINE_SPEC §3.2 (Workflow & Pipeline Executor)
+* RESEARCH.md (DAG semantics and validation rules)
 
 ### Files to touch
 
@@ -109,7 +130,19 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 4. **Override and event schemas**
 
-   * Clarify `OverrideSpec`, `OverrideKind`, `Event`, `EventType` enums and add comments tying them to later runtime phases (router, context, telemetry). 
+   * Clarify `OverrideSpec`, `OverrideKind`, `Event`, `EventType` enums and add comments tying them to later runtime phases (router, context, telemetry).
+   * Include safe-mode flags: `analysis_only`, `dry_run`, and any task-level overrides (per AGENT_ENGINE_SPEC §4.6 and RESEARCH Appendix A).
+
+5. **ToolPlan schema** *(NEW – from canonical docs)*
+
+   * Define `ToolPlan` structure for tool invocation requests from agents (OVERVIEW §8, SPEC §4.3).
+   * Minimal schema skeleton: `{ tool_name: str, arguments: dict, result_field?: str }` (exact structure per RESEARCH.md).
+   * Include `ExecutionInput` and `ExecutionOutput` for recording tool I/O in Tasks (Phase 5 will detail execution).
+
+6. **Built-in tool catalog** *(NEW – from canonical docs)*
+
+   * Document which tools are built-in vs. user-defined (per SPEC §4.3 examples: `filesystem.write_file`, `filesystem.read_file`, `filesystem.list`, `command.run`).
+   * Ensure tool registry can load both built-in and custom tool definitions from manifests.
 
 ### Invariants & edge cases
 
@@ -130,7 +163,18 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 2 – Pipeline Executor & Task Manager: Robust DAG Execution
 
-**Goal:** Bring pipeline execution and task lifecycle up to spec: full DAG traversal, merge behavior, basic error paths, checkpoint resumption. 
+**Status: 🔵 SONNET DESIGN** (core execution logic; requires design before implementation)
+
+**Goal:** Bring pipeline execution and task lifecycle up to spec: full DAG traversal, merge behavior, basic error paths, checkpoint resumption.
+
+### References
+* AGENT_ENGINE_OVERVIEW §5 (Workflow Graph & Pipelines)
+* AGENT_ENGINE_SPEC §3.2 (Workflow & Pipeline Executor semantics)
+
+### Design Gaps (Requires Sonnet Input)
+* **Merge semantics**: What is "simple merge policy"? List? Dict keyed by edge source? Aggregation rules? (see RESEARCH for details)
+* **Error recovery matrix**: Complete error taxonomy (JSON errors, tool errors, context errors, routing errors, permissions errors).
+* **Fallback routing**: Precise fallback matrix structure and lookup logic.
 
 ### Files to touch
 
@@ -193,7 +237,18 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 3 – JSON Engine v1.0: Validation, Repair, and Retries
 
-**Goal:** Make the JSON engine match the spec and research: structured validation, tiered repair, retry strategies, clear error categories.  
+**Status: 🟡 NEEDS INFO** (depends on Phase 2 error taxonomy design)
+
+**Goal:** Make the JSON engine match the spec and research: structured validation, tiered repair, retry strategies, clear error categories.
+
+### References
+* AGENT_ENGINE_OVERVIEW §10 (JSON Engine)
+* AGENT_ENGINE_SPEC §3.5 (JSON Engine completion criteria)
+* RESEARCH.md §5.2, §7 (JSON validation & repair strategies)
+
+### Design Gaps (Blocked by Phase 2)
+* Complete error taxonomy across all runtime components (tool errors, context errors, routing errors beyond JSON-only).
+* Once Phase 2 defines the full error space, Phase 3 refines JSON-specific errors.
 
 ### Files to touch
 
@@ -248,7 +303,20 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 4 – Agent Runtime v1.0: Structured Prompts, JSON Enforcement, Token Budgeting
 
-**Goal:** Implement a real Agent Runtime that respects spec + research: deterministic prompt building, context assembly, JSON enforcement, basic token budgeting.  
+**Status: 🔵 SONNET DESIGN** (core prompt/context logic; requires design before implementation)
+
+**Goal:** Implement a real Agent Runtime that respects spec + research: deterministic prompt building, context assembly, JSON enforcement, basic token budgeting.
+
+### References
+* AGENT_ENGINE_OVERVIEW §7 (Agent Runtime), §9 (Memory & Context)
+* AGENT_ENGINE_SPEC §3.3 (Runtime - Agent Runtime completion criteria)
+* RESEARCH.md §5.1-5.3 (Agent Runtime and context assembly details)
+
+### Design Gaps (Requires Sonnet Input)
+* **Compression algorithm**: Exact HEAD/TAIL preservation strategy and importance scoring for middle compression (token-based? importance-scored?).
+* **Context profile semantics**: How does a profile map to memory selection? Query structure? Ranking/scoring details?
+* **Prompt structure**: Exact prompt template and ordering (system wrapper, task summary, context items, JSON schema instructions).
+* **Token budgeting enforcement**: When context exceeds budget, compression algorithm and thresholds.
 
 ### Files to touch
 
@@ -310,7 +378,20 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 5 – Tool Runtime v1.0: ToolPlan Execution, Sandbox Integration, Workspace Safety
 
-**Goal:** Implement Tool Runtime as per spec: ToolPlan parsing, deterministic tool execution, workspace boundaries, integration with security & telemetry.  
+**Status: 🔵 SONNET DESIGN** (tool execution model & security decisions; requires design before implementation)
+
+**Goal:** Implement Tool Runtime as per spec: ToolPlan parsing, deterministic tool execution, workspace boundaries, integration with security & telemetry.
+
+### References
+* AGENT_ENGINE_OVERVIEW §8 (Tool Runtime), §14 (Security & Permissions)
+* AGENT_ENGINE_SPEC §3.3 (Runtime - Tool Runtime completion criteria), §4.3 (Example tools)
+* RESEARCH.md §3.1-3.3 (Tool Runtime and security model details)
+
+### Design Gaps (Requires Sonnet Input)
+* **ToolPlan structure** (detailed schema): Exact JSON structure for tool invocation requests from agents (minimal schema in Phase 1; full spec needed).
+* **Built-in tool implementations**: Define which tools are engine-provided (filesystem operations, command execution) vs. user-defined.
+* **Tool execution model**: Sequential vs. parallel step execution, multi-step ToolPlan support, error recovery per step.
+* **Security decision logic**: Filesystem root enforcement, network/shell gating per risk level and manifest policies.
 
 ### Files to touch
 
@@ -370,7 +451,21 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 6 – Memory & Context System v1.0: File-Backed Stores, Context Profiles, Compression
 
-**Goal:** Complete memory stores and context assembler according to overview + research: task/project/global stores, explicit context profiles, compression actually applied.  
+**Status: 🔵 SONNET DESIGN** (retrieval policies & memory layer architecture; requires design before implementation)
+
+**Goal:** Complete memory stores and context assembler according to overview + research: task/project/global stores, explicit context profiles, compression actually applied.
+
+### References
+* AGENT_ENGINE_OVERVIEW §9 (Memory & Context system, five memory layers)
+* AGENT_ENGINE_SPEC §3.4 (Memory & Context completion criteria)
+* RESEARCH.md §1-2 (Memory tiers and retrieval policies)
+
+### Design Gaps (Requires Sonnet Input)
+* **Memory layer mapping**: Canonical docs describe five layers (Conversation, RAG, Agent State, Profile, Tool/Environment); map to task/project/global stores (Phase 1 identified three; how do five map to three?).
+* **RAG integration**: Vector database seeding, semantic retrieval, document ingestion pipeline (currently unspecified).
+* **Agent state memory**: Persistent JSON blob schema and storage (distinct from conversation memory).
+* **Retrieval policies**: Exact algorithm for "hybrid" and "recency" policies; importance scoring; token budgeting interaction.
+* **Context profile application**: How profiles (max_tokens, retrieval_policy, sources) translate to actual memory queries.
 
 ### Files to touch
 
@@ -428,7 +523,20 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 7 – Router v1.0: Deterministic Routing, Fallback Matrix, Overrides
 
-**Goal:** Implement router to spec with deterministic behavior, error/fallback routing, and override handling (but **without** advanced learned/MoA routing yet; that will be optional later).  
+**Status: 🔵 SONNET DESIGN** (routing algorithm & fallback matrix; requires design before implementation)
+
+**Goal:** Implement router to spec with deterministic behavior, error/fallback routing, and override handling (but **without** advanced learned/MoA routing yet; that will be optional later).
+
+### References
+* AGENT_ENGINE_OVERVIEW §6 (Routing system)
+* AGENT_ENGINE_SPEC §3.3 (Runtime - Router completion criteria), §4.4-4.7 (Example manifest usage)
+* RESEARCH.md §4.1-4.2 (Routing determinism and fallback logic)
+
+### Design Gaps (Requires Sonnet Input)
+* **Pipeline selection algorithm**: How are "task mode, tags, and simple scores" evaluated for deterministic pipeline choice?
+* **Fallback matrix structure**: Precise format and lookup logic for `(failure_category, current_stage_type) → fallback_stage_id` mapping.
+* **Override application semantics**: How do safe-mode flags and task-level overrides deterministically alter routing decisions? Traceability on Task?
+* **Edge selection logic**: When multiple edges are available (e.g., from decision nodes), how does router select which to follow?
 
 ### Files to touch
 
@@ -480,7 +588,18 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 8 – Telemetry & Event Bus v1.0: Sinks, Cost Tracking, Wiring
 
-**Goal:** Turn the current in-memory telemetry stub into the observability backbone described in the overview/spec.  
+**Status: 🟢 HAIKU READY** (mechanical wiring of event emission and sinks, once event types are defined)
+
+**Goal:** Turn the current in-memory telemetry stub into the observability backbone described in the overview/spec.
+
+### References
+* AGENT_ENGINE_OVERVIEW §11 (Telemetry & Event Bus)
+* AGENT_ENGINE_SPEC §3.6 (Telemetry & Events completion criteria)
+* RESEARCH.md §6-7 (Event types and observability)
+
+### Note on Cost Estimation
+* Cost per model must be configured externally (cost tables per provider/model); engine does not compute costs itself, only tracks token counts for cost calculation by sinks.
+* See Phase 10 for LLM adapter cost tracking integration.
 
 ### Files to touch
 
@@ -535,7 +654,14 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 9 – Plugin & Hook System v1.0
 
-**Goal:** Implement hook surfaces and plugin manager so that external code can observe and modify behavior without changing core engine.  
+**Status: 🟢 HAIKU READY** (mechanical plugin registration and event subscription wiring)
+
+**Goal:** Implement hook surfaces and plugin manager so that external code can observe and modify behavior without changing core engine.
+
+### References
+* AGENT_ENGINE_OVERVIEW §12 (Plugin & Hook System)
+* AGENT_ENGINE_SPEC §3.7 (Plugin System completion criteria)
+* RESEARCH.md §3.2, §5 (Hook surfaces and plugin integration points)
 
 ### Files to touch
 
@@ -590,7 +716,19 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 10 – LLM Adapter Layer v1.0: Multi-Provider, Streaming, Token/Cost Accounting
 
-**Goal:** Complete the LLM adapter layer to match overview/spec: backend-agnostic interface, multiple providers, token/cost tracking, streaming support.  
+**Status: 🟢 HAIKU READY** (once LLMClient interface finalized; mostly provider-specific implementations)
+
+**Goal:** Complete the LLM adapter layer to match overview/spec: backend-agnostic interface, multiple providers, token/cost tracking, streaming support.
+
+### References
+* AGENT_ENGINE_OVERVIEW §13 (LLM Backend Interface)
+* AGENT_ENGINE_SPEC §3.8 (LLM Adapter completion criteria)
+* RESEARCH.md §3-5 (Provider-specific considerations)
+
+### Additional Details (from Canonical Docs)
+* **Streaming support**: Phase overview mentions "streaming (even if not yet used)"; implement streaming interface in adapters but agent runtime (Phase 4) uses non-streaming for now.
+* **Cost estimation**: Cost tables should be externally configurable per provider/model; engine tracks `prompt_tokens`, `completion_tokens`, `total_tokens` and lets plugins compute cost via external tables.
+* **Supported providers**: Anthropic, OpenAI, Ollama (per plan); other providers can be added later.
 
 ### Files to touch
 
@@ -644,7 +782,19 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 11 – Security Model v1.0: Permissions, Safe Modes, Audit Logging
 
-**Goal:** Upgrade the partial security layer into a proper permissions system as per overview + research, wired through Tool Runtime and, where relevant, Agent Runtime.  
+**Status: 🔵 SONNET DESIGN** (permissions model architecture; requires design before implementation)
+
+**Goal:** Upgrade the partial security layer into a proper permissions system as per overview + research, wired through Tool Runtime and, where relevant, Agent Runtime.
+
+### References
+* AGENT_ENGINE_OVERVIEW §14 (Security & Permissions)
+* AGENT_ENGINE_SPEC §3.3 (Runtime - security component), §4.3 (Example tool permissions)
+* RESEARCH.md Appendix A (Permissions & Safe Modes)
+
+### Design Gaps (Requires Sonnet Input)
+* **Permission model granularity**: Filesystem (root + subpaths), network (allow/deny list), shell execution flags; default + per-agent + per-tool overrides.
+* **Safe-mode enforcement**: How `analysis_only` and `dry_run` flags block mutation operations in tools.
+* **Audit event schema**: What permission checks and denials are logged; sensitivity redaction policy.
 
 ### Files to touch
 
@@ -702,13 +852,30 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 12 – Patterns Library (Optional) & Manifest Templates
 
-**Goal:** Provide optional pattern manifests (committee, supervisor, etc.) that are **strictly separated** from the core engine and can be used as examples.  
+**Status: 🟢 HAIKU READY** (template implementations once core engine APIs stable)
+
+**Goal:** Provide optional pattern manifests (committee, supervisor, chat) that are **strictly separated** from the core engine and can be used as examples.
 
 **Mark this phase as OPTIONAL / Phase N+; not required for core completion.**
 
+### References
+* AGENT_ENGINE_SPEC §3.9 (Patterns Library - optional but clean)
+* AGENT_ENGINE_OVERVIEW §1 (Patterns library as optional manifest templates)
+
+### Pattern Implementations (from Canonical Docs)
+* **Committee-of-agents pattern**: Multiple agents voting or reaching consensus
+* **Supervisor + worker pattern**: One coordinator agent, multiple specialist workers
+* **Chat pattern**: Conversational agent with memory and turn-taking (NEW – from canonical docs)
+
+All patterns must:
+* Rely only on public `Engine` APIs + manifests
+* Be implemented as helper functions / manifests, not built-in behavior
+* Have no core engine imports or dependencies
+* Be disabled unless explicitly authored in `plugins.yaml` or manifest
+
 ### Files to touch
 
-* `src/agent_engine/patterns/committee.py`, `supervisor.py`
+* `src/agent_engine/patterns/committee.py`, `supervisor.py`, `chat.py` (NEW)
 * `configs/patterns/*` (new example manifests)
 * `tests/test_plugins_and_patterns.py`
 
@@ -718,6 +885,7 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
   * Committee-of-agents pattern
   * Supervisor + worker pattern
+  * Chat pattern (conversational loop with memory)
 * Ensure:
 
   * These rely only on public Engine APIs + manifests.
@@ -727,12 +895,34 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase 13 – Example App & Public API-Only Usage
 
-**Goal:** Ensure there is at least one example app that uses only the public Engine façade and public config surfaces.
+**Status: 🟢 HAIKU READY** (CLI glue code; manifests drive all behavior)
+
+**Goal:** Ensure there is at least one example app that uses only the public Engine façade and public config surfaces. Example manifests demonstrate all major features.
+
+### References
+* AGENT_ENGINE_SPEC §4 (Example Project Structure & Manifests)
+* AGENT_ENGINE_OVERVIEW §1, §2 (Engine responsibilities and configuration)
+
+### Detailed Manifest Structure (from Canonical Docs)
+The example should include the full manifest suite from SPEC §4:
+* **agents.yaml**: Agent definitions with models, context profiles, tool lists, output schemas
+* **tools.yaml**: Tool definitions with types, filesystem roots, command allowlists
+* **workflow.yaml**: DAG nodes (agent, tool, decision, merge) and edges with conditions
+* **pipelines.yaml**: Pipeline templates mapping node types to stage sequences
+* **memory.yaml**: Task/project/global stores and context profile configurations
+* **plugins.yaml**: Telemetry loggers and optional cost tracking plugins
+
+Example should mirror the "Code Gremlin" spec but simplified (e.g., one agent instead of three).
 
 ### Files to touch
 
 * `examples/basic_llm_agent/cli.py`
-* `configs/basic_llm_agent/*`
+* `configs/basic_llm_agent/agents.yaml` (refined per spec)
+* `configs/basic_llm_agent/tools.yaml` (refined per spec)
+* `configs/basic_llm_agent/workflow.yaml`
+* `configs/basic_llm_agent/pipelines.yaml`
+* `configs/basic_llm_agent/memory.yaml`
+* `configs/basic_llm_agent/plugins.yaml`
 * `tests/test_basic_llm_agent_example.py`
 * `docs/operational/README.md`
 
@@ -740,26 +930,31 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 * Refactor `cli.py` to:
 
-  * Instantiate `Engine` via `Engine.from_config_dir`.
+  * Instantiate `Engine` via `Engine.from_config_dir("configs/basic_llm_agent")`.
   * Use `Engine.run_one` or `Engine.create_task` + `Engine.run_task`.
-* Keep example simple but fully manifest-driven.
+* Manifests should be complete, matching SPEC §4 example structure.
 
 ### Invariants & edge cases
 
 * Example must not import from `runtime.*` directly.
 * Changing manifests should allow reconfiguring the workflow without code changes.
+* All manifests must validate against engine schemas.
 
 ### Minimum tests
 
 * `test_basic_llm_agent_example.py`:
 
   * Confirm example uses Engine façade and that end-to-end behavior still works.
+  * Verify all manifests validate and load correctly.
+  * Simple execution: create task → run pipeline → verify output structure.
 
 ---
 
 ## Phase 14 – Tests, Hardening, and Minimal Benchmarks
 
-**Goal:** Close coverage gaps identified in the status report, add edge-case tests, and introduce minimal performance/robustness checks.  
+**Status: 🟢 HAIKU READY** (test writing once behaviors are defined in prior phases)
+
+**Goal:** Close coverage gaps identified in the status report, add edge-case tests, and introduce minimal performance/robustness checks.
 
 ### Files to touch
 
@@ -789,7 +984,7 @@ Most of this exists and is salvageable; we are tightening behavior and documenti
 
 ## Phase N+ (Optional Advanced Features from RESEARCH)
 
-These are explicitly **optional** and should be clearly marked as experimental features that depend on future research:   
+These are explicitly **optional** and should be clearly marked as experimental features that depend on future research:
 
 * **Learned / MoA routing** (Mixture-of-agents, learned routers).
 * **Learned retrieval policies for context** (dense retrievers, bandits).
@@ -798,3 +993,66 @@ These are explicitly **optional** and should be clearly marked as experimental f
 * **Advanced patterns (ReAct debate, PromptBreeder, etc.).**
 
 These should each become their own later phases that **plug into** the already-complete engine via telemetry, plugins, and existing schemas, not by rewriting the core.
+
+---
+
+## Implementation Summary by Tier
+
+### 🟢 HAIKU READY – Immediate Execution (No Design Blocker)
+| Phase | Title | Dependencies |
+|-------|-------|--------------|
+| 0 | Repo Cleanup & API Shell | ✅ Done |
+| 1 | Core Schemas & DAG Model | ✅ Done (precondition for 2+) |
+| 8 | Telemetry & Event Bus | Phase 2 error taxonomy |
+| 9 | Plugin & Hook System | Phase 8 event types |
+| 10 | LLM Adapter Layer | None |
+| 12 | Patterns Library | Phases 2–11 (core engine stable) |
+| 13 | Example App & Manifests | Phases 2–11 (core engine stable) |
+| 14 | Tests & Hardening | All prior phases for behavior specs |
+
+### 🔵 SONNET DESIGN – Requires Design Input Before Implementation
+| Phase | Title | Key Design Decisions |
+|-------|-------|---------------------|
+| 2 | Pipeline Executor & Task Manager | Merge semantics, error recovery matrix, fallback routing |
+| 4 | Agent Runtime v1.0 | Prompt structure, compression algorithm, context profile application |
+| 5 | Tool Runtime v1.0 | ToolPlan schema (detailed), tool execution model, security decision logic |
+| 6 | Memory & Context System | Five-layer memory mapping, RAG integration, retrieval policies |
+| 7 | Router v1.0 | Pipeline selection algorithm, fallback matrix structure, override application |
+| 11 | Security Model v1.0 | Permission granularity, safe-mode enforcement, audit schema |
+
+### 🟡 NEEDS INFO – Blocked by Other Phases
+| Phase | Title | Blocker |
+|-------|-------|---------|
+| 3 | JSON Engine v1.0 | Phase 2 (error taxonomy definition) |
+
+### 📌 OPTIONAL – Core Engine Complete Without These
+| Phase | Title | Note |
+|-------|-------|------|
+| 12 | Patterns Library | Optional pattern templates; engine runs fine without |
+| N+ | Advanced Features | Experimental research features; plug into stable core |
+
+---
+
+## Implementation Order (Recommended)
+
+1. **✅ Phase 0-1**: Repo cleanup and schemas (foundation)
+2. **🔵 Sonnet Design Work**: Phases 2, 4–7, 11 (design critical paths concurrently if possible)
+3. **Phase 2**: Pipeline Executor (once designed; unlocks testing of later phases)
+4. **Phases 3, 5**: JSON Engine, Tool Runtime (once Phase 2 defines error model)
+5. **Phases 4, 6**: Agent Runtime, Memory System (design-dependent)
+6. **Phase 7**: Router (integrates with phases 2–6)
+7. **Phase 8**: Telemetry (wires through 2–7)
+8. **Phase 9-11**: Plugins, LLM Adapters, Security
+9. **Phases 13-14**: Example app, tests (final polish)
+10. **Phase 12, N+**: Patterns and optional features (if time permits)
+
+---
+
+## Relationship to Canonical Docs
+
+The plan now explicitly cross-references all three canonical documents:
+* **AGENT_ENGINE_OVERVIEW** – High-level architecture and responsibilities
+* **AGENT_ENGINE_SPEC** – Definition of Done and acceptance criteria
+* **RESEARCH.md** – Detailed algorithmic and design details (referenced within phase descriptions)
+
+Phases that require **Sonnet Design** will produce mini-design docs answering the specific "Design Gaps" listed, which will then guide Haiku implementation.

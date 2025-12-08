@@ -12,7 +12,19 @@ from .stage import Stage, StageType
 
 
 class EdgeType(str, Enum):
-    """Edge semantics (normal flow, conditional routing, or error/fallback)."""
+    """Edge semantics – how transitions are selected in the workflow DAG.
+
+    Per AGENT_ENGINE_OVERVIEW §5.1 and AGENT_ENGINE_SPEC §3.2:
+    - NORMAL: Standard transition; always taken unless overridden.
+    - CONDITIONAL: Branch from a decision stage; taken if condition is met.
+    - ERROR: Fallback edge taken when a stage fails (alternative to on_error policy).
+    - FALLBACK: Alternate edge for degraded/error modes (explicit fallback path).
+
+    Invariants:
+    - CONDITIONAL edges must originate from DECISION-type stages only.
+    - CONDITIONAL edges must have a non-null condition field.
+    - ERROR and FALLBACK edges are optional; stages can fail without them.
+    """
 
     NORMAL = "normal"
     CONDITIONAL = "conditional"
@@ -21,31 +33,93 @@ class EdgeType(str, Enum):
 
 
 class Edge(SchemaBase):
+    """A directed edge in the workflow DAG – one transition from one stage to another.
+
+    Edges define the possible execution paths through a workflow. The edge type and condition
+    determine when this transition is taken. Multiple outgoing edges from a stage enable
+    branching; multiple inbound edges to a stage enable merging.
+
+    Fields:
+        from_stage_id: Source stage ID.
+        to_stage_id: Target stage ID.
+        condition: Tag or expression for conditional routing (used by CONDITIONAL edges).
+        edge_id: Optional edge identifier.
+        edge_type: Edge semantics (per EdgeType).
+    """
+
     from_stage_id: str
     to_stage_id: str
-    condition: Optional[str] = Field(default=None, description="Tag or expression for decision routing")
-    edge_id: Optional[str] = Field(default=None)
-    edge_type: EdgeType = Field(default=EdgeType.NORMAL, description="Routing semantics for this edge")
+    condition: Optional[str] = Field(default=None, description="Tag or expression for decision routing (CONDITIONAL edges only)")
+    edge_id: Optional[str] = Field(default=None, description="Optional edge identifier")
+    edge_type: EdgeType = Field(default=EdgeType.NORMAL, description="Routing semantics (per EdgeType)")
 
 
 class WorkflowGraph(SchemaBase):
+    """A complete directed acyclic graph (DAG) describing all possible workflow paths.
+
+    The workflow graph is the blueprint for task execution. It defines all stages and the
+    transitions between them. A valid workflow must be acyclic, have at least one entry and
+    exit node, and satisfy all stage/edge constraints (per Stage and Edge docstrings).
+
+    The workflow graph itself does not prescribe which entry/exit nodes are used in any given
+    execution; that is determined by Pipeline definitions, which specify specific start and
+    end nodes for concrete workflows.
+
+    Per AGENT_ENGINE_OVERVIEW §5 and AGENT_ENGINE_SPEC §3.2:
+    - Stages can be connected via normal, conditional, error, or fallback edges.
+    - Decision stages branch to multiple stages; merge stages join multiple branches.
+    - Every valid execution path moves forward and eventually terminates (no cycles).
+
+    Fields:
+        workflow_id: Unique identifier.
+        stages: List of all stage IDs in the graph.
+        edges: List of directed edges connecting stages.
+        invariants: Optional metadata about graph properties.
+        start_stage_ids: Optional explicit entry point(s); if empty, inferred as nodes with no inbound edges.
+        end_stage_ids: Optional explicit exit point(s); if empty, inferred as nodes with no outbound edges.
+    """
+
     workflow_id: str
-    stages: List[str] = Field(..., description="List of stage IDs")
-    edges: List[Edge] = Field(default_factory=list)
-    invariants: Dict[str, bool] = Field(default_factory=dict)
-    start_stage_ids: List[str] = Field(default_factory=list, description="Start stage IDs for the workflow")
-    end_stage_ids: List[str] = Field(default_factory=list, description="End stage IDs for the workflow")
+    stages: List[str] = Field(..., description="List of all stage IDs in the graph")
+    edges: List[Edge] = Field(default_factory=list, description="Directed edges connecting stages")
+    invariants: Dict[str, bool] = Field(default_factory=dict, description="Optional graph invariant metadata")
+    start_stage_ids: List[str] = Field(default_factory=list, description="Explicit entry point stage IDs (optional; inferred if empty)")
+    end_stage_ids: List[str] = Field(default_factory=list, description="Explicit exit point stage IDs (optional; inferred if empty)")
+
 
 class Pipeline(SchemaBase):
-    pipeline_id: str
-    name: str
-    description: str
-    workflow_id: str
-    start_stage_ids: List[str]
-    end_stage_ids: List[str]
-    allowed_modes: List[str] = Field(default_factory=list)
-    fallback_end_stage_ids: List[str] = Field(default_factory=list)
-    metadata: Dict[str, object] = Field(default_factory=dict)
+    """A concrete traversal through the WorkflowGraph – a specific path from entry to exit.
+
+    A pipeline specifies which start and end stages are used for a particular execution mode
+    or task type. Multiple pipelines can traverse the same underlying workflow graph but use
+    different subsets of entry/exit nodes and may enforce different constraints (e.g., allowed modes).
+
+    Per AGENT_ENGINE_OVERVIEW §5.3 and AGENT_ENGINE_SPEC §3.2:
+    - A pipeline is an acyclic path or branching tree that converges and terminates.
+    - The router selects which pipeline to use for a task.
+    - Pipelines can define fallback exit nodes for error cases.
+
+    Fields:
+        pipeline_id: Unique identifier.
+        name: Human-readable name.
+        description: Description of this pipeline's purpose.
+        workflow_id: Reference to the WorkflowGraph this pipeline traverses.
+        start_stage_ids: Entry stage(s) for this pipeline.
+        end_stage_ids: Normal exit stage(s) for successful completion.
+        allowed_modes: Optional task modes (TaskMode values) allowed for this pipeline.
+        fallback_end_stage_ids: Optional fallback exit stage(s) for error cases.
+        metadata: Pipeline-specific metadata.
+    """
+
+    pipeline_id: str = Field(..., description="Unique pipeline identifier")
+    name: str = Field(..., description="Human-readable pipeline name")
+    description: str = Field(..., description="Description of pipeline purpose")
+    workflow_id: str = Field(..., description="Reference to WorkflowGraph this pipeline uses")
+    start_stage_ids: List[str] = Field(..., description="Entry stage(s)")
+    end_stage_ids: List[str] = Field(..., description="Normal exit stage(s)")
+    allowed_modes: List[str] = Field(default_factory=list, description="Optional task modes (TaskMode values) allowed")
+    fallback_end_stage_ids: List[str] = Field(default_factory=list, description="Optional fallback exit stage(s) for errors")
+    metadata: Dict[str, object] = Field(default_factory=dict, description="Pipeline-specific metadata")
 
 
 def validate_workflow_graph(graph: WorkflowGraph, *, stages: Optional[Dict[str, "Stage"]] = None) -> None:

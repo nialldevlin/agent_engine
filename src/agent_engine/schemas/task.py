@@ -13,6 +13,19 @@ from .memory import ContextFingerprint
 
 
 class TaskMode(str, Enum):
+    """Execution mode flags for tasks – safe-mode and operational constraints.
+
+    Per AGENT_ENGINE_SPEC §4.6 and RESEARCH Appendix A, task modes control how agents
+    and tools are permitted to behave:
+    - ANALYSIS_ONLY: Agents analyze and reason; tools may not mutate the workspace.
+    - IMPLEMENT: Normal mode; agents and tools can both read and write.
+    - REVIEW: Agents focus on inspection/feedback of existing work; no new implementation.
+    - DRY_RUN: Tools are invoked in simulation mode (read-only); outputs logged but not applied.
+
+    These modes are enforced by Tool Runtime and Agent Runtime via permission checks and
+    overrides. They can be set per-task and may override manifest-level permissions.
+    """
+
     ANALYSIS_ONLY = "analysis_only"
     IMPLEMENT = "implement"
     REVIEW = "review"
