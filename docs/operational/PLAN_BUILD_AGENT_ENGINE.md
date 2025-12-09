@@ -4,7 +4,8 @@
 
 ### Assumptions
 
-* Canonical behavior is defined by **AGENT_ENGINE_OVERVIEW.md**, **AGENT_ENGINE_SPEC.md**, and **RESEARCH.md**; any conflicts MUST resolve in favor of those docs.
+* Canonical behavior is defined by **AGENT_ENGINE_OVERVIEW.md**, **AGENT_ENGINE_SPEC.md**, **RESEARCH.md**, and **PROJECT_INTEGRATION_SPEC.md**; any conflicts MUST resolve in favor of those docs in order (SPEC > OVERVIEW > RESEARCH > PROJECT_INTEGRATION).
+* PROJECT_INTEGRATION_SPEC.md defines the external contract between projects and the engine (manifests, API surfaces, invariants).
 * Many core schemas and config loader are already solid; we **refine and wire**, not reboot the world.
 
 Each phase below is intended to be implementable via a **single Haiku / Copilot "Act Mode" prompt** (subject to implementation status below). For each phase you'll feed:
@@ -32,7 +33,9 @@ Phases are also grouped by implementation tier:
 
 ## Phase 0 – Repo Cleanup, Guardrails, and Public API Shell
 
-**Goal:** Align the repo skeleton with the canonical docs, mark what’s “core engine vs extras”, and introduce a stable public façade without deeply changing behavior yet.
+**Goal:** Align the repo skeleton with the canonical docs, mark what's "core engine vs extras", and introduce a stable public façade without deeply changing behavior yet.
+
+**Reference:** Foundational APIs must conform to the external contract defined in PROJECT_INTEGRATION_SPEC.md (Engine class, from_config_dir method, run method).
 
 ### Status (2025-12-05)
 
@@ -85,6 +88,7 @@ The prior `examples/basic_llm_agent` CLI example has been removed because it no 
 Most of this exists and is salvageable; we are tightening behavior and documenting invariants. This phase is critical and must be completed before most other phases can proceed.
 
 ### References
+* PROJECT_INTEGRATION_SPEC §3-5 (External manifest structure and validation contract)
 * AGENT_ENGINE_OVERVIEW §5 (Workflow Graph & Pipelines)
 * AGENT_ENGINE_SPEC §3.2 (Workflow & Pipeline Executor)
 * RESEARCH.md (DAG semantics and validation rules)
@@ -897,9 +901,10 @@ All patterns must:
 
 **Status: 🟢 HAIKU READY** (CLI glue code; manifests drive all behavior)
 
-**Goal:** Ensure there is at least one example app that uses only the public Engine façade and public config surfaces. Example manifests demonstrate all major features.
+**Goal:** Ensure there is at least one example app that uses only the public Engine façade and public config surfaces. Example manifests demonstrate all major features and conform to the integration contract.
 
 ### References
+* PROJECT_INTEGRATION_SPEC §1-9 (External contract: manifests, API surfaces, validation)
 * AGENT_ENGINE_SPEC §4 (Example Project Structure & Manifests)
 * AGENT_ENGINE_OVERVIEW §1, §2 (Engine responsibilities and configuration)
 
@@ -1050,9 +1055,12 @@ These should each become their own later phases that **plug into** the already-c
 
 ## Relationship to Canonical Docs
 
-The plan now explicitly cross-references all three canonical documents:
+The plan now explicitly cross-references all four canonical documents:
 * **AGENT_ENGINE_OVERVIEW** – High-level architecture and responsibilities
 * **AGENT_ENGINE_SPEC** – Definition of Done and acceptance criteria
 * **RESEARCH.md** – Detailed algorithmic and design details (referenced within phase descriptions)
+* **PROJECT_INTEGRATION_SPEC** – External contract between projects and engine (manifests, API surfaces, invariants)
 
 Phases that require **Sonnet Design** will produce mini-design docs answering the specific "Design Gaps" listed, which will then guide Haiku implementation.
+
+The integration specification (PROJECT_INTEGRATION_SPEC) is the authoritative source for what external projects can rely on. Internal engine implementations (Phases 0-14) must ensure the engine honors this contract.

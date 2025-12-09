@@ -1,507 +1,286 @@
-# LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
+# AGENT_ENGINE_SPEC.md  
+_Canonical Engine Specification | Matches AGENT_ENGINE_OVERVIEW_
 
-# Agent Engine — Specification & Completion Requirements
+## 0. Purpose & Scope
 
-## 1. Purpose & Scope
+This document defines the **complete technical specification** for Agent Engine.  
+It describes the internal subsystems, execution semantics, routing behavior, task model, status propagation rules, and validation requirements that all implementations of Agent Engine must satisfy.  
 
-**Agent Engine** is a **general-purpose LLM orchestration engine**, not an application.
+The **AGENT_ENGINE_OVERVIEW.md** describes *what* the engine is.  
+This specification describes *how it must behave*.
 
-When finished, it must:
-
-1. Execute **manifest-defined workflows** (DAGs of agents, tools, and routing logic).
-2. Provide a **stable runtime** for multi-agent systems (agent runtime + tool runtime + memory + routing).
-3. Be **configuration-driven** (no hard-coded app behavior in core).
-4. Expose **telemetry & hook surfaces** so applications can add plugins, analytics, and advanced behaviors.
-5. Support multiple LLM backends via a **pluggable LLM adapter**.
-
-It must *not*:
-
-* Hard-code specific applications (e.g., “code gremlin” behavior).
-* Depend on any particular pattern (ReAct, committee, supervisor, etc.).
-* Depend on a specific provider (must support multiple LLMs).
+This document is authoritative for engine correctness, determinism, and compatibility.
 
 ---
 
-## 2. High-Level Architecture (What Must Exist)
+## 1. Architectural Responsibilities of Agent Engine
 
-The finished engine must have these major areas implemented and stable:
+Agent Engine provides:
 
-1. **Config & Manifest System**
+- Execution of declaratively defined workflows (DAGs) composed of deterministic and agent-driven operations.
+- Routing, context assembly, task lifecycle management, and output validation.
+- Enforcement of schemas, node roles, context profiles, and tool permissions.
+- Parallelism through branch and split semantics.
+- Deterministic merge behavior for recombining clones and subtasks.
+- Structured error handling and standardized status propagation.
+- Complete observability through task history and telemetry.
 
-   * YAML/JSON manifests for:
-
-     * Agents
-     * Tools
-     * Workflows (DAG)
-     * Pipelines (stage sequences)
-     * Memory configuration & context profiles
-     * Plugins & hooks
-   * Schema registry + validation for all of the above.
-
-2. **Workflow Graph & Pipeline Executor**
-
-   * A DAG-based workflow model:
-
-     * Node types: agent node, tool node, decision/branch node, etc.
-     * Edge types: normal, error, conditional.
-   * A pipeline executor that:
-
-     * Walks the DAG for a given task.
-     * For each node, runs a configurable stage pipeline.
-
-3. **Runtime**
-
-   * **Agent runtime** (LLM calls, prompt construction, JSON enforcement).
-   * **Tool runtime** (deterministic tool invocation with safety).
-   * **Task manager** (task lifecycle, ID, state).
-   * **Router** (decides next node based on graph + task state).
-   * **Context/memory runtime** (task/project/global memory).
-
-4. **Memory & Context System**
-
-   * Task-level, project-level, and optional global memory stores.
-   * Configurable **context profiles** and retrieval policies.
-   * A **ContextAssembler** that chooses what goes into prompts.
-
-5. **JSON Engine**
-
-   * Strict JSON validation for agent outputs and tool I/O.
-   * Schema-driven repair and retry strategies.
-   * Clear, structured error types.
-
-6. **Telemetry & Event Bus**
-
-   * Event types for:
-
-     * agent calls
-     * tool calls
-     * workflow transitions
-     * errors/failures
-     * cost/usage
-   * Event bus with pluggable sinks (file, stdout, custom plugins).
-
-7. **Plugin & Hook System**
-
-   * Hooks around key lifecycle points:
-
-     * before/after task
-     * before/after node
-     * before/after agent call
-     * before/after tool call
-     * on error / on task completion
-   * Plugin manager to register and configure plugins from manifests.
-
-8. **LLM Adapter**
-
-   * A common interface for LLM calls.
-   * Support for multiple providers/models.
-   * Token/counting & cost tracking.
-
-9. **Patterns Library (Optional)**
-
-   * Optional templates for common patterns (committee, supervisor, etc.).
-   * Fully decoupled: engine runs fine with zero patterns loaded.
-
-10. **Tests & Hardening**
-
-    * Unit tests, integration tests, config/schema tests.
-    * Example project tests.
-    * Basic performance & reliability checks.
+Agent Engine is **not** responsible for defining project workflows, schemas, models, or tools.  
+These are always supplied by external project configuration.
 
 ---
 
-## 3. Definition of Done (Completion Criteria)
+## 2. Core Engine Data Structures
 
-The engine is “complete” when all of the following are true:
+### 2.1 Task
 
-### 3.1 Config & Manifests
+A Task is the atomic unit of computation and contains:
 
-* ✅ All engine behavior is driven by manifests:
+- Unique task identifier
+- Normalized input payload
+- Current output (from most recently executed node)
+- Full node-by-node execution history
+- Standardized metadata:
+  - status (`success`, `failure`, or `partial`)
+  - lineage (parent, clone type, subtask type)
+  - routing decisions
+  - timestamps
+- References to task-level, project-level, and global memory
 
-  * No hard-coded agents/tools/workflows in `src/agent_engine` core.
-* ✅ Schema registry exists for all config surfaces and is used at load time.
-* ✅ Invalid manifests produce clear, structured errors (not silent failure).
-* ✅ Example configs (`configs/basic_llm_agent`) validate against the same schemas.
+Tasks may spawn:
 
-### 3.2 Workflow & Pipeline Executor
+- **Clones**, created by Branch nodes  
+- **Subtasks**, created by Split nodes  
 
-* ✅ A workflow can be fully described in `workflow.yaml` and `pipelines.yaml` with no code changes.
-* ✅ The DAG is validated (no cycles, valid node/edge types).
-* ✅ The engine can:
+Rules:
 
-  * Start at a configured entry node.
-  * Execute through multiple nodes.
-  * Handle conditional edges based on node results.
+- Parent is complete when:
+  - **clones** → one finishes successfully (unless merged later)
+  - **subtasks** → all finish (unless merged earlier)
+- Task history must preserve every input and output exactly as provided.
+- All status fields must use the universal status model.
 
-### 3.3 Runtime (Agent, Tool, Task, Router)
+### 2.2 Node (Operation)
 
-* ✅ **AgentRuntime**:
+Nodes are immutable objects created from manifest configuration.  
+Each node has:
 
-  * Builds prompts deterministically.
-  * Calls LLM via LLM adapter.
-  * Enforces JSON output via JSON engine.
-  * Surfaces errors with clear types (no generic “oops”).
+- ID (globally unique)
+- Kind: `agent` or `deterministic`
+- Role: exactly one of  
+  `start`, `linear`, `decision`, `branch`, `split`, `merge`, `exit`
+- Input schema
+- Output schema
+- Context profile (or global / none)
+- Allowed tools (optional)
+- Failure-handling configuration (`continue_on_failure` or `fail_on_failure`)
+- Role-specific metadata (e.g., merge behavior)
 
-* ✅ **ToolRuntime**:
+### 2.3 Edge
 
-  * Executes only tools declared in manifests.
-  * Enforces configured permissions (filesystem root, commands, etc.).
-  * Logs tool calls via telemetry.
+Directed pairs `(from_node, to_node)`.  
+Edges define all routing.  
+No implicit routing exists.
 
-* ✅ **TaskManager**:
+Constraints:
 
-  * Creates tasks with unique IDs.
-  * Tracks node progress & results.
-  * Can resume tasks or inspect history.
-
-* ✅ **Router**:
-
-  * Respects the workflow DAG.
-  * Uses node outputs to pick next edges when conditional.
-  * Handles error paths and fallback nodes.
-
-### 3.4 Memory & Context
-
-* ✅ Memory tiers implemented:
-
-  * TaskStore (per-task history/state).
-  * ProjectStore (longer-lived project context).
-  * GlobalStore (optional, engine or app-level).
-
-* ✅ ContextAssembler:
-
-  * Reads memory according to context profiles.
-  * Applies retrieval policies (e.g., recency or hybrid scoring).
-  * Performs token budgeting to stay under model limits.
-
-### 3.5 JSON Engine
-
-* ✅ All agent outputs that should be JSON are validated against their schemas.
-* ✅ JSON errors are categorized (parse vs schema vs catastrophic).
-* ✅ Engine retries in a controlled way (no infinite loops).
-* ✅ Tools using JSON IO also pass through JSON Engine where applicable.
-
-### 3.6 Telemetry & Events
-
-* ✅ Every agent and tool call produces telemetry events with:
-
-  * timestamps
-  * task ID
-  * node ID
-  * latency
-  * model info (for agents)
-  * cost/usage (when available)
-
-* ✅ Workflow transitions produce events.
-
-* ✅ Errors and retries are logged as events.
-
-* ✅ Telemetry sinks (at least JSONL file) can be configured via manifests.
-
-### 3.7 Plugin System
-
-* ✅ Hooks exist and are exercised in at least one example plugin.
-
-* ✅ Plugins are loaded from manifests (`plugins.yaml`).
-
-* ✅ Plugins can subscribe to events and/or hooks to:
-
-  * log
-  * add metrics
-  * alter behavior in controlled ways
-
-* ✅ The engine runs with **zero plugins configured**.
-
-### 3.8 LLM Adapter
-
-* ✅ A base `LLMClient` interface exists.
-* ✅ At least:
-
-  * one OpenAI-compatible adapter
-  * one Anthropic-compatible adapter
-* ✅ Callers (AgentRuntime) do not depend on provider-specific details.
-* ✅ Token and cost estimation is recorded in telemetry where possible.
-
-### 3.9 Patterns Library (Optional but Clean)
-
-* ✅ `patterns/` contains example patterns (committee, supervisor, etc.) implemented using engine APIs.
-* ✅ No core engine code imports patterns.
-* ✅ Patterns are wired via manifests, not hard-coded.
-
-### 3.10 Tests & Examples
-
-* ✅ `tests/` covers:
-
-  * config & schema loading/validation
-  * workflow execution (at least one non-trivial DAG)
-  * agent runtime and tool runtime
-  * memory & context policies
-  * telemetry + plugin integration
-  * example applications
-
-* ✅ No “empty” tests that just `pass` or only import modules.
-
-* ✅ `examples/basic_llm_agent` is a working example:
-
-  * Can be run from CLI.
-  * Uses only engine surfaces (no secret internal hacks).
-
-When all of the above are true, the engine is “ready for serious apps.”
+- DAG must be acyclic.
+- All nodes reachable from at least one start node.
+- Each start node must reach at least one exit node.
 
 ---
 
-## 4. What an Example Project Should Look Like
+## 3. Execution Semantics
 
-This section defines what a **well-formed Agent Engine application** looks like once the engine is complete.
+### 3.1 Router
 
-### 4.1 Directory structure
+The router is responsible for:
 
-Example: a “Code Gremlin” project generator app.
+- Selecting the start node (default or explicitly provided)
+- Advancing the Task along the DAG according to node roles
+- Creating clones (branch) or subtasks (split)
+- Waiting for inbound edges to complete (merge)
+- Halting at exit nodes
 
-```text
-code_gremlin/
-├── configs
-│   ├── agents.yaml
-│   ├── tools.yaml
-│   ├── memory.yaml
-│   ├── plugins.yaml
-│   ├── workflow.yaml
-│   └── pipelines.yaml
-├── src
-│   ├── code_gremlin
-│   │   ├── cli.py
-│   │   └── __init__.py
-│   └── tools
-│       └── code_ops.py
-├── pyproject.toml
-├── README.md
-└── tests
-    └── test_end_to_end.py
-```
+Router **never** invents routes; the DAG is the sole routing structure.
 
-The application:
+### 3.2 Stage Lifecycle
 
-* Depends on `agent_engine` as a library.
-* Defines configurations and minimal glue code.
+For every node execution:
 
-### 4.2 Example `agents.yaml`
+1. Assemble context (using context profile)
+2. Execute deterministic logic or invoke LLM agent
+3. Validate output using node’s output schema
+4. Update task current output
+5. Write complete structured history entry
+6. Determine routing according to node role
 
-```yaml
-agents:
-  project_architect:
-    model: "gpt-max"
-    description: "Designs the project architecture and file layout."
-    context_profile: "architect_profile"
-    tools: []
-    output_schema: "ArchitectOutput"
+### 3.3 Node Role Behavior (Formal Specification)
 
-  module_implementer:
-    model: "claude-sonnet"
-    description: "Implements code modules using filesystem and test tools."
-    context_profile: "implementation_profile"
-    tools:
-      - write_file
-      - read_file
-      - run_tests
-    output_schema: "ImplementerOutput"
+#### **Start**
+- deterministic only
+- 0 inbound edges, 1 outbound
+- normalizes raw input
 
-  code_reviewer:
-    model: "gpt-max"
-    description: "Reviews code and suggests improvements."
-    context_profile: "review_profile"
-    tools: []
-    output_schema: "ReviewerOutput"
-```
+#### **Linear**
+- 1 inbound, 1 outbound
+- transforms task
 
-### 4.3 Example `tools.yaml`
+#### **Decision**
+- 1 inbound, ≥2 outbound edges
+- must output a valid edge selection
+- if selected edge does not exist → node failure
 
-```yaml
-tools:
-  write_file:
-    type: filesystem.write_file
-    root: "./generated_project"
+#### **Branch**
+- 1 inbound, ≥2 outbound
+- creates **clones**  
+- parent completes when one clone succeeds (unless merged)
 
-  read_file:
-    type: filesystem.read_file
-    root: "./generated_project"
+#### **Split**
+- 1 inbound, ≥1 outbound
+- creates **subtasks**
+- parent completes when all subtasks succeed (unless merged)
 
-  list_files:
-    type: filesystem.list
-    root: "./generated_project"
+#### **Merge**
+- ≥2 inbound, 1 outbound
+- waits for all inbound tasks
+- receives structured list of upstream outputs
+- must validate output according to its schema
 
-  run_tests:
-    type: command.run
-    command: "pytest --maxfail=1"
-    working_dir: "./generated_project"
-```
+#### **Exit**
+- deterministic only
+- ≥1 inbound, 0 outbound
+- read-only
+- cannot invoke agents or tools
+- returns output to user, using task’s pre-set status
+- may be flagged `always_fail`
 
-These tools are implemented generically by Agent Engine’s tool runtime, with safety boundaries derived from these configs.
+### 3.4 Status Propagation
 
-### 4.4 Example `workflow.yaml`
+All entities use:  
+`success` | `failure` | `partial`
 
-```yaml
-workflow:
-  nodes:
-    - id: gather_requirements
-      type: agent
-      agent: project_architect
+Rules:
 
-    - id: design_architecture
-      type: agent
-      agent: project_architect
+- Tools report status → node inherits if misuse; errors not caused by misuse do not automatically change node status.
+- Node status must be set explicitly.
+- Merge nodes may ignore or consider failure metadata based on configuration.
+- Task status must be set *before* reaching an exit node.
+- Exit nodes never determine correctness; they only present already-decided status.
 
-    - id: implement_module
-      type: agent
-      agent: module_implementer
+### 3.5 Failure Handling
 
-    - id: review_module
-      type: agent
-      agent: code_reviewer
+Nodes may specify:
 
-    - id: finalize_project
-      type: agent
-      agent: module_implementer
+- `continue_on_failure: true`  
+- `fail_on_failure: true` (default)
 
-  edges:
-    - from: gather_requirements
-      to: design_architecture
-
-    - from: design_architecture
-      to: implement_module
-
-    - from: implement_module
-      to: review_module
-
-    - from: review_module
-      to: implement_module
-      condition: "changes_requested"
-
-    - from: review_module
-      to: finalize_project
-      condition: "approved"
-```
-
-Engine reads this DAG and pipeline definitions to drive everything.
-
-### 4.5 Example `pipelines.yaml`
-
-```yaml
-pipeline_templates:
-  agent_node:
-    stages:
-      - load_task_state
-      - assemble_context
-      - build_prompt
-      - call_llm
-      - validate_json
-      - apply_agent_effects   # e.g., tool calls if the schema says so
-      - emit_telemetry
-
-  tool_node:
-    stages:
-      - validate_tool_input
-      - execute_tool
-      - emit_telemetry
-```
-
-These stage names correspond to functions/methods in engine runtime.
-
-### 4.6 Example `memory.yaml`
-
-```yaml
-memory:
-  task_store:
-    type: in_memory
-    max_messages: 20
-
-  project_store:
-    type: file_json
-    path: "./.project_memory.json"
-
-  global_store:
-    type: disabled
-
-context_profiles:
-  architect_profile:
-    max_tokens: 4000
-    retrieval_policy: "hybrid"
-    sources:
-      - task_store
-
-  implementation_profile:
-    max_tokens: 6000
-    retrieval_policy: "recency"
-    sources:
-      - task_store
-      - project_store
-
-  review_profile:
-    max_tokens: 4000
-    retrieval_policy: "recency"
-    sources:
-      - task_store
-      - project_store
-```
-
-### 4.7 Example `plugins.yaml`
-
-```yaml
-plugins:
-  - name: jsonl_telemetry_logger
-    type: telemetry.logger
-    config:
-      path: "./logs/events.jsonl"
-
-  - name: cost_summary
-    type: telemetry.cost_summary
-    config:
-      warn_above_usd: 0.10
-```
-
-### 4.8 Example `src/code_gremlin/cli.py`
-
-```python
-from agent_engine import Engine
-
-def main():
-    engine = Engine.from_config_dir("configs")
-    result = engine.run()
-    print("Project generated at:", result.output_path)
-    print("Summary:\n", result.summary)
-
-if __name__ == "__main__":
-    main()
-```
-
-That’s all the “code” needed to hook into the engine for a non-trivial app.
+Branch, split, and merge nodes may incorporate failure logic defined per node.
 
 ---
 
-## 5. How Suites (Claude / GPT-Max) Should Think About “Done”
+## 4. Context & Memory Semantics
 
-When agent suites are building Agent Engine, they should aim for:
+Each node must specify one of:
 
-1. **Engine equals platform, not app.**
+- context profile
+- global context
+- no context
 
-   * Code under `src/agent_engine` knows nothing about “code gremlins”, “doc assistants”, etc.
-   * It only knows about **agents, tools, workflows, tasks, memory, plugins, telemetry**.
+The Context Assembler:
 
-2. **Everything interesting lives in manifests + plugins.**
+- retrieves memory from task / project / global layers
+- applies retrieval and token policies (e.g., recency, hybrid)
+- produces structured, read-only context
 
-   * Adding a new app = **add configs + optional tools/plugins**, do not touch engine core.
+---
 
-3. **Example apps prove capability.**
+## 5. Tools (Deterministic Helpers)
 
-   * At least one fully working example (like `basic_llm_agent` now; later a `code_gremlin`), driven purely by configs.
+Tools are not nodes.  
+They may perform deterministic operations such as:
 
-4. **Tests validate engine, not specific apps.**
+- file I/O  
+- data transforms  
+- command execution (sandboxed)  
 
-   * Tests in `tests/` confirm:
+Rules:
 
-     * DAG execution
-     * agent & tool runtime
-     * schemas & config loading
-     * memory & routing
-     * plugin/hook behaviors
+- Tools report status via the universal status model.
+- Tools may throw implementation-level errors that do not necessarily fail the node.
+- Tools are invoked only when the node lists them explicitly.
+- Tools must comply with configured permissions (filesystem root, allow_network, etc.).
 
-If those principles hold and all “Definition of Done” items above are satisfied, you’ve got a real Agent Engine that can host your chaos gremlins safely.
+---
+
+## 6. Observability Requirements
+
+The engine must capture:
+
+- every node input/output pair
+- context used at each stage
+- tool invocations
+- routing decisions
+- merge events
+- clone/subtask creation
+- timestamps
+- structured status metadata
+
+The engine must support:
+
+- replayability
+- deterministic debug traces
+- optional telemetry sinks (plugins)
+
+---
+
+## 7. Error Semantics
+
+### 7.1 Stage Errors
+A stage may fail due to:
+
+- schema mismatch  
+- invalid routing decision  
+- context assembly failure  
+- tool misuse  
+
+### 7.2 Task Errors
+A task enters `partial` when some subtasks or clones fail but parent rules allow partial completion.
+
+### 7.3 Exit Errors
+Exit nodes marked `always_fail` override any existing success.
+
+---
+
+## 8. Engine Initialization Requirements
+
+`Engine.from_config_dir(path)` must:
+
+1. Load all manifests
+2. Validate schemas and references
+3. Construct node objects, edge table, and DAG
+4. Validate DAG invariants
+5. Initialize memory stores
+6. Register tools and adapters
+7. Load plugins
+8. Return constructed engine
+
+---
+
+## 9. Completion Criteria (Engine Definition of Done)
+
+Agent Engine is complete when:
+
+- DAG execution matches formal semantics
+- Node role behavior is correct
+- Context assembly is correct
+- Tools work with sandboxing + status reporting
+- Router enforces all routing rules
+- Parallel and hierarchical flows behave correctly
+- Structured history logging is complete
+- Exit node behavior is correct
+- No hidden logic exists outside the DAG or manifests
+
+---
+
+# END OF SPEC

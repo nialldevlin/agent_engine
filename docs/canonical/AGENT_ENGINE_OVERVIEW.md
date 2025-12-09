@@ -1,476 +1,343 @@
 # LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
 
-# Agent Engine Overview
-_Last updated: 2025-12-03_
+# **AGENT_ENGINE_OVERVIEW.md**
 
-[Research Notes](docs/canonical/RESEARCH.md) is the only other canonical document; consult it for the research basis and open checklists.
-
-## 1. Overview
-
-The **Agent Engine** is an extensible, modular framework for building
-multi-agent LLM applications. It provides clean internal data models, strict
-schema enforcement, and standardized execution behavior derived from external
-configuration using YAML or JSON. The engine handles everything except raw LLM
-API calls: prompt construction, task state management, agent
-orchestration, tool execution, memory layers, workflow graphs, routing, and
-event telemetry.
-
-Instead of embedding logic directly into code, the engine is configured through
-manifests defining agents, pipelines, workflow graphs, tools, memory settings,
-and plugin rules. This allows the engine to be used for any agent system using
-YAML or JSON to configure the engine with any intended functionality, define
-"personality", and create any desired LLM application.
-
-The engine handles all of the following:
-
-* Agents
-* Tasks
-* Tools
-* Memory
-* Data Retrieval
-* Context Assembly
-* Workflow Graphs
-* Pipelines
-* Routing
-* Plugin Hooks
-* Telemetry & Events
-
-The engine consists of these components:
-
-* Config Loader
-* Core Data Models
-* Task Manager
-* Workflow Graph
-* Pipeline Executor
-* Router
-* Agent Runtime
-* Tool Runtime
-* Memory and Retrieval Layer
-* JSON Engine
-* Telemetry/Event Bus
-* Plugin/Hook System
-* LLM Backend Adapter
-* Patterns Library (optional manifest templates such as committee, supervisor, chat; none are enabled unless explicitly authored)
+*Canonical Architecture Overview for Agent Engine*
 
 ---
 
- ## 2. Engine Responsibilities (see RESEARCH.md §1)
+## **0. Introduction**
 
-The Agent Engine performs three high-level operations:
+Agent Engine was created to make it easy for anyone to build custom LLM-powered agent applications without giving up the advanced features found in commercial agent suites like ChatGPT, Claude Code, or Codex. Instead of forcing developers to wire together raw model calls and hope the results behave predictably, Agent Engine handles the hard parts: structuring workflows, validating outputs, managing context, routing through complex logic, coordinating parallel agents, and keeping detailed execution records. The goal is to provide the reliability, safety, and power of a professional-grade agent framework while allowing complete freedom to design any agent behavior, tool usage, or workflow pattern a project needs.
 
-1. **Load all definitions** (agents, tools, workflow graph, pipelines, etc.)
-   from YAML/JSON manifests.
-2. **Convert a user request into a Task**, the stateful unit of work.
-3. **Execute the Task through the workflow graph**, using routing, pipelines,
-   agents, tools, memory, and plugins.
+Agent Engine is a configuration-first orchestration framework for executing structured workflows that combine deterministic logic and large-language-model (LLM) agents. Instead of embedding workflow logic directly into code, projects specify behavior declaratively through manifests describing nodes, edges, context visibility, tool access, schemas, and execution policies. The engine consumes these manifests and executes the resulting workflow as a directed acyclic graph (DAG).
 
-Everything else—schema enforcement, tool safety, JSON validation, context
-construction, memory retrieval—supports these operations.
+The system is designed around determinism, transparency, and extensibility. Every step of execution is logged, validated, and structured, allowing developers to reason about workflow behavior with clarity and precision. Nodes produce fully validated output, tasks retain complete histories, and the engine routes execution strictly according to the DAG. No hidden heuristics or implicit logic exists inside the runtime.
 
----
+Agent Engine emphasizes strong separation between project-defined workflow logic and the engine’s stable execution semantics. The engine provides routing, validation, task management, parallelism, subtask tracking, and observability, while projects provide node logic, schemas, context profiles, and tool choices.
 
-## 3. Configuration (see RESEARCH.md §5)
-
-The engine has configurations to allow extensibility for:
-
-* high-level engine configuration
-* workflow graph definition (stages and transitions)
-* pipeline definitions (paths through the workflow graph)
-* agents
-* tools
-* modes
-* enabled plugins and hooks
-* memory
-
-All files may be YAML or JSON.
-**YAML is converted to JSON**, and internal storage is JSON-shaped structures
-only with strict schemas.
-Every manifest must validate against the published JSON Schemas; no implicit or undeclared fields are allowed.
+For underlying architectural motivations and research notes, see **docs/canonical/RESEARCH.md**.
 
 ---
 
-## 4. Tasks
-
-A **Task** is the engine’s stateful record of work. It carries everything needed
-through the workflow. Tasks act as the glue between stages. Tasks arise from
-prompts but are not tied to them; a prompt may generate several tasks, and a
-task may span multiple prompts.
-
-A Task:
-
-* describes *what* must be done
-* tracks pipeline progress
-* records all stage outputs
-* holds related memory/context
-* stores telemetry, decisions, overrides, and tool outputs
-* links to subtasks or parent tasks if needed
+## **1. Core Concepts**
 
 ---
 
-## 5. Workflow Graph & Pipelines (see RESEARCH.md §3)
+### **1.1 Tasks**
 
-The **Workflow Graph** is the complete map of stages and allowed routing
-decisions. **Pipelines** are specific traversals through this graph.
+A Task is the fundamental unit of work processed by Agent Engine. Every user request becomes a Task, which flows through the workflow DAG until it reaches an exit node. Tasks represent both the evolving state of execution and the authoritative source of truth for all data produced during the workflow.
 
-The workflow graph consists of nodes (stages) and edges (transitions) and is
-represented as a **directed acyclic graph (DAG)**. This means:
+A Task contains structured fields:
 
-* edges have a direction (from one stage to another)
-* there are **no cycles** (no path that returns to a previous stage)
-* every valid execution path moves forward and eventually terminates
+* an identifier
+* the normalized input payload
+* the current output produced by the most recent node
+* a complete execution history organized by node
+* standardized metadata describing routing decisions, lineage, and status
+* references to task, project, and global memory layers
 
-User input is turned into a Task, and the pipeline routes that Task through the
-graph. A stage is an operation on the Task, resulting in progress toward the
-task’s goal or manipulation of the workspace. A stage may be a deterministic
-tool call or, more commonly, an agent call. All stage interactions are
-structured and schema-enforced.
+Task history stores every structured input and output a node sees or produces, along with the node’s status, tool calls, validation outcomes, and timestamps.
 
-Conceptually:
+Tasks may produce descendants through two mechanisms:
 
-* any node with a single outgoing edge is a **transformation**
-* any node with multiple outgoing edges is a **decision**
-* decision nodes may be deterministic or agent-driven
-* a pipeline that encounters no decisions is linear
+* **clones**, created by Branch nodes
+* **subtasks**, created by Split nodes
 
-### 5.1 Workflow Graph
+All clones and subtasks retain references to their parent Task, allowing the engine to track lineage, aggregate results, and determine when the parent Task has completed.
 
-A **Workflow Graph** is a directed acyclic graph (DAG) containing:
+Parent Task completion follows strict rules:
 
-* **Nodes (Stages)**, including:
-  * **Start nodes** – entry points for pipelines
-  * **End nodes** – terminal nodes with no outgoing edges
-  * **Work stages** – agent stages and tool stages that perform work
-  * **Decision stages** – stages that choose among multiple outgoing edges based
-    on Task state (deterministic rules or agent output)
-  * **Merge stages** – stages that join multiple incoming paths into one
-* **Edges (Transitions)**:
-  * directed connections from one node to another
-  * controlled, validated transitions that define legal execution paths
+* For clones, the parent may complete when one clone reaches an exit node, unless a merge later recombines clones for continued processing.
+* For subtasks, the parent completes only once all subtasks have reached their exit conditions, unless a merge node recombines them earlier.
 
-Constraints:
-
-* the graph is acyclic (no cycles allowed)
-* every pipeline must start at a valid start node and end at an end node
-* from each start node, there must be at least one path to some end node
-* stages should be either pure transformations (single outgoing edge) or decisions
-  (multiple outgoing edges), but not both at the same time
-
-Because the graph is a DAG, it can be statically validated, is guaranteed to
-terminate for well-formed pipelines, and is easier to debug and reason about.
-Routers may only select among pipelines explicitly defined in manifests; there is no implicit or self-directed routing.
-
-Retries, refinements, or "loop-like" behaviors are implemented at the **stage
-or pattern level** (for example, an agent stage that internally retries up to N
-times), not by creating cycles in the workflow graph itself.
-
-### 5.2 Stages
-
-A **Stage** represents one step in the workflow and follows a fixed lifecycle:
-
-1. **Prepare Input**
-   * assemble context: user input, prior stage outputs, memory, retrieved
-     documents, mode flags, and agent or tool configuration
-2. **Call Agent or Deterministic Function**
-   * for an **agent stage**:
-     * render prompts
-     * call the LLM via the Agent Runtime
-     * enforce JSON/schema
-   * for a **tool stage**:
-     * validate inputs
-     * execute the tool
-     * validate outputs
-3. **Handle Output**
-   * store results into the Task
-   * update Task status or metadata
-   * optionally set flags that influence downstream routing
-
-Stages may participate in:
-
-* linear flows (single in, single out)
-* decision flows (single in, multiple out via downstream Decision stage)
-* merge flows (multiple in, single out)
-
-### 5.3 Pipelines
-
-A **Pipeline** is the traversal of a Task through the workflow graph along a
-specific **acyclic path** (or branching tree that ultimately converges and
-terminates).
-
-A pipeline definition includes:
-
-* **entry stage** (start node)
-* **allowed sequence of stages** and transitions
-* **termination rules**, typically defined by reaching an end node
-* **fallback behavior** (e.g., alternate end nodes for error or degraded modes)
-
-The router chooses which pipeline to run for a Task and how that pipeline is
-instantiated within the global workflow graph (for example, which agents are
-assigned to which stages and which optional branches are enabled).
+Task status uses a universal, standardized model: `success`, `failure`, or `partial`. Node status, tool status, and task status all use the same representation for consistency.
 
 ---
 
-## 6. Routing (see RESEARCH.md §4.1-4.2)
+### **1.2 Operations (Nodes / Stages)**
 
-The **Router** determines:
+Operations, also called nodes or stages, are atomic processing units within the DAG. Each node transforms a Task in an isolated, deterministic way using its context, configuration, and optional tools. Every node execution is recorded in the Task history.
 
-* which pipeline a Task should follow
-* which stages in the workflow graph will be traversed
-* which agent handles each agent stage
-* how to apply user overrides
-* whether to use alternate agent variants
-* how to incorporate scoring/evolution
-* fallback agent selection if errors happen
-* how to produce a routing trace for debugging
+Nodes come in two fundamental kinds:
 
-Routing considers:
+* **agent nodes**, which invoke an LLM and validate its output against a schema
+* **deterministic nodes**, which execute predefined logic without any LLM involvement
 
-* the Task (input, metadata, mode flags)
-* agent capabilities and constraints
-* the workflow graph (available stages and transitions)
-* pipeline definitions
-* project rules and policies
-* plugin overrides
+Regardless of kind, all nodes operate with structured input, produce schema-validated structured output, and emit a stage-level status according to the universal status model. Nodes may call tools if the node configuration allows them.
 
-The router may be purely rule-based or may consult a specialized routing agent
-that proposes choices within the constraints of the DAG. All routing decisions
-are recorded on the Task for inspection and debugging.
+Node executions always occur with an assembled context determined by the node’s context profile, ensuring that each node sees exactly the information intended by the workflow’s design.
 
 ---
 
-## 7. Agent Runtime (see RESEARCH.md §5.1-5.3)
+### **1.3 Node Roles (Execution Semantics)**
 
-The Agent Runtime is responsible for:
+Every node has exactly one role, which defines how it interacts with the DAG and how the router moves execution forward. Roles describe execution semantics rather than behavioral logic, and they determine the number of inbound and outbound edges a node may have.
 
-* rendering prompts
-* combining context
-* calling the LLM backend
-* handling retries and JSON repair
-* enforcing schemas
-* producing structured outputs
-* attaching metadata (token counts, timing, cost)
-* emitting events to telemetry
+#### **Start**
 
----
+Start nodes prepare the user’s raw input into a normalized Task input structure. They are deterministic-only, accept zero inbound edges, and produce one outbound edge. Multiple start nodes may exist, but one must be marked default so execution can begin deterministically when no explicit start node is provided.
 
-## 8. Tool Runtime (see RESEARCH.md §3.1-3.3)
+#### **Linear**
 
-The Tool Runtime handles:
+Linear nodes represent the general case of Task transformation. They accept one inbound edge and produce one outbound edge. These nodes may be agent nodes or deterministic nodes and reflect the simplest form of progression through the graph.
 
-* tool invocation
-* input validation
-* permission checks (filesystem/network)
-* execution (Python, shell, HTTP, custom)
-* output validation
-* writing results to the Task
-* generating Tool Events for telemetry
+#### **Decision**
 
-Tools allow agents to:
+Decision nodes select exactly one of multiple possible outbound edges. They have one inbound edge and two or more outbound edges. Each decision node outputs a structured, schema-validated selection that identifies the chosen edge while also producing the usual node output payload. If a decision node selects an edge that does not exist, the stage fails.
 
-* read/write files
-* run search
-* query environments
-* execute transformations
-* call external APIs
+#### **Branch**
 
-Tools must follow strict schemas to avoid ambiguous behavior and pass through
-the security and permissions layer. Tool execution is deterministic: agents can only request tools via structured `ToolPlan` JSON, and every tool enforces consent and workspace boundaries before running.
+Branch nodes create parallel clones of the current Task. They have one inbound edge and two or more outbound edges. Each outbound edge receives a cloned Task, allowing parallel evaluation of the same content. The parent Task is considered complete when one clone successfully reaches an exit node, unless a merge node later recombines clone results for further processing.
+
+#### **Split**
+
+Split nodes create subtasks for hierarchical processing. They have one inbound edge and one or more outbound edges. Each outbound edge produces a new subtask derived from the parent. The parent Task ordinarily waits for all subtasks to complete unless a merge node recombines them earlier.
+
+#### **Merge**
+
+Merge nodes reconcile multiple upstream results. They have two or more inbound edges and exactly one outbound edge. Merge nodes wait for all incoming branches or subtasks to complete, receiving only successful outputs in a structured list that includes the output, the producing node ID, and associated metadata. Merge nodes may still observe failure metadata for diagnostic or selection purposes. Merge behavior, including how to combine or choose results, is defined per node.
+
+Merge nodes may also recombine clones or subtasks back into the original Task, allowing further continuation along the DAG.
+
+#### **Exit**
+
+Exit nodes finalize Tasks. They are deterministic, accept one or more inbound edges, and produce no outbound edges. Exit nodes are restricted to read-only behavior: they do not modify Task state except to format and return the final output. They never call agents. Exit nodes read the standardized status already written into Task metadata by earlier stages and present this result to the user. Some exit nodes may carry an `always_fail` flag to produce structured error outputs.
 
 ---
 
-## 9. Memory and Context (see RESEARCH.md §1-2)
+### **1.4 Tools**
 
-LLMs have no built-in memory.
-The engine constructs memory layers to supply context to agents.
+Tools are deterministic helpers invoked within node operations. They are not nodes themselves and are never part of the DAG. Instead, tools extend the capability of deterministic and agent nodes in a controlled, permission-regulated manner.
 
-### 9.1 Context
+Tools report status using the universal status model. When a tool reports failure due to improper usage, the node receiving that failure typically inherits a failure status. Tools may also throw errors unrelated to misuse; such errors do not necessarily cause node failure, though they are recorded in the Task history.
 
-Context = everything the agent sees when it runs. The Context Assembler follows explicit, deterministic policies declared in manifests; it never adds data that was not requested by the configured context profile.
-
-* prompt template
-* system instructions
-* user messages
-* stage outputs
-* memory history
-* retrieved documents
-* tool observations
-* mode flags
-* agent configuration
-* routing notes
-
-A Context Assembler component is responsible for collecting and packaging this
-information for each stage invocation strictly according to the configured profile (no implicit Stage 4 heuristics).
-
-### 9.2 Memory Layers
-
-#### Conversation Memory
-
-* recent messages
-* summarized older messages
-* structured state extracted from history
-
-#### Long-Term Knowledge Memory (RAG)
-
-* vector database of documents, files, research, preferences
-* semantic retrieval
-* supports cross-task recall
-
-#### Agent State Memory
-
-* persistent JSON blob per agent
-* goals, partial results, reasoning structures
-* not user-visible
-
-#### Profile Memory
-
-* user preferences
-* styles
-* long-running projects
-* saved contexts
-
-#### Tool/Environment Memory
-
-* file modifications
-* code edits
-* environment queries
-
-Memory is retrieved per stage and inserted into the context batch according to
-pipeline and agent configuration. These conceptual layers are realized via the task/project/global memory stores; do not assume a separate legacy subsystem exists.
+Tool usage is defined in node configuration and is always logged.
 
 ---
 
-## 10. JSON Engine (see RESEARCH.md §5.2, §7)
+### **1.5 Context & Memory**
 
-The JSON Engine ensures reliability:
+Nodes execute within a structured, read-only context assembled for each stage. The context is derived from three memory layers:
 
-* schema enforcement
-* parse errors → structured `EngineError`
-* repair strategies
-* multi-pass retries
-* deterministic fallback behaviors
-* schema-based transformations
-* agent output normalization
+* global memory
+* project memory
+* task memory
 
-This is critical for preventing pipeline collapse and keeping all agent and tool
-outputs structured and predictable.
+Each node must specify exactly one of the following:
 
----
+* a context profile
+* global context
+* no context
 
-## 11. Telemetry and Event Bus (see RESEARCH.md §6-7)
+This requirement ensures clear, predictable visibility of information during execution.
 
-Every significant action emits an Event:
-
-* task created
-* stage started/finished
-* agent called
-* tool called
-* memory retrieved
-* pipeline transitions
-* errors & recoveries
-* cost/timing metrics
-
-Plugins can listen to events for:
-
-* logging
-* analytics
-* scoring
-* evolution
-* auditing
-* debugging
-* external monitoring integrations
-
-The Event Bus is the observability backbone of the engine.
+The **Context Assembler** runs before each node, producing a validated, structured context package. Nodes receive only what is defined by their context profile, ensuring determinism and preventing accidental visibility of information.
 
 ---
 
-## 12. Plugin and Hook System (see RESEARCH.md §3.2, §5)
-
-Plugins add custom functionality without modifying the core engine.
-
-Hook surfaces include:
-
-* before/after task
-* before/after stage
-* before/after agent
-* before/after tool
-* memory events
-* routing decisions
-* pipeline transitions
-* errors
-
-Plugins allow developers to build any system on top of the base engine. The
-engine stays lightweight while plugins provide heavy customization.
+## **2. Workflow Graph (DAG)**
 
 ---
 
-## 13. LLM Backend Interface (see RESEARCH.md §3-5)
+### **2.1 DAG Structure**
 
-The engine is backend-agnostic.
-An `LLMClient` interface defines standard methods:
+Agent Engine executes exactly one DAG per project. The DAG may contain disconnected components, provided each component contains at least one start node and at least one exit node. The DAG must be acyclic and must always terminate.
 
-* `generate()`
-* `stream_generate()`
-* backend-specific configuration
-* token counting
-* cost estimation (optional)
+Agent Engine does not support loops, cycles, or stage retries. Any iterative or retry behavior must be implemented externally or through future loop-like node mechanisms.
 
-Adapters can be built for:
-
-* OpenAI
-* Anthropic
-* Google
-* Mistral
-* Local models (llama.cpp, vLLM, etc.)
-
-Multiple backends can coexist in a single project (for example, one model for
-reasoning and another for fast tool-style calls), configured via manifests.
+The DAG is the sole routing structure. No alternative routing system exists.
 
 ---
 
-## 14. Security and Permissions (see RESEARCH.md Appendix A)
+### **2.2 Edges**
 
-All tools used by agents go through a permissions layer that requires explicit
-consent, with engine-level defaults and configurable per-project and per-agent
-defaults.
-
-The security system can control:
-
-* filesystem permissions (read-only, write, restricted paths)
-* network permissions
-* shell execution toggles
-* environment visibility
-* tool whitelists per agent
-* safe-mode flags (`analysis_only`, `dry_run`)
-
-Security is both a manifest concern and a runtime enforcement concern.
+Edges are explicitly defined as `(from_node, to_node)` pairs. The DAG expresses all routing. Node roles determine how many edges are allowed and how execution proceeds. No pipeline configurations or external routing strategies exist; pipelines are emergent execution traces produced when the Task moves through the graph.
 
 ---
 
-## 15. Summary
+### **2.3 Node Identity & Reuse**
 
-The Agent Engine is a modular, backend-agnostic framework for building complex
-multi-agent LLM systems. It separates configuration from execution using
-structured manifests that define agents, tools, pipelines, workflow graphs,
-memory, modes, and plugins. The engine does not perform raw LLM calls itself;
-instead, it handles all higher-order orchestration: task creation, schema-safe
-prompting, tool execution, memory retrieval, context assembly, routing, event
-generation, and workflow transitions.
+Node IDs must be globally unique. A node configuration describes exactly one behavior. Reusing the same node ID across multiple locations in the DAG is permitted; each occurrence acts as an independent stage and produces its own execution history entries while sharing the same configuration.
 
-A Task acts as the stateful core of execution, carrying all information needed
-as it moves through a pipeline. Pipelines represent explicit traversals through
-a directed acyclic workflow graph, while the router selects the best pipeline
-and agent assignments based on project rules, capabilities, user modes, and
-plugin overrides. Each stage executes deterministically through a fixed
-lifecycle of input preparation, agent or tool execution, and output handling.
+---
 
-Memory is layered and unified. The engine retrieves context from conversational
-history, long-term RAG documents, agent state, user profiles, and
-environment/tool outputs. All of this is merged into a coherent context package
-before each agent call. A strict JSON engine ensures schema compliance,
-retries, and repair, making structured outputs reliable. Every significant
-action sends events through the telemetry bus, enabling logging, audits,
-analytics, scoring, and evolution.
+### **2.4 Branch / Split / Merge Semantics**
 
-In total, the Agent Engine provides a clean foundation for any LLM application—
-from simple assistant flows to deeply coordinated multi-agent ecosystems.
-Developers define behavior through manifests and plugins, while the engine
-ensures safety, determinism, extensibility, and predictable execution.
+Branch, Split, and Merge provide structured parallelism and hierarchical decomposition.
+
+**Branch nodes** create clones of the parent Task for parallel evaluation. Clones permit pipelines such as multi-agent voting, redundant processing, or expert selection.
+
+**Split nodes** create subtasks to support hierarchical workflows. Subtasks may perform distinct components of a larger problem.
+
+**Merge nodes** recombine clone or subtask results. Merges may continue with the resultant Task or finalize sub-results. All successful upstream outputs are included in the merge input, and failed branches or subtasks are excluded but logged. Merge nodes can be configured to halt or continue on failure, depending on workflow design.
+
+---
+
+## **3. Execution Model**
+
+---
+
+### **3.1 Stage Lifecycle**
+
+Each stage execution follows this lifecycle:
+
+* assemble context according to the node’s profile
+* execute the node’s operation
+* validate output against the node’s schema
+* update Task state, including current output and history
+* determine next routing via node role semantics
+
+This lifecycle ensures deterministic, observable, structured computation.
+
+---
+
+### **3.2 Router**
+
+The router drives DAG traversal. It selects the start node (either explicit or default) and follows node role semantics to determine subsequent stages. Router responsibilities include:
+
+* linear progression through Linear nodes
+* selecting outbound edges according to Decision node output
+* creating clones for Branch nodes
+* creating subtasks for Split nodes
+* coordinating Merge nodes until all required inputs arrive
+* halting execution at Exit nodes
+
+The router does not supplement or modify DAG logic. It never infers routes outside the graph.
+
+---
+
+### **3.3 Concurrency & Parallelism**
+
+Branch nodes and Split nodes generate concurrent execution paths. Merged execution resumes only when upstream clones or subtasks finish or are recombined. Parent Task behavior during parallelism follows strict rules:
+
+* clones progress independently
+* subtasks represent separate workflow paths
+* parent progression depends on merge or exit behavior
+
+Concurrency is predictable and explicit.
+
+---
+
+### **3.4 Status Determination**
+
+All components—including nodes, tools, clones, subtasks, and the Task itself—use the standardized status model (`success`, `failure`, `partial`). Status must be set prior to reaching an exit node. Exit nodes do not determine correctness; they simply read the status and produce user-facing results.
+
+---
+
+## **4. Configuration & Manifest Structure**
+
+---
+
+### **4.1 Node Configuration**
+
+Each node is defined exclusively by its manifest entry. Configuration includes:
+
+* node kind (agent or deterministic)
+* node role
+* input and output schemas
+* context profile
+* allowed tools
+* merge/branch/split strategy
+* descriptive metadata
+
+Manifests represent the complete public API for defining node behavior.
+
+---
+
+### **4.2 DAG Configuration**
+
+A project’s manifest includes:
+
+* definitions of all nodes
+* a complete set of edges
+* start nodes (one marked default)
+* exit nodes, optionally with `always_fail`
+
+This configuration defines the full workflow.
+
+---
+
+### **4.3 Failure Handling Configuration**
+
+Nodes may specify whether execution should stop or continue when failures occur. Merge nodes may ignore failures, incorporate failure metadata, or cause overall failure depending on configuration. Error exit nodes provide structured representation of irrecoverable errors.
+
+---
+
+### **4.4 Task-Level Settings**
+
+Projects may configure:
+
+* memory usage policies
+* status evaluation mechanisms
+* history retention
+* failure-handling strategies
+
+Task-level behavior is always declared explicitly through manifest configuration.
+
+---
+
+## **5. Observability & Telemetry**
+
+---
+
+### **5.1 Execution Trace**
+
+The execution trace is a complete record of the Task’s journey through the DAG. Each entry contains structured node inputs, outputs, statuses, tool invocations, and timestamps. Routing decisions, clone creation, subtask creation, and merges are all recorded.
+
+### **5.2 Logs & Metrics**
+
+Structured logging captures validation failures, context assembly, tool execution, LLM usage, and node performance. Metrics may include timing, resource usage, and parallel execution characteristics.
+
+### **5.3 Replayability**
+
+Deterministic nodes and structured output schemas allow workflows to be replayed for debugging, with nondeterministic LLM behavior constrained by strict schemas and historical records.
+
+---
+
+## **6. Error Handling**
+
+---
+
+### **6.1 Stage Errors**
+
+Stages may fail due to schema mismatches, tool misuse, operation errors, or environment issues. Stage failure is recorded in the Task history with structured metadata. Nodes may be configured to treat stage failure as catastrophic or recoverable.
+
+### **6.2 Task Errors**
+
+Task-level errors arise from unrecoverable stage errors, explicit failure routing, invalid decisions, or reaching exit nodes marked `always_fail`. Parent tasks may enter a `partial` state when subtasks or components fail.
+
+### **6.3 Error Exit Nodes**
+
+Error exit nodes finalize Tasks with standardized failure information, structured output, and consistent semantics. They do not execute LLMs and maintain strict read-only behavior.
+
+---
+
+## **7. Example Execution Walkthrough**
+
+A typical execution begins when a user request arrives. The engine selects the default or explicitly provided start node, which normalizes the input. Linear and decision stages process and route the Task forward. Branch nodes may create clones for parallel evaluation, and split nodes may create subtasks for hierarchical decomposition. Merge nodes reconcile the results and advance the Task. When the Task reaches an exit node, the exit node reads its status and presents a final structured response to the user. Every step of this process is captured in the Task history and execution trace.
+
+---
+
+## **8. Design Principles**
+
+Agent Engine adheres to principles of declarative configuration, strict validation, strong separation of concerns, transparent execution, and deterministic routing through the DAG. The engine avoids implicit logic and instead relies solely on manifests to define behavior. Parallelism, context visibility, status propagation, and termination semantics are always explicit.
+
+See **docs/canonical/RESEARCH.md** for additional conceptual background and rationale.
+
+---
+
+## **9. Glossary**
+
+* **Task** — A unit of work flowing through the DAG.
+* **Clone** — A parallel copy of a Task created by a Branch node.
+* **Subtask** — A hierarchical child task created by a Split node.
+* **Node / Stage** — An atomic operation applied to a Task.
+* **Role** — The execution semantics governing a node’s position in the DAG.
+* **Context** — Structured, read-only data assembled for a node according to its profile.
+* **Tool** — A deterministic helper invoked within a node.
+* **Branch / Split / Merge** — Mechanisms for structured parallelism and recombination.
+* **Exit node** — A deterministic read-only finalizer for Task output.
+* **Router** — Component responsible for following DAG semantics and node outputs.
+* **Pipeline** — The actual execution trace a Task takes through the DAG.
+* **Status model** — Standardized status values: `success`, `failure`, `partial`.
