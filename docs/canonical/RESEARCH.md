@@ -2,6 +2,10 @@
 
 # Agent Engine – Consolidated Research Notes
 
+**LIBRARY NOTE**: This document is a compilation of research from various papers and sources that inform Agent Engine design. It serves as a reference library for understanding architectural choices and background concepts. **Not all information in this document is in scope for current implementation.** When implementing features, refer to the canonical spec (`AGENT_ENGINE_SPEC.md`) and architecture (`AGENT_ENGINE_OVERVIEW.md`) to determine what is required. Treat this file as background material to prevent scope creep.
+
+---
+
 This document is the single source of research grounding for the Agent Engine orchestrator ("Agent Engine"). It replaces earlier files (`RESEARCH.md`, `RESEARCH_NOTES.md`, `RESEARCH_ALIGNMENT.md`, `PROMPT_WRAPPING.md`) and is meant to be stable enough that other plans and design docs can cite it directly.
 
 The goal is to keep implementation decisions tightly linked to published work or clearly stated heuristics. Where possible, each subsection ends with an **"Implementation checklist"** that you can turn into concrete tasks.

@@ -59,10 +59,16 @@ Task status uses a universal, standardized model: `success`, `failure`, or `part
 
 Operations, also called nodes or stages, are atomic processing units within the DAG. Each node transforms a Task in an isolated, deterministic way using its context, configuration, and optional tools. Every node execution is recorded in the Task history.
 
-Nodes come in two fundamental kinds:
+Every node has exactly two defining dimensions:
 
+**Kind** (node computation type):
 * **agent nodes**, which invoke an LLM and validate its output against a schema
 * **deterministic nodes**, which execute predefined logic without any LLM involvement
+
+**Role** (node position and routing semantics):
+* start, linear, decision, branch, split, merge, exit (defined in section 1.3 below)
+
+These two dimensions form a cross-product: any valid combination of kind and role may exist (subject to node role constraints).
 
 Regardless of kind, all nodes operate with structured input, produce schema-validated structured output, and emit a stage-level status according to the universal status model. Nodes may call tools if the node configuration allows them.
 
@@ -142,11 +148,11 @@ The **Context Assembler** runs before each node, producing a validated, structur
 
 ### **2.1 DAG Structure**
 
-Agent Engine executes exactly one DAG per project. The DAG may contain disconnected components, provided each component contains at least one start node and at least one exit node. The DAG must be acyclic and must always terminate.
+Agent Engine executes exactly one DAG per project. Each project config directory contains exactly one workflow DAG (workflow.yaml) that governs all routing for that project. The DAG may contain disconnected components, provided each component contains at least one start node and at least one exit node. The DAG must be acyclic and must always terminate.
 
 Agent Engine does not support loops, cycles, or stage retries. Any iterative or retry behavior must be implemented externally or through future loop-like node mechanisms.
 
-The DAG is the sole routing structure. No alternative routing system exists.
+The DAG is the sole routing structure. No alternative routing system exists. There are no pipeline configuration files; all routing decisions must be represented as nodes and edges in the DAG.
 
 ---
 

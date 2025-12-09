@@ -22,20 +22,21 @@ Agent Engine executes those manifests according to the canonical semantics.
 
 Projects integrate with the engine by providing:
 
-1. **One workflow DAG** (`workflow.yaml`)  
-2. **Node definitions** (embedded in workflow manifest)  
-3. **Agent definitions** (`agents.yaml`)  
-4. **Tool definitions** (`tools.yaml`)  
-5. **Memory + context profiles** (`memory.yaml`)  
-6. **Schemas** (registered or inline)  
-7. **Optional plugins** (`plugins.yaml`)  
+1. **One workflow DAG** (`workflow.yaml`)
+   Each project config directory contains exactly one workflow DAG that governs all routing for that project.
+2. **Node definitions** (embedded in workflow manifest)
+3. **Agent definitions** (`agents.yaml`)
+4. **Tool definitions** (`tools.yaml`)
+5. **Memory + context profiles** (`memory.yaml`)
+6. **Schemas** (registered or inline)
+7. **Optional plugins** (`plugins.yaml`)
 
 The engine guarantees:
 
-- deterministic workflow execution  
-- strict schema validation  
-- structured task history  
-- compliant context assembly  
+- deterministic workflow execution
+- strict schema validation
+- structured task history
+- compliant context assembly
 - correct parallel/subtask semantics  
 
 ---
@@ -65,10 +66,12 @@ Projects must define **exactly one DAG**.
 
 Defines:
 
-- nodes  
-- edges  
-- start nodes (≥1, one marked default)  
-- exit nodes (≥1; may include error exit nodes)  
+- nodes
+- edges
+- start nodes (≥1, one marked default)
+- exit nodes (≥1; may include error exit nodes)
+
+**Important**: There are no pipeline configuration files. All routing decisions must be represented as nodes and edges in the DAG. Pipelines are emergent execution traces that result from a Task flowing through the graph.
 
 #### Node fields:
 
@@ -84,6 +87,8 @@ Defines:
 | `continue_on_failure` | bool (default false) |
 | Role-specific config | merge behavior, etc. |
 
+**Kind and Role Cross-Product**: Any valid combination of `kind` ∈ {`agent`, `deterministic`} and `role` ∈ {`start`, `linear`, `decision`, `branch`, `split`, `merge`, `exit`} may exist, subject to the constraints below.
+
 #### Edge fields:
 
 | Field | Description |
@@ -94,14 +99,14 @@ Defines:
 
 Constraints:
 
-- Graph must be acyclic  
-- Merges must have ≥2 inbound  
-- Starts have 0 inbound  
-- Exits have 0 outbound  
-- Branch must have ≥2 outbound  
-- Split must have ≥1 outbound  
-- Decision must have ≥2 outbound  
-- Linear exactly 1 inbound + 1 outbound  
+- Graph must be acyclic
+- Merges must have ≥2 inbound
+- Starts have 0 inbound
+- Exits have 0 outbound
+- Branch must have ≥2 outbound
+- Split must have ≥1 outbound
+- Decision must have ≥2 outbound
+- Linear exactly 1 inbound + 1 outbound
 
 No cycles; no retries built in; loops must be implemented outside the DAG.
 
@@ -168,14 +173,9 @@ Engine validates strictly.
 
 ### 3.6 plugins.yaml (Optional)
 
-Plugins receive read-only access to:
+Plugins are read-only observers on events (telemetry, logging, metrics). They receive access to task lifecycle events, node execution events, routing decisions, and errors, but cannot modify workflow behavior or DAG structure.
 
-- tasks  
-- node events  
-- routing events  
-- errors  
-
-Plugins cannot modify DAG behavior.
+Plugins are configured via `plugins.yaml` and function purely as observability hooks.
 
 ---
 
