@@ -11,12 +11,14 @@ from .memory import (
     ContextFingerprint,
     ContextItem,
     ContextPackage,
+    ContextProfile,
+    ContextProfileSource,
     ContextRequest,
     MemoryConfig,
 )
 from .override import OverrideSpec
-from .stage import Stage
-from .task import Task, TaskSpec
+from .stage import Node, NodeKind, NodeRole
+from .task import Task, TaskLifecycle, TaskSpec, UniversalStatus
 from .tool import ToolCallRecord, ToolDefinition, ToolPlan, ToolStep
 from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
 from .workflow import Edge, WorkflowGraph
@@ -28,7 +30,7 @@ SCHEMA_REGISTRY: Dict[str, SchemaType] = {
     "task_spec": TaskSpec,
     "task": Task,
     "failure_signature": FailureSignature,
-    "stage": Stage,
+    "node": Node,
     "edge": Edge,
     "workflow_graph": WorkflowGraph,
     "agent_definition": AgentDefinition,
@@ -44,6 +46,8 @@ SCHEMA_REGISTRY: Dict[str, SchemaType] = {
     "memory_config": MemoryConfig,
     "context_item": ContextItem,
     "context_fingerprint": ContextFingerprint,
+    "context_profile": ContextProfile,
+    "context_profile_source": ContextProfileSource,
     "context_request": ContextRequest,
     "context_package": ContextPackage,
     "event": Event,

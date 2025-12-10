@@ -10,21 +10,24 @@ from .memory import (
     ContextItem,
     ContextPackage,
     ContextPolicy,
+    ContextProfile,
+    ContextProfileSource,
     ContextRequest,
     MemoryConfig,
     MemoryStoreConfig,
 )
 from .override import OverrideKind, OverrideScope, OverrideSeverity, OverrideSpec
 from .registry import SCHEMA_REGISTRY, get_schema_json
-from .stage import OnErrorPolicy, Stage, StageType
+from .stage import Node, NodeKind, NodeRole
 from .task import (
     RoutingDecision,
     StageExecutionRecord,
     Task,
+    TaskLifecycle,
     TaskMode,
     TaskPriority,
     TaskSpec,
-    TaskStatus,
+    UniversalStatus,
 )
 from .tool import (
     ToolCallRecord,
@@ -37,7 +40,7 @@ from .tool import (
     ToolStepKind,
 )
 from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
-from .workflow import Edge, EdgeType, WorkflowGraph
+from .workflow import Edge, WorkflowGraph
 
 __all__ = [
     "AgentDefinition",
@@ -60,6 +63,8 @@ __all__ = [
     "ContextItem",
     "ContextPackage",
     "ContextPolicy",
+    "ContextProfile",
+    "ContextProfileSource",
     "ContextRequest",
     "MemoryConfig",
     "MemoryStoreConfig",
@@ -69,16 +74,17 @@ __all__ = [
     "OverrideSpec",
     "SCHEMA_REGISTRY",
     "get_schema_json",
-    "OnErrorPolicy",
-    "Stage",
-    "StageType",
+    "Node",
+    "NodeKind",
+    "NodeRole",
     "RoutingDecision",
     "StageExecutionRecord",
     "Task",
+    "TaskLifecycle",
     "TaskMode",
     "TaskPriority",
     "TaskSpec",
-    "TaskStatus",
+    "UniversalStatus",
     "ToolCallRecord",
     "ToolCapability",
     "ToolDefinition",
@@ -92,6 +98,5 @@ __all__ = [
     "ExecutionInput",
     "ExecutionOutput",
     "Edge",
-    "EdgeType",
     "WorkflowGraph",
 ]
