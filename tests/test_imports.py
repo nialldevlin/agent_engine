@@ -19,7 +19,6 @@ def test_public_schema_exports():
         "ToolDefinition",
         "WorkflowGraph",
         "Edge",
-        "EdgeType",
         "__version__",
     ]
     for name in required:

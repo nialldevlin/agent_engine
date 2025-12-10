@@ -6,21 +6,22 @@ from agent_engine.schemas import (
     AgentDefinition,
     AgentRole,
     Edge,
-    EdgeType,
     EngineError,
     EngineErrorCode,
     EngineErrorSource,
     FailureCode,
     FailureSignature,
-    Stage,
-    StageType,
+    Node,
+    NodeKind,
+    NodeRole,
     Task,
+    TaskLifecycle,
     TaskMode,
     TaskSpec,
-    TaskStatus,
     ToolDefinition,
     ToolKind,
     ToolRiskLevel,
+    UniversalStatus,
     WorkflowGraph,
     get_schema_json,
 )
@@ -28,8 +29,8 @@ from agent_engine.schemas import (
 
 def test_task_spec_and_task_instantiation() -> None:
     spec = TaskSpec(task_spec_id="spec-1", request="Fix bug", mode=TaskMode.ANALYSIS_ONLY)
-    task = Task(task_id="task-1", spec=spec)
-    assert task.status == TaskStatus.PENDING
+    task = Task(task_id="task-1", spec=spec, task_memory_ref="task_mem", project_memory_ref="proj_mem", global_memory_ref="global_mem")
+    assert task.status == UniversalStatus.PENDING
     assert task.spec.request == "Fix bug"
 
 
@@ -39,10 +40,10 @@ def test_task_invalid_missing_required() -> None:
 
 
 def test_stage_and_workflow_graph() -> None:
-    stage = Stage(stage_id="s1", name="do", type=StageType.AGENT)
-    graph = WorkflowGraph(workflow_id="wf1", stages=[stage.stage_id], edges=[])
+    node = Node(stage_id="s1", name="do", kind=NodeKind.AGENT, role=NodeRole.START, default_start=True, context="global")
+    graph = WorkflowGraph(workflow_id="wf1", nodes=[node.stage_id], edges=[])
     assert graph.workflow_id == "wf1"
-    assert graph.stages == ["s1"]
+    assert graph.nodes == ["s1"]
 
 
 def test_tool_definition() -> None:
@@ -83,18 +84,18 @@ def test_schema_registry_lookup() -> None:
 
 
 def test_stage_round_trip_validation() -> None:
-    stage = Stage(stage_id="s-linear", name="Linear", type=StageType.LINEAR, terminal=False)
-    payload = stage.model_dump()
-    restored, err = validate("stage", payload)
+    node = Node(stage_id="s-linear", name="Linear", kind=NodeKind.DETERMINISTIC, role=NodeRole.LINEAR, context="global")
+    payload = node.model_dump()
+    restored, err = validate("node", payload)
     assert err is None
-    assert restored.stage_id == stage.stage_id
+    assert restored.stage_id == node.stage_id
 
 
 def test_workflow_round_trip_validation() -> None:
     graph = WorkflowGraph(
         workflow_id="wf2",
-        stages=["start", "end"],
-        edges=[Edge(from_stage_id="start", to_stage_id="end", edge_type=EdgeType.NORMAL)],
+        nodes=["start", "end"],
+        edges=[Edge(from_node_id="start", to_node_id="end")],
     )
     payload = graph.model_dump()
     restored, err = validate("workflow_graph", payload)

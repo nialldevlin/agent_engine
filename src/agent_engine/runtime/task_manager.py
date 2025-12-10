@@ -16,9 +16,10 @@ from agent_engine.schemas import (
     Severity,
     StageExecutionRecord,
     Task,
+    TaskLifecycle,
     TaskMode,
     TaskSpec,
-    TaskStatus,
+    UniversalStatus,
 )
 
 def _generate_task_id(spec: TaskSpec) -> str:
@@ -62,17 +63,23 @@ class TaskManager:
     tasks: Dict[str, Task] = field(default_factory=dict)
 
     def create_task(self, spec: TaskSpec, task_id: str | None = None) -> Task:
+        generated_task_id = task_id or _generate_task_id(spec)
+        project_id = _extract_project_id(generated_task_id)
         task = Task(
-            task_id=task_id or _generate_task_id(spec),
+            task_id=generated_task_id,
             spec=spec,
-            status=TaskStatus.PENDING,
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
             created_at=_now_iso(),
             updated_at=_now_iso(),
+            task_memory_ref=f"task_memory:{generated_task_id}",
+            project_memory_ref=f"project_memory:{project_id}",
+            global_memory_ref="global_memory:default",
         )
         self.tasks[task.task_id] = task
         return task
 
-    def set_status(self, task: Task, status: TaskStatus) -> None:
+    def set_status(self, task: Task, status: UniversalStatus) -> None:
         task.status = status
         task.updated_at = _now_iso()
 

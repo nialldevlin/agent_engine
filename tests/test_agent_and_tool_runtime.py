@@ -5,12 +5,12 @@ from agent_engine.runtime.tool_runtime import ToolRuntime
 from agent_engine.schemas import (
     EngineErrorCode,
     EngineErrorSource,
-    Stage,
-    StageType,
+    Node,
+    NodeKind,
+    NodeRole,
     TaskMode,
     TaskSpec,
     Task,
-    TaskStatus,
     ToolCapability,
     ToolDefinition,
     ToolKind,
@@ -31,11 +31,11 @@ class FakeLLM:
 def test_agent_runtime_validates_output_schema() -> None:
     llm = FakeLLM({"task_spec_id": "s1", "request": "x", "mode": "analysis_only"})
     runtime = AgentRuntime(llm_client=llm)
-    stage = Stage(stage_id="s1", name="agent", type=StageType.AGENT, outputs_schema_id="task_spec")
+    node = Node(stage_id="s1", name="agent", kind=NodeKind.AGENT, role=NodeRole.LINEAR, context="global", outputs_schema_id="task_spec")
     spec = TaskSpec(task_spec_id="s1", request="hello", mode=TaskMode.ANALYSIS_ONLY)
-    task = Task(task_id="task-agent-1", spec=spec, pipeline_id="pipe", status=TaskStatus.PENDING, metadata={})
+    task = Task(task_id="task-agent-1", spec=spec, task_memory_ref="tm", project_memory_ref="pm", global_memory_ref="gm")
     context = ContextAssembler().build_context(task, ContextRequest(context_request_id="c1", budget_tokens=0, domains=[], history_types=[]))
-    output, err = runtime.run_agent_stage(task, stage, context)
+    output, err = runtime.run_agent_stage(task, node, context)
     assert err is None
     assert output.task_spec_id == "s1"
 
@@ -43,11 +43,11 @@ def test_agent_runtime_validates_output_schema() -> None:
 def test_agent_runtime_schema_error() -> None:
     llm = FakeLLM({"not": "matching"})
     runtime = AgentRuntime(llm_client=llm)
-    stage = Stage(stage_id="s1", name="agent", type=StageType.AGENT, outputs_schema_id="task_spec")
+    node = Node(stage_id="s1", name="agent", kind=NodeKind.AGENT, role=NodeRole.LINEAR, context="global", outputs_schema_id="task_spec")
     spec = TaskSpec(task_spec_id="s1", request="hello", mode=TaskMode.ANALYSIS_ONLY)
-    task = Task(task_id="task-agent-2", spec=spec, pipeline_id="pipe", status=TaskStatus.PENDING, metadata={})
+    task = Task(task_id="task-agent-2", spec=spec, task_memory_ref="tm", project_memory_ref="pm", global_memory_ref="gm")
     context = ContextAssembler().build_context(task, ContextRequest(context_request_id="c1", budget_tokens=0, domains=[], history_types=[]))
-    output, err = runtime.run_agent_stage(task, stage, context)
+    output, err = runtime.run_agent_stage(task, node, context)
     assert output is None
     assert err is not None
     assert err.code == EngineErrorCode.VALIDATION
@@ -67,11 +67,11 @@ def test_tool_runtime_security_gate() -> None:
         )
     }
     runtime = ToolRuntime(tools=tools, tool_handlers={})
-    stage = Stage(stage_id="t1", name="tool", type=StageType.TOOL, tool_id="net")
+    node = Node(stage_id="t1", name="tool", kind=NodeKind.DETERMINISTIC, role=NodeRole.LINEAR, context="global", tools=["net"])
     spec = TaskSpec(task_spec_id="task", request="r", mode=TaskMode.ANALYSIS_ONLY)
-    task = Task(task_id="task-tool-1", spec=spec, pipeline_id="pipe", status=TaskStatus.PENDING, metadata={})
+    task = Task(task_id="task-tool-1", spec=spec, task_memory_ref="tm", project_memory_ref="pm", global_memory_ref="gm")
     context = ContextAssembler().build_context(task, ContextRequest(context_request_id="c1", budget_tokens=0, domains=[], history_types=[]))
-    output, err = runtime.run_tool_stage(task, stage, context)
+    output, err = runtime.run_tool_stage(task, node, context)
     assert output is None
     assert err is not None
     assert err.code == EngineErrorCode.SECURITY

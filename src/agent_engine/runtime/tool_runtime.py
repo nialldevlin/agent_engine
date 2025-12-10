@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Tuple
 
 from agent_engine.json_engine import validate
-from agent_engine.schemas import EngineError, Stage, Task, ToolDefinition, ToolKind
+from agent_engine.schemas import EngineError, Node, Task, ToolDefinition, ToolKind
 from agent_engine.security import check_tool_call
 
 
@@ -22,10 +22,14 @@ class ToolRuntime:
         self.tool_handlers = tool_handlers or {}
         self.llm_client = llm_client
 
-    def run_tool_stage(self, task: Task, stage: Stage, context_package) -> Tuple[Any | None, EngineError | None]:
-        if stage.tool_id is None:
+    def run_tool_stage(self, task: Task, node: Node, context_package) -> Tuple[Any | None, EngineError | None]:
+        if not node.tools:
             return None, None
-        tool_def = self.tools.get(stage.tool_id)
+        # Use the first tool in the tools list
+        tool_id = node.tools[0] if node.tools else None
+        if not tool_id:
+            return None, None
+        tool_def = self.tools.get(tool_id)
         if tool_def is None:
             return None, None
 

@@ -17,8 +17,8 @@ from agent_engine.schemas import (
     EngineErrorCode,
     EngineErrorSource,
     MemoryConfig,
+    Node,
     Severity,
-    Stage,
     SCHEMA_REGISTRY,
     ToolDefinition,
     WorkflowGraph,
@@ -30,7 +30,7 @@ from agent_engine.schemas.workflow import validate_workflow_graph
 class EngineConfig:
     agents: Dict[str, AgentDefinition] = field(default_factory=dict)
     tools: Dict[str, ToolDefinition] = field(default_factory=dict)
-    stages: Dict[str, Stage] = field(default_factory=dict)
+    nodes: Dict[str, Node] = field(default_factory=dict)
     workflow: Optional[WorkflowGraph] = None
     memory: Optional[MemoryConfig] = None
     version: str = __version__
@@ -57,20 +57,20 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
         if err:
             return None, err
         workflow: Optional[WorkflowGraph] = None
-        stages: Dict[str, Stage] = {}
+        nodes: Dict[str, Node] = {}
         if workflow_payload is not None:
-            # Extract stages from embedded objects BEFORE validation if they exist
-            if isinstance(workflow_payload, dict) and 'stages' in workflow_payload:
-                stages_in_payload = workflow_payload.get('stages', [])
-                if stages_in_payload and isinstance(stages_in_payload[0], dict):
-                    # Convert embedded stage dicts to Stage objects
-                    for stage_dict in stages_in_payload:
-                        stage_obj, validation_err = validate("stage", stage_dict)
+            # Extract nodes from embedded objects BEFORE validation if they exist
+            if isinstance(workflow_payload, dict) and 'nodes' in workflow_payload:
+                nodes_in_payload = workflow_payload.get('nodes', [])
+                if nodes_in_payload and isinstance(nodes_in_payload[0], dict):
+                    # Convert embedded node dicts to Node objects
+                    for node_dict in nodes_in_payload:
+                        node_obj, validation_err = validate("node", node_dict)
                         if validation_err:
-                            return None, _from_validation_error("stage", validation_err)
-                        stages[stage_obj.stage_id] = stage_obj
-                    # Replace stage dicts with stage IDs in payload for validation
-                    workflow_payload['stages'] = [s.stage_id for s in stages.values()]
+                            return None, _from_validation_error("node", validation_err)
+                        nodes[node_obj.stage_id] = node_obj
+                    # Replace node dicts with stage IDs in payload for validation
+                    workflow_payload['nodes'] = [n.stage_id for n in nodes.values()]
 
             workflow_obj, validation_err = validate("workflow_graph", workflow_payload)
             if validation_err:
@@ -87,7 +87,7 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
                 return None, _from_validation_error("memory", validation_err)
 
         if workflow:
-            graph_error = _validate_workflow(workflow, stages)
+            graph_error = _validate_workflow(workflow, nodes)
             if graph_error:
                 return None, graph_error
 
@@ -95,7 +95,7 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
             EngineConfig(
                 agents=agents,
                 tools=tools,
-                stages=stages,
+                nodes=nodes,
                 workflow=workflow,
                 memory=memory,
             ),
@@ -180,9 +180,9 @@ def _validate_tool_schemas(tools: Dict[str, ToolDefinition]) -> Optional[EngineE
     return None
 
 
-def _validate_workflow(workflow: WorkflowGraph, stages: Dict[str, Stage]) -> Optional[EngineError]:
+def _validate_workflow(workflow: WorkflowGraph, nodes: Dict[str, Node]) -> Optional[EngineError]:
     try:
-        validate_workflow_graph(workflow, stages=stages)
+        validate_workflow_graph(workflow, nodes=nodes)
     except ValueError as exc:
         return _error(str(exc))
     return None

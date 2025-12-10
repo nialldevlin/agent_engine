@@ -15,11 +15,12 @@ from agent_engine.runtime.router import Router
 from agent_engine.runtime.task_manager import TaskManager
 from agent_engine.schemas import (
     Edge,
-    Stage,
-    StageType,
+    Node,
+    NodeKind,
+    NodeRole,
     TaskMode,
     TaskSpec,
-    TaskStatus,
+    UniversalStatus,
     WorkflowGraph,
 )
 
@@ -27,49 +28,56 @@ from agent_engine.schemas import (
 def test_dag_execution_with_decision_routing():
     """Test a small DAG: transform → decision → (left|right) → merge."""
     stages = {
-        "transform_1": Stage(
+        "transform_1": Node(
             stage_id="transform_1",
             name="Transform",
-            type=StageType.LINEAR,
-            entrypoint=True,
+            kind=NodeKind.DETERMINISTIC,
+            role=NodeRole.START,
+            default_start=True,
+            context="global",
         ),
-        "decision_1": Stage(
+        "decision_1": Node(
             stage_id="decision_1",
             name="Decision",
-            type=StageType.DECISION,
+            kind=NodeKind.AGENT,
+            role=NodeRole.DECISION,
+            context="global",
         ),
-        "left_branch": Stage(
+        "left_branch": Node(
             stage_id="left_branch",
             name="Left Branch",
-            type=StageType.AGENT,
+            kind=NodeKind.AGENT,
+            role=NodeRole.LINEAR,
+            context="global",
         ),
-        "right_branch": Stage(
+        "right_branch": Node(
             stage_id="right_branch",
             name="Right Branch",
-            type=StageType.AGENT,
+            kind=NodeKind.AGENT,
+            role=NodeRole.LINEAR,
+            context="global",
         ),
-        "merge_1": Stage(
+        "merge_1": Node(
             stage_id="merge_1",
             name="Merge",
-            type=StageType.MERGE,
-            terminal=True,
+            kind=NodeKind.DETERMINISTIC,
+            role=NodeRole.MERGE,
+            context="global",
         ),
     }
 
     edges = [
-        Edge(from_stage_id="transform_1", to_stage_id="decision_1"),
-        Edge(from_stage_id="decision_1", to_stage_id="left_branch", condition="left"),
-        Edge(from_stage_id="decision_1", to_stage_id="right_branch", condition="right"),
-        Edge(from_stage_id="left_branch", to_stage_id="merge_1"),
-        Edge(from_stage_id="right_branch", to_stage_id="merge_1"),
+        Edge(from_node_id="transform_1", to_node_id="decision_1"),
+        Edge(from_node_id="decision_1", to_node_id="left_branch", condition="left"),
+        Edge(from_node_id="decision_1", to_node_id="right_branch", condition="right"),
+        Edge(from_node_id="left_branch", to_node_id="merge_1"),
+        Edge(from_node_id="right_branch", to_node_id="merge_1"),
     ]
 
     graph = WorkflowGraph(
         workflow_id="test_dag_wf",
-        stages=["transform_1", "decision_1", "left_branch", "right_branch", "merge_1"],
+        nodes=["transform_1", "decision_1", "left_branch", "right_branch", "merge_1"],
         edges=edges,
-        start_stage_ids=["transform_1"],
-        end_stage_ids=["merge_1"],
     )
 
     router = Router(workflow=graph, stages=stages)
@@ -110,7 +118,7 @@ def test_dag_execution_with_decision_routing():
 
     result_task = executor.run(task)
 
-    assert result_task.status == TaskStatus.COMPLETED
+    assert result_task.status == UniversalStatus.COMPLETED
     assert result_task.task_id == task.task_id
     executed_stages = [entry.stage_id for entry in result_task.routing_trace]
     assert "transform_1" in executed_stages
@@ -126,20 +134,18 @@ def test_dag_execution_with_decision_routing():
 def test_router_resolve_edge_deterministic():
     """Test Router.resolve_edge method with deterministic routing policy."""
     stages = {
-        "s1": Stage(stage_id="s1", name="Stage 1", type=StageType.AGENT),
-        "s2": Stage(stage_id="s2", name="Stage 2", type=StageType.AGENT),
-        "s3": Stage(stage_id="s3", name="Stage 3", type=StageType.AGENT),
+        "s1": Node(stage_id="s1", name="Stage 1", kind=NodeKind.AGENT, role=NodeRole.START, default_start=True, context="global"),
+        "s2": Node(stage_id="s2", name="Stage 2", kind=NodeKind.AGENT, role=NodeRole.LINEAR, context="global"),
+        "s3": Node(stage_id="s3", name="Stage 3", kind=NodeKind.AGENT, role=NodeRole.EXIT, context="global"),
     }
     edges = [
-        Edge(from_stage_id="s1", to_stage_id="s2", condition="go_to_s2"),
-        Edge(from_stage_id="s1", to_stage_id="s3", condition="go_to_s3"),
+        Edge(from_node_id="s1", to_node_id="s2", condition="go_to_s2"),
+        Edge(from_node_id="s1", to_node_id="s3", condition="go_to_s3"),
     ]
     graph = WorkflowGraph(
         workflow_id="resolve_edge_wf",
-        stages=["s1", "s2", "s3"],
+        nodes=["s1", "s2", "s3"],
         edges=edges,
-        start_stage_ids=["s1"],
-        end_stage_ids=["s3"]
     )
     router = Router(workflow=graph, stages=stages)
 

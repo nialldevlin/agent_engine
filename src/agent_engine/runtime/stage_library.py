@@ -8,7 +8,7 @@ stage-level behavior without requiring full production wiring.
 """
 from typing import Any, Dict, Tuple
 
-from agent_engine.schemas import EngineError, Stage, Task
+from agent_engine.schemas import EngineError, Node, Task
 
 
 def _get_runtime(runtime_dependencies, name: str):
@@ -20,8 +20,8 @@ def _get_runtime(runtime_dependencies, name: str):
     return getattr(runtime_dependencies, name, None)
 
 
-def run_agent_stage(task: Task, stage: Stage, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
-    """Run an agent stage using the provided AgentRuntime.
+def run_agent_stage(task: Task, node: Node, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
+    """Run an agent node using the provided AgentRuntime.
 
     runtime_dependencies may be either a dict containing 'agent_runtime' or
     an object with attribute `agent_runtime`. Returns (output, EngineError|None).
@@ -31,13 +31,13 @@ def run_agent_stage(task: Task, stage: Stage, context, runtime_dependencies) -> 
         return None, EngineError(error_id="no_agent_runtime", code=None, message="AgentRuntime not provided", source=None, severity=None)
 
     try:
-        return agent_runtime.run_agent_stage(task, stage, context)
+        return agent_runtime.run_agent_stage(task, node, context)
     except Exception as exc:  # Defensive: convert unexpected exceptions to EngineError
         return None, EngineError(error_id="agent_stage_exception", code=None, message=str(exc), source=None, severity=None)
 
 
-def run_tool_stage(task: Task, stage: Stage, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
-    """Run a tool stage using the provided ToolRuntime.
+def run_tool_stage(task: Task, node: Node, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
+    """Run a tool node using the provided ToolRuntime.
 
     Returns (output, EngineError|None).
     """
@@ -46,29 +46,29 @@ def run_tool_stage(task: Task, stage: Stage, context, runtime_dependencies) -> T
         return None, EngineError(error_id="no_tool_runtime", code=None, message="ToolRuntime not provided", source=None, severity=None)
 
     try:
-        return tool_runtime.run_tool_stage(task, stage, context)
+        return tool_runtime.run_tool_stage(task, node, context)
     except Exception as exc:
         return None, EngineError(error_id="tool_stage_exception", code=None, message=str(exc), source=None, severity=None)
 
 
-def run_decision_stage(task: Task, stage: Stage, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
-    """Run a decision stage.
+def run_decision_stage(task: Task, node: Node, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
+    """Run a decision node.
 
     Default behaviour is to delegate to the AgentRuntime (so decisions can be
     evaluated by an LLM). If the agent returns a non-dict, we return it as-is
-    and the caller (PipelineExecutor) will convert it to a decision structure.
+    and the caller (DAGExecutor) will convert it to a decision structure.
     """
     agent_runtime = _get_runtime(runtime_dependencies, "agent_runtime") or _get_runtime(runtime_dependencies, "agent")
     if agent_runtime is None:
-        return None, EngineError(error_id="no_agent_runtime_for_decision", code=None, message="AgentRuntime not provided for decision stage", source=None, severity=None)
+        return None, EngineError(error_id="no_agent_runtime_for_decision", code=None, message="AgentRuntime not provided for decision node", source=None, severity=None)
 
     try:
-        return agent_runtime.run_agent_stage(task, stage, context)
+        return agent_runtime.run_agent_stage(task, node, context)
     except Exception as exc:
         return None, EngineError(error_id="decision_stage_exception", code=None, message=str(exc), source=None, severity=None)
 
 
-def run_merge_stage(task: Task, stage: Stage, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
+def run_merge_stage(task: Task, node: Node, context, runtime_dependencies) -> Tuple[Any | None, EngineError | None]:
     """Aggregate prior stage outputs for the given task.
 
     The merge implementation inspects the Task stored in TaskManager (if

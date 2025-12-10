@@ -9,7 +9,8 @@ from agent_engine.schemas import (
     Task,
     TaskSpec,
     TaskMode,
-    TaskStatus,
+    TaskLifecycle,
+    UniversalStatus,
     MemoryConfig,
     ContextPolicy,
     FailureSignature,
@@ -42,9 +43,11 @@ class TestMultiTierContextAssembly:
         task = Task(
             task_id="task-123",
             spec=task_spec,
-            status=TaskStatus.PENDING,
-            pipeline_id="test-pipeline",
-            metadata={"project_id": "test-project"}
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            task_memory_ref="task_memory:task-123",
+            project_memory_ref="project_memory:test-project",
+            global_memory_ref="global_memory:default"
         )
 
         # Add items to task memory
@@ -100,9 +103,11 @@ class TestMultiTierContextAssembly:
         task = Task(
             task_id="task-budget",
             spec=task_spec,
-            status=TaskStatus.PENDING,
-            pipeline_id="test",
-            metadata={"project_id": "proj-budget"}
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            task_memory_ref="task_memory:task-budget",
+            project_memory_ref="project_memory:proj-budget",
+            global_memory_ref="global_memory:default"
         )
 
         # Add many items to each tier (more than budget allows)
@@ -148,9 +153,11 @@ class TestMultiTierContextAssembly:
         task = Task(
             task_id="task-new",
             spec=task_spec,
-            status=TaskStatus.PENDING,
-            pipeline_id="test",
-            metadata={"project_id": "proj-new"}
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            task_memory_ref="task_memory:task-new",
+            project_memory_ref="project_memory:proj-new",
+            global_memory_ref="global_memory:default"
         )
 
         # Task store should not exist yet
@@ -183,9 +190,11 @@ class TestMultiTierContextAssembly:
                 request="Test 1",
                 mode=TaskMode.ANALYSIS_ONLY
             ),
-            status=TaskStatus.PENDING,
-            pipeline_id="test",
-            metadata={"project_id": "project-A"}
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            task_memory_ref="task_memory:task1",
+            project_memory_ref="project_memory:project-A",
+            global_memory_ref="global_memory:default"
         )
 
         task2 = Task(
@@ -195,9 +204,11 @@ class TestMultiTierContextAssembly:
                 request="Test 2",
                 mode=TaskMode.ANALYSIS_ONLY
             ),
-            status=TaskStatus.PENDING,
-            pipeline_id="test",
-            metadata={"project_id": "project-B"}
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            task_memory_ref="task_memory:task2",
+            project_memory_ref="project_memory:project-B",
+            global_memory_ref="global_memory:default"
         )
 
         # Add decision to project A
@@ -282,9 +293,11 @@ class TestMultiTierContextAssembly:
                 request="Test",
                 mode=TaskMode.ANALYSIS_ONLY
             ),
-            status=TaskStatus.PENDING,
-            pipeline_id="test",
-            metadata={"project_id": "test"}
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            task_memory_ref="task_memory:task-headtail",
+            project_memory_ref="project_memory:test",
+            global_memory_ref="global_memory:default"
         )
 
         # Add many items with varying importance
