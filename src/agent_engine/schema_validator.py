@@ -1,0 +1,202 @@
+"""Schema validation functions for manifest data against Pydantic schemas.
+
+This module provides validation functions for each manifest type (nodes, edges, agents,
+tools, memory configurations). All validation errors are wrapped in SchemaValidationError
+with clear field paths for debugging.
+"""
+
+from typing import Any, Dict, List, Optional
+
+from pydantic import ValidationError
+
+from .exceptions import SchemaValidationError
+from .schemas.memory import ContextProfile, ContextProfileSource
+from .schemas.stage import Node
+from .schemas.workflow import Edge
+
+
+def validate_nodes(nodes_data: List[Dict], file_name: str = "workflow.yaml") -> Dict[str, Node]:
+    """Validate node data and return dict of node_id -> Node.
+
+    Args:
+        nodes_data: List of node dictionaries to validate.
+        file_name: Name of the file being validated (for error reporting).
+
+    Returns:
+        Dictionary mapping node IDs to validated Node objects.
+
+    Raises:
+        SchemaValidationError: If validation fails for any node.
+    """
+    nodes = {}
+    for i, node_dict in enumerate(nodes_data):
+        try:
+            node = Node(**node_dict)
+            nodes[node.stage_id] = node
+        except ValidationError as e:
+            field_path = f"nodes[{i}]"
+            raise SchemaValidationError(file_name, field_path, str(e))
+        except Exception as e:
+            field_path = f"nodes[{i}]"
+            raise SchemaValidationError(file_name, field_path, str(e))
+    return nodes
+
+
+def validate_edges(edges_data: List[Dict], file_name: str = "workflow.yaml") -> List[Edge]:
+    """Validate edge data and return list of Edge objects.
+
+    Args:
+        edges_data: List of edge dictionaries to validate.
+        file_name: Name of the file being validated (for error reporting).
+
+    Returns:
+        List of validated Edge objects.
+
+    Raises:
+        SchemaValidationError: If validation fails for any edge.
+    """
+    edges = []
+    for i, edge_dict in enumerate(edges_data):
+        try:
+            edge = Edge(**edge_dict)
+            edges.append(edge)
+        except ValidationError as e:
+            field_path = f"edges[{i}]"
+            raise SchemaValidationError(file_name, field_path, str(e))
+        except Exception as e:
+            field_path = f"edges[{i}]"
+            raise SchemaValidationError(file_name, field_path, str(e))
+    return edges
+
+
+def validate_agents(agents_data: List[Dict], file_name: str = "agents.yaml") -> List[Dict]:
+    """Validate agent data.
+
+    Agents are validated for:
+    - Required fields: id, kind, llm
+    - kind must be 'agent'
+
+    Args:
+        agents_data: List of agent dictionaries to validate.
+        file_name: Name of the file being validated (for error reporting).
+
+    Returns:
+        List of validated agent dictionaries.
+
+    Raises:
+        SchemaValidationError: If validation fails for any agent.
+    """
+    validated = []
+    for i, agent in enumerate(agents_data):
+        # Check required fields
+        required = ["id", "kind", "llm"]
+        missing = [f for f in required if f not in agent]
+        if missing:
+            field_path = f"agents[{i}]"
+            raise SchemaValidationError(
+                file_name, field_path, f"Missing required fields: {missing}"
+            )
+        # Validate kind is "agent"
+        if agent["kind"] != "agent":
+            field_path = f"agents[{i}].kind"
+            raise SchemaValidationError(
+                file_name, field_path, f"Expected 'agent', got '{agent['kind']}'"
+            )
+        validated.append(agent)
+    return validated
+
+
+def validate_tools(tools_data: List[Dict], file_name: str = "tools.yaml") -> List[Dict]:
+    """Validate tool data.
+
+    Tools are validated for:
+    - Required fields: id, type, entrypoint, permissions
+    - permissions must contain: allow_network, allow_shell, root
+
+    Args:
+        tools_data: List of tool dictionaries to validate.
+        file_name: Name of the file being validated (for error reporting).
+
+    Returns:
+        List of validated tool dictionaries.
+
+    Raises:
+        SchemaValidationError: If validation fails for any tool.
+    """
+    validated = []
+    for i, tool in enumerate(tools_data):
+        # Check required fields
+        required = ["id", "type", "entrypoint", "permissions"]
+        missing = [f for f in required if f not in tool]
+        if missing:
+            field_path = f"tools[{i}]"
+            raise SchemaValidationError(
+                file_name, field_path, f"Missing required fields: {missing}"
+            )
+        # Validate permissions structure
+        permissions = tool.get("permissions", {})
+        perm_required = ["allow_network", "allow_shell", "root"]
+        perm_missing = [f for f in perm_required if f not in permissions]
+        if perm_missing:
+            field_path = f"tools[{i}].permissions"
+            raise SchemaValidationError(
+                file_name, field_path, f"Missing permission fields: {perm_missing}"
+            )
+        validated.append(tool)
+    return validated
+
+
+def validate_memory_config(
+    memory_data: Dict, file_name: str = "memory.yaml"
+) -> Dict:
+    """Validate memory configuration.
+
+    Memory configuration is validated for:
+    - Required stores: task_store, project_store, global_store
+    - Each store must have a 'type' field
+    - Optional context_profiles must be valid ContextProfile objects
+
+    Args:
+        memory_data: Memory configuration dictionary to validate.
+        file_name: Name of the file being validated (for error reporting).
+
+    Returns:
+        The validated memory configuration dictionary.
+
+    Raises:
+        SchemaValidationError: If validation fails.
+    """
+    # Check required stores
+    required_stores = ["task_store", "project_store", "global_store"]
+    missing = [s for s in required_stores if s not in memory_data]
+    if missing:
+        raise SchemaValidationError(file_name, "memory", f"Missing stores: {missing}")
+
+    # Validate each store has type
+    for store_name in required_stores:
+        if store_name not in memory_data:
+            continue
+        store = memory_data[store_name]
+        if not isinstance(store, dict) or "type" not in store:
+            raise SchemaValidationError(
+                file_name, f"memory.{store_name}", "Missing 'type' field"
+            )
+
+    # Validate context profiles if present
+    if "context_profiles" in memory_data:
+        profiles_data = memory_data["context_profiles"]
+        if not isinstance(profiles_data, list):
+            raise SchemaValidationError(
+                file_name, "memory.context_profiles", "Expected list"
+            )
+        for i, profile_dict in enumerate(profiles_data):
+            try:
+                ContextProfile(**profile_dict)
+            except ValidationError as e:
+                field_path = f"memory.context_profiles[{i}]"
+                raise SchemaValidationError(file_name, field_path, str(e))
+            except Exception as e:
+                field_path = f"memory.context_profiles[{i}]"
+                raise SchemaValidationError(file_name, field_path, str(e))
+
+    return memory_data

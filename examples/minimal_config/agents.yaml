@@ -1,0 +1,5 @@
+agents:
+  - id: "default_agent"
+    kind: "agent"
+    llm: "anthropic/claude-3-5-sonnet"
+    config: {}

@@ -1,0 +1,24 @@
+nodes:
+  - id: "start"
+    kind: "deterministic"
+    role: "start"
+    default_start: true
+    context: "none"
+    continue_on_failure: false
+  - id: "main"
+    kind: "agent"
+    role: "linear"
+    context: "global"
+    tools: ["read_file"]
+    continue_on_failure: false
+  - id: "exit"
+    kind: "deterministic"
+    role: "exit"
+    context: "none"
+    continue_on_failure: false
+
+edges:
+  - from: "start"
+    to: "main"
+  - from: "main"
+    to: "exit"

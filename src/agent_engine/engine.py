@@ -1,179 +1,157 @@
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Any, Callable, Dict, Optional
-
-from agent_engine.config_loader import EngineConfig, load_engine_config
-from agent_engine.plugins import PluginManager
-from agent_engine.runtime.agent_runtime import AgentRuntime
-from agent_engine.runtime.context import ContextAssembler
-from agent_engine.runtime.dag_executor import DAGExecutor
-from agent_engine.runtime.router import Router
-from agent_engine.runtime.task_manager import TaskManager
-from agent_engine.runtime.tool_runtime import ToolRuntime
-from agent_engine.runtime.llm_client import LLMClient
-from agent_engine.schemas import Task, TaskMode, TaskSpec
-from agent_engine.telemetry import TelemetryBus
+from typing import Dict, List, Any
+from .dag import DAG
+from .manifest_loader import (
+    load_workflow_manifest,
+    load_agents_manifest,
+    load_tools_manifest,
+    load_memory_manifest,
+    load_plugins_manifest,
+    load_schemas
+)
+from .schema_validator import (
+    validate_nodes,
+    validate_edges,
+    validate_agents,
+    validate_tools,
+    validate_memory_config
+)
+from .memory_stores import MemoryStore, initialize_memory_stores, initialize_context_profiles
+from .adapters import AdapterRegistry, initialize_adapters
+from .schemas.memory import ContextProfile
 
 
 class Engine:
-    """Facade that runs manifest-driven Agent Engine workloads.
+    """Agent Engine - orchestrates workflow execution.
 
-    Example applications must use Engine and public schemas only; runtime internals (router,
-    task manager, dag executor, etc.) must not be imported directly.
+    Per AGENT_ENGINE_SPEC §8 and PROJECT_INTEGRATION_SPEC §6.
     """
-
-    _REQUIRED_MANIFESTS = ("agents", "tools", "workflow")
-
-    @classmethod
-    def from_config_dir(
-        cls,
-        config_dir: str,
-        llm_client: LLMClient,
-        *,
-        telemetry: Optional[TelemetryBus] = None,
-        plugins: Optional[PluginManager] = None,
-    ) -> Engine:
-        """Create an Engine from a directory of YAML/JSON manifests.
-
-        Args:
-            config_dir: Directory containing the required manifests.
-            llm_client: Concrete LLM client implementation.
-            telemetry: Optional telemetry bus.
-            plugins: Optional plugin manager for runtime hooks.
-
-        Returns:
-            Configured Engine instance.
-
-        Raises:
-            FileNotFoundError: If a required manifest cannot be found.
-            RuntimeError: If manifest validation fails.
-        """
-        base_dir = Path(config_dir).expanduser().resolve()
-        manifest_paths = cls._collect_manifest_paths(base_dir)
-        config, error = load_engine_config(manifest_paths)
-        if error:
-            raise RuntimeError(f"Failed to load engine config: {error.message}")
-        if config is None:
-            raise RuntimeError("Engine configuration factory returned no config.")
-        return cls(
-            config=config,
-            llm_client=llm_client,
-            telemetry=telemetry,
-            plugins=plugins,
-        )
 
     def __init__(
         self,
-        config: EngineConfig,
-        llm_client: LLMClient,
-        telemetry: Optional[TelemetryBus] = None,
-        plugins: Optional[PluginManager] = None,
-        *,
-        task_manager: Optional[TaskManager] = None,
-        router: Optional[Router] = None,
-        context_assembler: Optional[ContextAssembler] = None,
-        agent_runtime: Optional[AgentRuntime] = None,
-        tool_runtime: Optional[ToolRuntime] = None,
-        dag_executor: Optional[DAGExecutor] = None,
+        config_dir: str,
+        workflow: DAG,
+        agents: List[Dict],
+        tools: List[Dict],
+        schemas: Dict[str, Dict],
+        memory_stores: Dict[str, MemoryStore],
+        context_profiles: Dict[str, ContextProfile],
+        adapters: AdapterRegistry,
+        plugins: List[Dict]
     ):
-        """Initialize the Engine with resolved runtime components."""
-        self.config = config
-        self.llm_client = llm_client
-        self.telemetry = telemetry or TelemetryBus()
+        """Initialize Engine with all components."""
+        self.config_dir = config_dir
+        self.workflow = workflow
+        self.agents = agents
+        self.tools = tools
+        self.schemas = schemas
+        self.memory_stores = memory_stores
+        self.context_profiles = context_profiles
+        self.adapters = adapters
         self.plugins = plugins
 
-        self.task_manager = task_manager or TaskManager()
-        self.router = router or Router(
-            workflow=config.workflow, stages=config.stages
-        )
-        self.context_assembler = context_assembler or ContextAssembler(memory_config=config.memory)
-        self.agent_runtime = agent_runtime or AgentRuntime(llm_client=self.llm_client)
-        self.tool_runtime = tool_runtime or ToolRuntime(
-            tools=config.tools,
-            llm_client=self.llm_client,
-        )
-        self.dag_executor = dag_executor or DAGExecutor(
-            task_manager=self.task_manager,
-            router=self.router,
-            context_assembler=self.context_assembler,
-            agent_runtime=self.agent_runtime,
-            tool_runtime=self.tool_runtime,
-            telemetry=self.telemetry,
-            plugins=self.plugins,
-        )
+    @classmethod
+    def from_config_dir(cls, path: str) -> 'Engine':
+        """Load and initialize engine from config directory.
 
-    def create_task(self, input: str | TaskSpec, *, mode: str | TaskMode = "default") -> Task:
-        """Create a Task from either a string request or a full TaskSpec.
+        Per AGENT_ENGINE_SPEC §8 initialization sequence:
+        1. Load all manifests
+        2. Validate schemas and references
+        3. Construct nodes, edges, and DAG
+        4. Validate DAG invariants
+        5. Initialize memory stores
+        6. Register tools and adapters
+        7. Load plugins
+        8. Return constructed engine
 
         Args:
-            input: User request or pre-built TaskSpec.
-            mode: Optional execution mode override; defaults to ``analysis_only``.
+            path: Path to config directory containing manifests
 
         Returns:
-            Task instance that is ready for execution.
+            Initialized Engine instance
+
+        Raises:
+            ManifestLoadError: If required manifest missing or invalid
+            SchemaValidationError: If manifest data invalid
+            DAGValidationError: If DAG structure invalid
         """
-        mode_enum = self._resolve_mode(mode)
-        if isinstance(input, TaskSpec):
-            task_spec = input
-            if mode_enum != TaskMode.ANALYSIS_ONLY or mode != "default":
-                task_spec = task_spec.model_copy(update={"mode": mode_enum})
-        else:
-            task_spec = TaskSpec(
-                task_spec_id=_generate_task_spec_id(),
-                request=input,
-                mode=mode_enum,
+        # Step 1: Load all manifests
+        workflow_data = load_workflow_manifest(path)
+        agents_data = load_agents_manifest(path)
+        tools_data = load_tools_manifest(path)
+        memory_data = load_memory_manifest(path)  # Optional
+        plugins_data = load_plugins_manifest(path)  # Optional
+        schemas = load_schemas(path)
+
+        # Step 2: Validate manifest data
+        nodes = validate_nodes(workflow_data.get('nodes', []), 'workflow.yaml')
+        edges = validate_edges(workflow_data.get('edges', []), 'workflow.yaml')
+        agents = validate_agents(agents_data.get('agents', []), 'agents.yaml')
+        tools = validate_tools(tools_data.get('tools', []), 'tools.yaml')
+
+        if memory_data:
+            memory_config = validate_memory_config(
+                memory_data.get('memory', {}),
+                'memory.yaml'
             )
-        return self.task_manager.create_task(spec=task_spec)
+        else:
+            memory_config = None
 
-    def run_task(self, task: Task) -> Task:
-        """Run a Task through the workflow DAG."""
-        return self.dag_executor.run(task=task)
+        # Step 3: Construct DAG
+        dag = DAG(nodes, edges)
 
-    def run_one(self, input: str | TaskSpec, mode: str | TaskMode = "default") -> Task:
-        """Convenience helper that creates and runs a task in one call."""
-        task = self.create_task(input, mode=mode)
-        return self.run_task(task)
+        # Step 4: Validate DAG
+        dag.validate()
 
-    def register_tool_handler(self, tool_id: str, handler: Callable[[Dict[str, Any]], Any]) -> None:
-        """Register a deterministic tool handler for the given tool_id."""
-        if tool_id not in self.config.tools:
-            raise ValueError(f"Unknown tool_id: {tool_id}")
-        self.tool_runtime.tool_handlers[tool_id] = handler
+        # Step 5: Initialize memory stores
+        memory_stores = initialize_memory_stores(memory_config)
+        context_profiles = initialize_context_profiles(memory_config)
 
-    @staticmethod
-    def _resolve_mode(mode: str | TaskMode) -> TaskMode:
-        if isinstance(mode, TaskMode):
-            return mode
-        normalized = mode.lower()
-        if normalized == "default":
-            return TaskMode.ANALYSIS_ONLY
+        # Step 6: Register tools and adapters
+        adapters = initialize_adapters(agents, tools)
+
+        # Step 7: Load plugins
+        plugins = plugins_data.get('plugins', []) if plugins_data else []
+
+        # Step 8: Return engine
+        return cls(
+            config_dir=path,
+            workflow=dag,
+            agents=agents,
+            tools=tools,
+            schemas=schemas,
+            memory_stores=memory_stores,
+            context_profiles=context_profiles,
+            adapters=adapters,
+            plugins=plugins
+        )
+
+    def run(self, input: Any) -> Dict[str, Any]:
+        """Execute workflow (stub for Phase 2).
+
+        In Phase 2, execution is not implemented. This returns a stub
+        indicating successful initialization.
+
+        Args:
+            input: JSON-serializable input data
+
+        Returns:
+            Stub dict with initialization status
+        """
+        import json
+
+        # Validate input is JSON-serializable
         try:
-            return TaskMode(normalized)
-        except ValueError as exc:
-            raise ValueError(f"Unknown TaskMode: {mode}") from exc
+            json.dumps(input)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Input must be JSON-serializable: {e}")
 
-    @classmethod
-    def _collect_manifest_paths(cls, base_dir: Path) -> Dict[str, Optional[Path]]:
-        if not base_dir.is_dir():
-            raise FileNotFoundError(f"Config directory does not exist: {base_dir}")
-        result: Dict[str, Optional[Path]] = {}
-        for name in (*cls._REQUIRED_MANIFESTS, "memory"):
-            result[name] = cls._find_manifest(base_dir, name)
-            if name in cls._REQUIRED_MANIFESTS and result[name] is None:
-                raise FileNotFoundError(f"Required manifest '{name}' missing in {base_dir}")
-        return result
+        # Get default start node
+        start_node = self.workflow.get_default_start_node()
 
-    @staticmethod
-    def _find_manifest(base_dir: Path, stem: str) -> Optional[Path]:
-        for ext in (".yaml", ".yml", ".json"):
-            candidate = base_dir / f"{stem}{ext}"
-            if candidate.exists():
-                return candidate
-        return None
-
-
-def _generate_task_spec_id() -> str:
-    from uuid import uuid4
-
-    return f"spec-{uuid4().hex[:8]}"
+        # Return stub (no execution until Phase 4)
+        return {
+            "status": "initialized",
+            "dag_valid": True,
+            "start_node": start_node.stage_id,
+            "message": "Execution not implemented until Phase 4"
+        }
