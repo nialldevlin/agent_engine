@@ -159,3 +159,27 @@ class ContextAssembler:
         if task_id in self.task_stores:
             self.task_stores[task_id].clear()
             del self.task_stores[task_id]
+
+    def get_context_metadata(self, context_package) -> Dict[str, Any]:
+        """Extract context metadata for history recording.
+
+        Args:
+            context_package: Assembled context package
+
+        Returns:
+            Metadata dict with context information
+        """
+        from typing import Any as TypingAny
+
+        metadata = {}
+
+        if hasattr(context_package, 'items'):
+            metadata['items_count'] = len(context_package.items)
+            metadata['total_tokens'] = sum(
+                getattr(item, 'token_cost', 0) for item in context_package.items
+            )
+
+        if hasattr(context_package, 'profile_id'):
+            metadata['profile_id'] = context_package.profile_id
+
+        return metadata

@@ -33,6 +33,12 @@ def test_dag_executor_runs_through_stages() -> None:
     tool_runtime = ToolRuntimeStub()
     executor = DAGExecutor(task_manager, router, context_assembler, agent_runtime, tool_runtime)
 
+    # Register a deterministic operation for s2 that uses the tool
+    def s2_operation(task, node, context):
+        return {"tool_stage": node.stage_id, "task": task.task_id}, None
+
+    executor.deterministic_registry.register("s2", s2_operation)
+
     spec = TaskSpec(task_spec_id="t1", request="do", mode=TaskMode.ANALYSIS_ONLY)
     task = task_manager.create_task(spec)
 

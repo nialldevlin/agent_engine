@@ -90,14 +90,14 @@ def test_dag_execution_with_decision_routing():
     tool_runtime = MagicMock()
 
     def mock_agent_stage(task, stage, context):
-        """Mock agent runtime: return decision or stage output."""
+        """Mock agent runtime: return decision or stage output (3-tuple format)."""
         if stage.stage_id == "decision_1":
-            return {"condition": "left"}, None
+            return {"condition": "left"}, None, None
         elif stage.stage_id == "left_branch":
-            return {"branch": "left", "result": "left_result"}, None
+            return {"branch": "left", "result": "left_result"}, None, None
         elif stage.stage_id == "right_branch":
-            return {"branch": "right", "result": "right_result"}, None
-        return None, None
+            return {"branch": "right", "result": "right_result"}, None, None
+        return None, None, None
 
     agent_runtime.run_agent_stage.side_effect = mock_agent_stage
     tool_runtime.run_tool_stage.return_value = (None, None)

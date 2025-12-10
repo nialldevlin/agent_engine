@@ -7,6 +7,8 @@ from agent_engine.runtime.dag_executor import DAGExecutor
 from agent_engine.runtime.router import Router
 from agent_engine.runtime.task_manager import TaskManager
 from agent_engine.runtime.tool_runtime import ToolRuntime
+from agent_engine.runtime.node_executor import NodeExecutor
+from agent_engine.runtime.deterministic_registry import DeterministicRegistry
 
 __all__ = [
     "AgentRuntime",
@@ -19,6 +21,8 @@ __all__ = [
     "Router",
     "TaskManager",
     "ToolRuntime",
+    "NodeExecutor",
+    "DeterministicRegistry",
 ]
 
 

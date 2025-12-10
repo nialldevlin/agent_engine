@@ -1,4 +1,4 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from .dag import DAG
 from .manifest_loader import (
     load_workflow_manifest,
@@ -18,6 +18,13 @@ from .schema_validator import (
 from .memory_stores import MemoryStore, initialize_memory_stores, initialize_context_profiles
 from .adapters import AdapterRegistry, initialize_adapters
 from .schemas.memory import ContextProfile
+from .runtime.task_manager import TaskManager
+from .runtime.node_executor import NodeExecutor
+from .runtime.router import Router
+from .runtime.agent_runtime import AgentRuntime
+from .runtime.tool_runtime import ToolRuntime
+from .runtime.context import ContextAssembler
+from .runtime.deterministic_registry import DeterministicRegistry
 
 
 class Engine:
@@ -48,6 +55,39 @@ class Engine:
         self.context_profiles = context_profiles
         self.adapters = adapters
         self.plugins = plugins
+
+        # Initialize runtime components (Phase 4-5)
+        self.task_manager = TaskManager()
+
+        # AgentRuntime expects llm_client and template_version
+        self.agent_runtime = AgentRuntime(llm_client=None, template_version="v1")
+
+        # ToolRuntime expects tools dict and tool_handlers
+        tools_dict = {t['id']: t for t in tools} if tools else {}
+        self.tool_runtime = ToolRuntime(tools=tools_dict, tool_handlers=None, llm_client=None)
+
+        # ContextAssembler - use a stub for now
+        self.context_assembler = None  # TODO: Initialize proper ContextAssembler
+
+        self.deterministic_registry = DeterministicRegistry()
+
+        # JSON engine stub (for schema validation)
+        self.json_engine = None  # TODO: Initialize proper JSON validator
+
+        self.node_executor = NodeExecutor(
+            agent_runtime=self.agent_runtime,
+            tool_runtime=self.tool_runtime,
+            context_assembler=self.context_assembler,
+            json_engine=self.json_engine,
+            deterministic_registry=self.deterministic_registry
+        )
+
+        # Initialize router (Phase 5)
+        self.router = Router(
+            dag=self.workflow,
+            task_manager=self.task_manager,
+            node_executor=self.node_executor
+        )
 
     @classmethod
     def from_config_dir(cls, path: str) -> 'Engine':
@@ -125,17 +165,22 @@ class Engine:
             plugins=plugins
         )
 
-    def run(self, input: Any) -> Dict[str, Any]:
-        """Execute workflow (stub for Phase 2).
+    def run(self, input: Any, start_node_id: Optional[str] = None) -> Dict[str, Any]:
+        """Execute workflow using Phase 5 Router.
 
-        In Phase 2, execution is not implemented. This returns a stub
-        indicating successful initialization.
+        Per AGENT_ENGINE_SPEC §3.1, executes the full workflow from start
+        to exit following DAG routing semantics.
 
         Args:
             input: JSON-serializable input data
+            start_node_id: Optional explicit start node ID (uses default if None)
 
         Returns:
-            Stub dict with initialization status
+            Dict with task_id, status, output, and history
+
+        Raises:
+            EngineError: If routing fails or execution stalls
+            ValueError: If input is not JSON-serializable
         """
         import json
 
@@ -145,13 +190,13 @@ class Engine:
         except (TypeError, ValueError) as e:
             raise ValueError(f"Input must be JSON-serializable: {e}")
 
-        # Get default start node
-        start_node = self.workflow.get_default_start_node()
+        # Execute via router (Phase 5 Step 12)
+        completed_task = self.router.execute_task(input, start_node_id)
 
-        # Return stub (no execution until Phase 4)
+        # Format return value
         return {
-            "status": "initialized",
-            "dag_valid": True,
-            "start_node": start_node.stage_id,
-            "message": "Execution not implemented until Phase 4"
+            "task_id": completed_task.id,
+            "status": completed_task.status.value,
+            "output": completed_task.current_output,
+            "history": [record.dict() for record in completed_task.history]
         }

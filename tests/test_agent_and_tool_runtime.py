@@ -35,9 +35,10 @@ def test_agent_runtime_validates_output_schema() -> None:
     spec = TaskSpec(task_spec_id="s1", request="hello", mode=TaskMode.ANALYSIS_ONLY)
     task = Task(task_id="task-agent-1", spec=spec, task_memory_ref="tm", project_memory_ref="pm", global_memory_ref="gm")
     context = ContextAssembler().build_context(task, ContextRequest(context_request_id="c1", budget_tokens=0, domains=[], history_types=[]))
-    output, err = runtime.run_agent_stage(task, node, context)
+    output, err, tool_plan = runtime.run_agent_stage(task, node, context)
     assert err is None
     assert output.task_spec_id == "s1"
+    assert tool_plan is None
 
 
 def test_agent_runtime_schema_error() -> None:
@@ -47,10 +48,11 @@ def test_agent_runtime_schema_error() -> None:
     spec = TaskSpec(task_spec_id="s1", request="hello", mode=TaskMode.ANALYSIS_ONLY)
     task = Task(task_id="task-agent-2", spec=spec, task_memory_ref="tm", project_memory_ref="pm", global_memory_ref="gm")
     context = ContextAssembler().build_context(task, ContextRequest(context_request_id="c1", budget_tokens=0, domains=[], history_types=[]))
-    output, err = runtime.run_agent_stage(task, node, context)
+    output, err, tool_plan = runtime.run_agent_stage(task, node, context)
     assert output is None
     assert err is not None
     assert err.code == EngineErrorCode.VALIDATION
+    assert tool_plan is None
 
 
 def test_tool_runtime_security_gate() -> None:

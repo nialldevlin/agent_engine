@@ -21,6 +21,8 @@ class DAGExecutor:
         tool_runtime,
         telemetry: TelemetryBus | None = None,
         plugins=None,
+        json_engine=None,
+        deterministic_registry=None,
     ) -> None:
         self.task_manager = task_manager
         self.router = router
@@ -29,6 +31,28 @@ class DAGExecutor:
         self.tool_runtime = tool_runtime
         self.telemetry = telemetry
         self.plugins = plugins
+
+        # Add NodeExecutor integration
+        from agent_engine.runtime.node_executor import NodeExecutor
+        from agent_engine.runtime.deterministic_registry import DeterministicRegistry
+
+        self.json_engine = json_engine
+        self.deterministic_registry = deterministic_registry or DeterministicRegistry()
+        self.node_executor = NodeExecutor(
+            agent_runtime=agent_runtime,
+            tool_runtime=tool_runtime,
+            context_assembler=context_assembler,
+            json_engine=json_engine or self._create_stub_json_engine(),
+            deterministic_registry=self.deterministic_registry
+        )
+
+    def _create_stub_json_engine(self):
+        """Create stub JSON engine for validation."""
+        class StubJsonEngine:
+            def validate(self, schema_id, payload):
+                # Pass-through validation
+                return payload, None
+        return StubJsonEngine()
 
     def run(self, task: Task) -> Task:
         """Execute a task through the DAG workflow."""
@@ -58,7 +82,8 @@ class DAGExecutor:
             self._emit_event("stage_finished", {"stage_id": node.stage_id, "stage_type": node.kind.value, "task_id": task.task_id, "error": bool(error)})
 
             # Record results and routing
-            self.task_manager.record_stage_result(task, node.stage_id, output=output, error=error, started_at=started_at)
+            # Note: record_stage_result is now handled by _run_stage through NodeExecutor
+            # self.task_manager.record_stage_result(task, node.stage_id, output=output, error=error, started_at=started_at)
             self.task_manager.append_routing(task, node.stage_id, decision=None, agent_id=node.agent_id)
 
             # Save checkpoint after stage execution
@@ -103,34 +128,20 @@ class DAGExecutor:
 
         return task
 
-    def _run_stage(self, task: Task, node: Node, context_package):
-        """Execute a single node by delegating to the appropriate runtime.
+    def _run_stage(self, task: Task, node: Node, ctx):
+        """Execute a single node by delegating to NodeExecutor."""
+        # Execute node through NodeExecutor
+        record, next_output = self.node_executor.execute_node(task, node)
 
-        Returns (output, error)
-        """
-        if node.kind == NodeKind.AGENT:
-            # Agent runtime is expected to provide `run_agent_stage` returning (output, error)
-            self._emit_plugin("before_agent", task_id=task.task_id, stage_id=node.stage_id)
-            output, error = self.agent_runtime.run_agent_stage(task, node, context_package)
-            self._emit_plugin("after_agent", task_id=task.task_id, stage_id=node.stage_id, error=error)
-            return output, error
+        # Store complete record in task history
+        task.stage_results[node.stage_id] = record
 
-        if node.kind == NodeKind.DETERMINISTIC:
-            # Deterministic nodes may invoke tools or perform merging
-            if node.tools:
-                self._emit_plugin("before_tool", task_id=task.task_id, stage_id=node.stage_id)
-                output, error = self.tool_runtime.run_tool_stage(task, node, context_package)
-                self._emit_plugin("after_tool", task_id=task.task_id, stage_id=node.stage_id, error=error)
-                return output, error
-            elif node.role == NodeRole.MERGE:
-                # Merge is a local aggregation step; not implemented in this MVP
-                return None, None
-            else:
-                # Linear deterministic nodes: no-op for now
-                return None, None
+        # Update task current output if execution succeeded
+        if next_output is not None:
+            task.current_output = next_output
 
-        # Unknown types: no-op for now
-        return None, None
+        # Return output and error for compatibility
+        return record.output, record.error
 
     def _resolve_stage(self, stage_id: str) -> Node:
         # If the Router was initialized with a stages mapping, use it

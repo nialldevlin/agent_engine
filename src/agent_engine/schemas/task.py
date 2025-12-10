@@ -10,6 +10,8 @@ from pydantic import Field
 from .base import SchemaBase, Severity
 from .errors import FailureSignature, EngineError
 from .memory import ContextFingerprint
+from .tool import ToolCallRecord
+from .stage import NodeRole, NodeKind
 
 
 class TaskMode(str, Enum):
@@ -109,8 +111,17 @@ TaskStatus = UniversalStatus
 
 
 class StageExecutionRecord(SchemaBase):
+    node_id: Optional[str] = Field(default=None, description="Node ID that executed")
+    node_role: Optional[NodeRole] = Field(default=None, description="Node role for replay context")
+    node_kind: Optional[NodeKind] = Field(default=None, description="Node kind for replay context")
+    input: Optional[Any] = Field(default=None, description="Input payload used for this node")
     output: Optional[Any] = Field(default=None)
     error: Optional[EngineError] = Field(default=None)
+    node_status: UniversalStatus = Field(default=UniversalStatus.PENDING, description="Node execution status")
+    tool_plan: Optional[Dict[str, Any]] = Field(default=None, description="ToolPlan emitted by agent")
+    tool_calls: List[ToolCallRecord] = Field(default_factory=list, description="Tool invocations during this stage")
+    context_profile_id: Optional[str] = Field(default=None, description="Context profile used")
+    context_metadata: Dict[str, Any] = Field(default_factory=dict, description="Context fingerprint/description")
     started_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
     completed_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
 
@@ -193,6 +204,7 @@ class Task(SchemaBase):
     global_memory_ref: str = Field(..., description="Reference to global-level memory store")
     created_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
     updated_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp")
+    child_task_ids: List[str] = Field(default_factory=list, description="IDs of clone/subtask children spawned from this task")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert Task to JSON-serializable dict.

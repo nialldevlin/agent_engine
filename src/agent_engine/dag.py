@@ -22,6 +22,7 @@ class DAG:
     - nodes: Dictionary mapping node_id to Node objects
     - edges: List of Edge objects forming the routing structure
     - adjacency: Efficient adjacency map for outbound edge lookups
+    - reverse_adjacency: Efficient reverse adjacency map for inbound edge lookups
 
     All nodes must be reachable from the default start node, and the default
     start node must be able to reach at least one exit node.
@@ -41,6 +42,7 @@ class DAG:
         self.nodes = nodes
         self.edges = edges
         self.adjacency = self._build_adjacency()
+        self.reverse_adjacency = self._build_reverse_adjacency()
 
     def _build_adjacency(self) -> Dict[str, List[Edge]]:
         """Build adjacency map: node_id -> list of outbound edges.
@@ -57,6 +59,24 @@ class DAG:
             if edge.from_node_id in adj:
                 adj[edge.from_node_id].append(edge)
         return adj
+
+    def _build_reverse_adjacency(self) -> Dict[str, List[Edge]]:
+        """Build reverse adjacency map: node_id -> list of inbound edges.
+
+        Creates an efficient lookup structure for finding all inbound edges
+        to any given node. This is essential for merge node coordination,
+        allowing the router to determine which upstream tasks must complete
+        before a merge can execute.
+
+        Returns:
+            Dictionary mapping each node_id to a list of Edge objects
+            that terminate at that node.
+        """
+        rev_adj = {node_id: [] for node_id in self.nodes}
+        for edge in self.edges:
+            if edge.to_node_id in rev_adj:
+                rev_adj[edge.to_node_id].append(edge)
+        return rev_adj
 
     def get_node(self, node_id: str) -> Node:
         """Get node by ID.
@@ -88,6 +108,21 @@ class DAG:
             if the node has no outbound edges (e.g., EXIT nodes).
         """
         return self.adjacency.get(node_id, [])
+
+    def get_inbound_edges(self, node_id: str) -> List[Edge]:
+        """Get all inbound edges to a node.
+
+        Returns the list of edges that terminate at the specified node,
+        enabling merge node coordination and upstream task tracking.
+
+        Args:
+            node_id: The ID of the node to query.
+
+        Returns:
+            List of Edge objects terminating at the node. Returns empty list
+            if the node has no inbound edges (e.g., START nodes).
+        """
+        return self.reverse_adjacency.get(node_id, [])
 
     def get_default_start_node(self) -> Node:
         """Get the default start node.

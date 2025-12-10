@@ -41,6 +41,7 @@ from .tool import (
 )
 from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
 from .workflow import Edge, WorkflowGraph
+from .router import MergeInputItem, WorkItem, WorkItemKind, MergeWaitState
 
 __all__ = [
     "AgentDefinition",
@@ -99,4 +100,8 @@ __all__ = [
     "ExecutionOutput",
     "Edge",
     "WorkflowGraph",
+    "MergeInputItem",
+    "WorkItem",
+    "WorkItemKind",
+    "MergeWaitState",
 ]

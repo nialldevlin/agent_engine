@@ -79,6 +79,17 @@ class TaskManager:
         self.tasks[task.task_id] = task
         return task
 
+    def get_task(self, task_id: str) -> Optional[Task]:
+        """Get a task by ID.
+
+        Args:
+            task_id: Task identifier
+
+        Returns:
+            Task if found, None otherwise
+        """
+        return self.tasks.get(task_id)
+
     def set_status(self, task: Task, status: UniversalStatus) -> None:
         task.status = status
         task.updated_at = _now_iso()
@@ -87,13 +98,43 @@ class TaskManager:
         task.current_stage_id = stage_id
         task.updated_at = _now_iso()
 
-    def record_stage_result(self, task: Task, stage_id: str, output=None, error=None, started_at: Optional[str] = None) -> None:
-        task.stage_results[stage_id] = StageExecutionRecord(
-            output=output,
-            error=error,
-            started_at=started_at or task.stage_results.get(stage_id, StageExecutionRecord()).started_at or _now_iso(),
-            completed_at=_now_iso(),
-        )
+    def record_stage_result(self, task: Task, stage_id: str, record: StageExecutionRecord = None, output=None, error=None, started_at: Optional[str] = None) -> None:
+        """Record complete stage execution record.
+
+        Supports both new (record parameter) and legacy (output/error/started_at) signatures.
+
+        Args:
+            task: Task to update
+            stage_id: Stage identifier
+            record: Complete StageExecutionRecord from NodeExecutor (new style)
+            output: Output payload (legacy style)
+            error: Error object (legacy style)
+            started_at: Start timestamp (legacy style)
+        """
+        if record is not None:
+            # New style: full StageExecutionRecord provided
+            task.stage_results[stage_id] = record
+        else:
+            # Legacy style: import here to avoid circular imports
+            from agent_engine.schemas import NodeRole, NodeKind, UniversalStatus
+
+            # Get start time: use provided value, existing record's value, or current time
+            final_started_at = started_at
+            if not final_started_at:
+                existing = task.stage_results.get(stage_id)
+                final_started_at = existing.started_at if existing and hasattr(existing, 'started_at') else _now_iso()
+
+            # Build minimal StageExecutionRecord from legacy components
+            task.stage_results[stage_id] = StageExecutionRecord(
+                node_id=stage_id,
+                node_role=NodeRole.LINEAR,  # Default fallback
+                node_kind=NodeKind.DETERMINISTIC,  # Default fallback
+                output=output,
+                error=error,
+                node_status=UniversalStatus.COMPLETED if error is None else UniversalStatus.FAILED,
+                started_at=final_started_at,
+                completed_at=_now_iso(),
+            )
         task.updated_at = _now_iso()
 
     def append_routing(self, task: Task, stage_id: str, decision: Optional[str], agent_id: Optional[str]) -> None:
@@ -101,6 +142,190 @@ class TaskManager:
             RoutingDecision(stage_id=stage_id, decision=decision, agent_id=agent_id, timestamp=_now_iso())
         )
         task.updated_at = _now_iso()
+
+    def create_clone(
+        self,
+        parent: Task,
+        branch_label: str,
+        output: Optional[Any] = None
+    ) -> Task:
+        """Create a clone task from a Branch node execution.
+
+        Clones inherit the parent's spec and memory refs but get a new task_id.
+        The parent's output becomes the clone's initial state.
+
+        Args:
+            parent: Parent task being cloned
+            branch_label: Edge label identifying which branch was taken
+            output: Output from the branch node (optional)
+
+        Returns:
+            New clone task with proper lineage tracking
+        """
+        clone_id = f"{parent.task_id}-clone-{len(parent.child_task_ids)}"
+        clone = Task(
+            task_id=clone_id,
+            spec=parent.spec,  # Inherit parent spec
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            current_output=output or parent.current_output,
+            parent_task_id=parent.task_id,
+            lineage_type="clone",
+            lineage_metadata={
+                "branch_label": branch_label,
+                "cloned_at_stage": parent.current_stage_id,
+                "clone_index": len(parent.child_task_ids)
+            },
+            task_memory_ref=f"task_memory:{clone_id}",
+            project_memory_ref=parent.project_memory_ref,  # Inherit project memory
+            global_memory_ref=parent.global_memory_ref,  # Inherit global memory
+            created_at=_now_iso(),
+            updated_at=_now_iso(),
+        )
+
+        # Track child relationship
+        parent.child_task_ids.append(clone_id)
+        parent.updated_at = _now_iso()
+
+        # Store clone in manager
+        self.tasks[clone_id] = clone
+
+        return clone
+
+    def create_subtask(
+        self,
+        parent: Task,
+        subtask_input: Any,
+        split_edge_label: Optional[str] = None
+    ) -> Task:
+        """Create a subtask from a Split node execution.
+
+        Subtasks get a new input payload derived from the parent's split logic.
+        Each subtask is an independent unit of work with its own lifecycle.
+
+        Args:
+            parent: Parent task being split
+            subtask_input: Input payload for this subtask
+            split_edge_label: Edge label identifying which split branch (optional)
+
+        Returns:
+            New subtask with proper lineage tracking
+        """
+        subtask_index = len(parent.child_task_ids)
+        subtask_id = f"{parent.task_id}-subtask-{subtask_index}"
+
+        # Create new spec for subtask with its own input
+        subtask_spec = TaskSpec(
+            task_spec_id=f"{parent.spec.task_spec_id}-subtask-{subtask_index}",
+            request=str(subtask_input),  # Convert input to request string
+            mode=parent.spec.mode,
+            priority=parent.spec.priority,
+            hints=parent.spec.hints,
+            files=parent.spec.files,
+            overrides=parent.spec.overrides,
+            metadata=parent.spec.metadata.copy()
+        )
+
+        subtask = Task(
+            task_id=subtask_id,
+            spec=subtask_spec,
+            lifecycle=TaskLifecycle.QUEUED,
+            status=UniversalStatus.PENDING,
+            current_output=None,  # Subtask starts fresh
+            parent_task_id=parent.task_id,
+            lineage_type="subtask",
+            lineage_metadata={
+                "split_edge_label": split_edge_label,
+                "split_at_stage": parent.current_stage_id,
+                "subtask_index": subtask_index,
+                "subtask_input": subtask_input
+            },
+            task_memory_ref=f"task_memory:{subtask_id}",
+            project_memory_ref=parent.project_memory_ref,  # Inherit project memory
+            global_memory_ref=parent.global_memory_ref,  # Inherit global memory
+            created_at=_now_iso(),
+            updated_at=_now_iso(),
+        )
+
+        # Track child relationship
+        parent.child_task_ids.append(subtask_id)
+        parent.updated_at = _now_iso()
+
+        # Store subtask in manager
+        self.tasks[subtask_id] = subtask
+
+        return subtask
+
+    def get_children(self, parent_id: str) -> List[Task]:
+        """Get all child tasks (clones and subtasks) of a parent.
+
+        Args:
+            parent_id: Parent task ID
+
+        Returns:
+            List of child Task objects (may be empty)
+        """
+        parent = self.tasks.get(parent_id)
+        if not parent:
+            return []
+
+        return [
+            self.tasks[child_id]
+            for child_id in parent.child_task_ids
+            if child_id in self.tasks
+        ]
+
+    def check_clone_completion(self, parent_id: str) -> bool:
+        """Check if parent task can complete based on clone completion rules.
+
+        Per AGENT_ENGINE_SPEC §2.1: Parent completes when ANY one clone succeeds.
+
+        Args:
+            parent_id: Parent task ID
+
+        Returns:
+            True if at least one clone has COMPLETED status, False otherwise
+        """
+        children = self.get_children(parent_id)
+
+        # No children = not complete
+        if not children:
+            return False
+
+        # Filter for clones only
+        clones = [c for c in children if c.lineage_type == "clone"]
+
+        # At least one clone must be COMPLETED
+        return any(
+            clone.status == UniversalStatus.COMPLETED
+            for clone in clones
+        )
+
+    def check_subtask_completion(self, parent_id: str) -> bool:
+        """Check if parent task can complete based on subtask completion rules.
+
+        Per AGENT_ENGINE_SPEC §2.1: Parent completes when ALL subtasks succeed.
+
+        Args:
+            parent_id: Parent task ID
+
+        Returns:
+            True if all subtasks have COMPLETED status, False otherwise
+        """
+        children = self.get_children(parent_id)
+
+        # No children = not complete
+        if not children:
+            return False
+
+        # Filter for subtasks only
+        subtasks = [c for c in children if c.lineage_type == "subtask"]
+
+        # All subtasks must be COMPLETED
+        return all(
+            subtask.status == UniversalStatus.COMPLETED
+            for subtask in subtasks
+        )
 
     def save_checkpoint(
         self,
