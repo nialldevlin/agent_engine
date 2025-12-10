@@ -17,7 +17,6 @@ from agent_engine.schemas import (
     EngineErrorCode,
     EngineErrorSource,
     MemoryConfig,
-    Pipeline,
     Severity,
     Stage,
     SCHEMA_REGISTRY,
@@ -33,21 +32,20 @@ class EngineConfig:
     tools: Dict[str, ToolDefinition] = field(default_factory=dict)
     stages: Dict[str, Stage] = field(default_factory=dict)
     workflow: Optional[WorkflowGraph] = None
-    pipelines: Dict[str, Pipeline] = field(default_factory=dict)
     memory: Optional[MemoryConfig] = None
     version: str = __version__
 
 
 def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfig], Optional[EngineError]]:
-    """Load all manifests (agents, tools, stages, workflow, pipelines, memory)."""
+    """Load all manifests (agents, tools, workflow, memory).
+
+    Note: stages are now embedded in workflow.yaml, not loaded separately.
+    """
     try:
         agents, err = _load_list(manifests.get("agents"), "agent_definition")
         if err:
             return None, err
         tools, err = _load_list(manifests.get("tools"), "tool_definition")
-        if err:
-            return None, err
-        stages, err = _load_list(manifests.get("stages"), "stage")
         if err:
             return None, err
 
@@ -59,22 +57,25 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
         if err:
             return None, err
         workflow: Optional[WorkflowGraph] = None
+        stages: Dict[str, Stage] = {}
         if workflow_payload is not None:
+            # Extract stages from embedded objects BEFORE validation if they exist
+            if isinstance(workflow_payload, dict) and 'stages' in workflow_payload:
+                stages_in_payload = workflow_payload.get('stages', [])
+                if stages_in_payload and isinstance(stages_in_payload[0], dict):
+                    # Convert embedded stage dicts to Stage objects
+                    for stage_dict in stages_in_payload:
+                        stage_obj, validation_err = validate("stage", stage_dict)
+                        if validation_err:
+                            return None, _from_validation_error("stage", validation_err)
+                        stages[stage_obj.stage_id] = stage_obj
+                    # Replace stage dicts with stage IDs in payload for validation
+                    workflow_payload['stages'] = [s.stage_id for s in stages.values()]
+
             workflow_obj, validation_err = validate("workflow_graph", workflow_payload)
             if validation_err:
                 return None, _from_validation_error("workflow", validation_err)
             workflow = workflow_obj
-
-        pipelines_payload, err = _load_file(manifests.get("pipelines"))
-        if err:
-            return None, err
-        pipelines_list = pipelines_payload or []
-        pipelines: Dict[str, Pipeline] = {}
-        for item in pipelines_list:
-            obj, validation_err = validate("pipeline", item)
-            if validation_err:
-                return None, _from_validation_error("pipeline", validation_err)
-            pipelines[obj.pipeline_id] = obj  # type: ignore[arg-type]
 
         memory_payload, err = _load_file(manifests.get("memory"), required=False)
         if err:
@@ -86,10 +87,7 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
                 return None, _from_validation_error("memory", validation_err)
 
         if workflow:
-            unknown = set(workflow.stages) - set(stages.keys())
-            if unknown:
-                return None, _error(f"Workflow references unknown stages: {sorted(unknown)}")
-            graph_error = _validate_workflow(workflow, pipelines, stages)
+            graph_error = _validate_workflow(workflow, stages)
             if graph_error:
                 return None, graph_error
 
@@ -99,7 +97,6 @@ def load_engine_config(manifests: Dict[str, Path]) -> Tuple[Optional[EngineConfi
                 tools=tools,
                 stages=stages,
                 workflow=workflow,
-                pipelines=pipelines,
                 memory=memory,
             ),
             None,
@@ -147,7 +144,7 @@ def _load_list(path: Optional[Path], schema_name: str, *, required: bool = True)
 
 
 def _resolve_id(obj) -> Optional[str]:
-    for attr in ("agent_id", "tool_id", "stage_id", "pipeline_id"):
+    for attr in ("agent_id", "tool_id", "stage_id"):
         value = getattr(obj, attr, None)
         if value is not None:
             return value
@@ -183,37 +180,11 @@ def _validate_tool_schemas(tools: Dict[str, ToolDefinition]) -> Optional[EngineE
     return None
 
 
-def _validate_workflow(workflow: WorkflowGraph, pipelines: Dict[str, Pipeline], stages: Dict[str, Stage]) -> Optional[EngineError]:
+def _validate_workflow(workflow: WorkflowGraph, stages: Dict[str, Stage]) -> Optional[EngineError]:
     try:
         validate_workflow_graph(workflow, stages=stages)
     except ValueError as exc:
         return _error(str(exc))
-
-    adjacency: Dict[str, List[str]] = {stage_id: [] for stage_id in workflow.stages}
-    for edge in workflow.edges:
-        adjacency.setdefault(edge.from_stage_id, []).append(edge.to_stage_id)
-
-    for pipeline in pipelines.values():
-        missing_starts = set(pipeline.start_stage_ids) - set(workflow.stages)
-        missing_ends = set(pipeline.end_stage_ids) - set(workflow.stages)
-        if missing_starts or missing_ends:
-            return _error(f"Pipeline {pipeline.pipeline_id} references unknown stages")
-
-        for start in pipeline.start_stage_ids:
-            if not _reaches_end(start, set(pipeline.end_stage_ids), adjacency):
-                return _error(f"Pipeline {pipeline.pipeline_id} start {start} cannot reach an end node")
     return None
 
 
-def _reaches_end(start: str, end_nodes: set[str], adjacency: Dict[str, list]) -> bool:
-    stack = [start]
-    seen = set()
-    while stack:
-        node = stack.pop()
-        if node in end_nodes:
-            return True
-        if node in seen:
-            continue
-        seen.add(node)
-        stack.extend(adjacency.get(node, []))
-    return False

@@ -15,7 +15,7 @@ class OverrideKind(str, Enum):
 
     Per AGENT_ENGINE_OVERVIEW §6 (Routing) and RESEARCH Appendix A (Security):
     - MEMORY: Control what memory is retrieved and how (context profiles, compression).
-    - ROUTING: Override pipeline selection or fallback edge choices.
+    - ROUTING: Override DAG routing or fallback edge choices.
     - SAFETY: Apply safe-mode flags (analysis_only, dry_run) or permission restrictions.
     - VERBOSITY: Control logging/telemetry verbosity.
     - MODE: Set or restrict task mode (TaskMode values).
@@ -61,7 +61,7 @@ class OverrideSpec(SchemaBase):
     """A task override – deterministic control knob for task execution.
 
     Overrides allow applications to temporarily modify task behavior without changing
-    manifests. Examples: enforce analysis-only mode, restrict to specific pipelines,
+    manifests. Examples: enforce analysis-only mode, control DAG routing decisions,
     reduce memory context, apply safe-mode flags.
 
     Per AGENT_ENGINE_SPEC §4.6 and RESEARCH Appendix A, overrides are applied by the
@@ -79,7 +79,7 @@ class OverrideSpec(SchemaBase):
     Payload examples (depends on kind):
     - SAFETY with "analysis_only": {"mode": "analysis_only"}
     - SAFETY with "dry_run": {"mode": "dry_run"}
-    - ROUTING with "pipeline": {"pipeline_id": "p1"}
+    - ROUTING with "condition": {"condition": "left_branch"}
     - MEMORY with compression: {"max_tokens": 2000, "compression": "aggressive"}
     - MODE with restriction: {"allowed_modes": ["analysis_only"]}
     """

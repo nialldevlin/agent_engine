@@ -20,7 +20,6 @@ def test_public_schema_exports():
         "WorkflowGraph",
         "Edge",
         "EdgeType",
-        "Pipeline",
         "__version__",
     ]
     for name in required:
@@ -34,6 +33,8 @@ def test_runtime_internals_not_exported():
         "TaskManager",
         "Router",
         "PipelineExecutor",
+        "DAGExecutor",
+        "Pipeline",
         "AgentRuntime",
         "ToolRuntime",
         "ContextAssembler",

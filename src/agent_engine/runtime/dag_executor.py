@@ -1,4 +1,4 @@
-"""Pipeline executor loops through stages using agent/tool runtimes."""
+"""DAG executor loops through stages using agent/tool runtimes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from agent_engine.schemas import ContextItem, EngineError, Stage, StageType, Tas
 from agent_engine.telemetry import TelemetryBus
 
 
-class PipelineExecutor:
+class DAGExecutor:
     def __init__(
         self,
         task_manager: TaskManager,
@@ -30,8 +30,8 @@ class PipelineExecutor:
         self.telemetry = telemetry
         self.plugins = plugins
 
-    def run(self, task: Task, pipeline_id: str) -> Task:
-        pipeline = self.router.pipelines[pipeline_id]
+    def run(self, task: Task) -> Task:
+        """Execute a task through the DAG workflow."""
         self._emit_plugin("before_task", task_id=task.task_id)
         self._emit_event("task", {"state": "start"})
         self.task_manager.set_status(task, TaskStatus.RUNNING)
@@ -40,7 +40,7 @@ class PipelineExecutor:
         retries: dict[str, int] = {}
         pending_decision: Optional[dict] = None
         while True:
-            next_stage_id = self.router.next_stage(current_stage_id, pipeline, decision=pending_decision)
+            next_stage_id = self.router.next_stage(current_stage_id, decision=pending_decision)
             pending_decision = None
             if next_stage_id is None:
                 self.task_manager.set_status(task, TaskStatus.COMPLETED)
@@ -60,7 +60,7 @@ class PipelineExecutor:
             # Record results and routing
             self.task_manager.record_stage_result(task, stage.stage_id, output=output, error=error, started_at=started_at)
             self.task_manager.append_routing(task, stage.stage_id, decision=None, agent_id=stage.agent_id)
-            
+
             # Save checkpoint after stage execution
             checkpoint_error = self.task_manager.save_checkpoint(task.task_id)
             if checkpoint_error:
@@ -96,10 +96,6 @@ class PipelineExecutor:
                     current_stage_id = stage.stage_id
                     # proceed to next stage even though error occurred
                 else:
-                    # fallback end nodes if configured
-                    if pipeline.fallback_end_stage_ids:
-                        self.task_manager.set_status(task, TaskStatus.FAILED)
-                        break
                     self.task_manager.set_status(task, TaskStatus.FAILED)
                     break
 

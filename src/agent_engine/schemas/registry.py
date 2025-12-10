@@ -19,7 +19,7 @@ from .stage import Stage
 from .task import Task, TaskSpec
 from .tool import ToolCallRecord, ToolDefinition, ToolPlan, ToolStep
 from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, GatherContextOutput
-from .workflow import Edge, Pipeline, WorkflowGraph
+from .workflow import Edge, WorkflowGraph
 
 SchemaType = Type
 
@@ -31,7 +31,6 @@ SCHEMA_REGISTRY: Dict[str, SchemaType] = {
     "stage": Stage,
     "edge": Edge,
     "workflow_graph": WorkflowGraph,
-    "pipeline": Pipeline,
     "agent_definition": AgentDefinition,
     "agent_manifest": AgentManifest,
     "tool_definition": ToolDefinition,

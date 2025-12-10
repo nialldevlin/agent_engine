@@ -1,4 +1,4 @@
-"""Tests for DAG execution and decision routing in the pipeline executor.
+"""Tests for DAG execution and decision routing in the DAG executor.
 
 Demonstrates:
 - DAG structure with transform → decision → branches → merge stages.
@@ -10,12 +10,11 @@ Demonstrates:
 import pytest
 from unittest.mock import MagicMock
 
-from agent_engine.runtime.pipeline_executor import PipelineExecutor
+from agent_engine.runtime.dag_executor import DAGExecutor
 from agent_engine.runtime.router import Router
 from agent_engine.runtime.task_manager import TaskManager
 from agent_engine.schemas import (
     Edge,
-    Pipeline,
     Stage,
     StageType,
     TaskMode,
@@ -68,19 +67,12 @@ def test_dag_execution_with_decision_routing():
     graph = WorkflowGraph(
         workflow_id="test_dag_wf",
         stages=["transform_1", "decision_1", "left_branch", "right_branch", "merge_1"],
-        edges=edges
-    )
-    pipeline = Pipeline(
-        pipeline_id="test_dag",
-        name="Test DAG Pipeline",
-        description="Test DAG workflow",
-        workflow_id="test_dag_wf",
+        edges=edges,
         start_stage_ids=["transform_1"],
         end_stage_ids=["merge_1"],
-        allowed_modes=["analysis_only"],
     )
 
-    router = Router(workflow=graph, pipelines={"test_dag": pipeline}, stages=stages)
+    router = Router(workflow=graph, stages=stages)
     task_manager = TaskManager()
     context_assembler = MagicMock()
     telemetry = MagicMock()
@@ -102,7 +94,7 @@ def test_dag_execution_with_decision_routing():
     agent_runtime.run_agent_stage.side_effect = mock_agent_stage
     tool_runtime.run_tool_stage.return_value = (None, None)
 
-    executor = PipelineExecutor(
+    executor = DAGExecutor(
         task_manager=task_manager,
         router=router,
         context_assembler=context_assembler,
@@ -113,10 +105,10 @@ def test_dag_execution_with_decision_routing():
     )
 
     spec = TaskSpec(task_spec_id="test_spec", mode=TaskMode.ANALYSIS_ONLY, request="Test request")
-    task = task_manager.create_task(spec, pipeline_id="test_dag")
+    task = task_manager.create_task(spec)
     context_assembler.build_context.return_value = MagicMock()
 
-    result_task = executor.run(task, "test_dag")
+    result_task = executor.run(task)
 
     assert result_task.status == TaskStatus.COMPLETED
     assert result_task.task_id == task.task_id
@@ -145,17 +137,11 @@ def test_router_resolve_edge_deterministic():
     graph = WorkflowGraph(
         workflow_id="resolve_edge_wf",
         stages=["s1", "s2", "s3"],
-        edges=edges
-    )
-    pipeline = Pipeline(
-        pipeline_id="test",
-        name="Test",
-        description="Router test",
-        workflow_id="resolve_edge_wf",
+        edges=edges,
         start_stage_ids=["s1"],
         end_stage_ids=["s3"]
     )
-    router = Router(workflow=graph, pipelines={"test": pipeline}, stages=stages)
+    router = Router(workflow=graph, stages=stages)
 
     # Test 1: Matching condition key "condition"
     decision_output = {"condition": "go_to_s2"}

@@ -38,34 +38,26 @@ def test_config_loader_success(tmp_path: Path) -> None:
             "risk_level": "low",
         }
     ]
-    stages = [{"stage_id": "s1", "name": "start", "type": "agent", "entrypoint": True, "terminal": True}]
-    workflow = {"workflow_id": "wf1", "stages": ["s1"], "edges": []}
-    pipelines = [
-        {
-            "pipeline_id": "p1",
-            "name": "main",
-            "description": "test pipeline",
-            "workflow_id": "wf1",
-            "start_stage_ids": ["s1"],
-            "end_stage_ids": ["s1"],
-            "allowed_modes": [],
-            "fallback_end_stage_ids": [],
-        }
-    ]
+    # Stages are now embedded in workflow.yaml (not separate manifest)
+    workflow = {
+        "workflow_id": "wf1",
+        "stages": [
+            {"stage_id": "s1", "name": "start", "type": "agent", "entrypoint": True, "terminal": True}
+        ],
+        "edges": [],
+        "start_stage_ids": ["s1"],
+        "end_stage_ids": ["s1"],
+    }
 
     _write_yaml(tmp_path / "agents.yaml", agents)
     _write_yaml(tmp_path / "tools.yaml", tools)
-    _write_yaml(tmp_path / "stages.yaml", stages)
     _write_yaml(tmp_path / "workflow.yaml", workflow)
-    _write_yaml(tmp_path / "pipelines.yaml", pipelines)
 
     config, err = load_engine_config(
         {
             "agents": tmp_path / "agents.yaml",
             "tools": tmp_path / "tools.yaml",
-            "stages": tmp_path / "stages.yaml",
             "workflow": tmp_path / "workflow.yaml",
-            "pipelines": tmp_path / "pipelines.yaml",
         }
     )
 
@@ -74,7 +66,6 @@ def test_config_loader_success(tmp_path: Path) -> None:
     assert "a1" in config.agents
     assert "t1" in config.tools
     assert "s1" in config.stages
-    assert "p1" in config.pipelines
     assert config.workflow is not None
     assert config.workflow.workflow_id == "wf1"
 
@@ -82,31 +73,18 @@ def test_config_loader_success(tmp_path: Path) -> None:
 def test_config_loader_unknown_stage(tmp_path: Path) -> None:
     _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])
     _write_yaml(tmp_path / "tools.yaml", [])
-    _write_yaml(tmp_path / "stages.yaml", [])
-    _write_yaml(tmp_path / "workflow.yaml", {"workflow_id": "wf1", "stages": ["missing"], "edges": []})
-    _write_yaml(
-        tmp_path / "pipelines.yaml",
-        [
-            {
-                "pipeline_id": "p1",
-                "name": "main",
-                "description": "test pipeline",
-                "workflow_id": "wf1",
-                "start_stage_ids": ["missing"],
-                "end_stage_ids": ["missing"],
-                "allowed_modes": [],
-                "fallback_end_stage_ids": [],
-            }
-        ],
-    )
+    # Workflow references a stage that is not defined
+    _write_yaml(tmp_path / "workflow.yaml", {
+        "workflow_id": "wf1",
+        "stages": ["missing"],
+        "edges": [],
+    })
 
     config, err = load_engine_config(
         {
             "agents": tmp_path / "agents.yaml",
             "tools": tmp_path / "tools.yaml",
-            "stages": tmp_path / "stages.yaml",
             "workflow": tmp_path / "workflow.yaml",
-            "pipelines": tmp_path / "pipelines.yaml",
         }
     )
 
@@ -119,47 +97,27 @@ def test_config_loader_unknown_stage(tmp_path: Path) -> None:
 def test_config_loader_cycle_detection(tmp_path: Path) -> None:
     _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])
     _write_yaml(tmp_path / "tools.yaml", [])
-    _write_yaml(
-        tmp_path / "stages.yaml",
-        [
-            {"stage_id": "s1", "name": "one", "type": "agent"},
-            {"stage_id": "s2", "name": "two", "type": "agent"},
-        ],
-    )
+    # Stages embedded in workflow.yaml
     _write_yaml(
         tmp_path / "workflow.yaml",
         {
             "workflow_id": "wf1",
-            "stages": ["s1", "s2"],
+            "stages": [
+                {"stage_id": "s1", "name": "one", "type": "agent"},
+                {"stage_id": "s2", "name": "two", "type": "agent"},
+            ],
             "edges": [
                 {"from_stage_id": "s1", "to_stage_id": "s2"},
                 {"from_stage_id": "s2", "to_stage_id": "s1"},
             ],
         },
     )
-    _write_yaml(
-        tmp_path / "pipelines.yaml",
-        [
-            {
-                "pipeline_id": "p1",
-                "name": "main",
-                "description": "cyclic",
-                "workflow_id": "wf1",
-                "start_stage_ids": ["s1"],
-                "end_stage_ids": ["s2"],
-                "allowed_modes": [],
-                "fallback_end_stage_ids": [],
-            }
-        ],
-    )
 
     config, err = load_engine_config(
         {
             "agents": tmp_path / "agents.yaml",
             "tools": tmp_path / "tools.yaml",
-            "stages": tmp_path / "stages.yaml",
             "workflow": tmp_path / "workflow.yaml",
-            "pipelines": tmp_path / "pipelines.yaml",
         }
     )
 
@@ -167,49 +125,36 @@ def test_config_loader_cycle_detection(tmp_path: Path) -> None:
     assert isinstance(err, EngineError)
     assert "Cycle" in err.message
 
-def test_pipeline_start_not_reaching_end(tmp_path: Path) -> None:
+def test_workflow_start_not_reaching_end(tmp_path: Path) -> None:
     _write_yaml(tmp_path / "agents.yaml", [{"agent_id": "a1", "role": "agent"}])
     _write_yaml(tmp_path / "tools.yaml", [])
-    _write_yaml(
-        tmp_path / "stages.yaml",
-        [
-            {"stage_id": "s1", "name": "one", "type": "agent"},
-            {"stage_id": "s2", "name": "two", "type": "agent"},
-        ],
-    )
+    # Stages embedded in workflow.yaml
     _write_yaml(
         tmp_path / "workflow.yaml",
-        {"workflow_id": "wf1", "stages": ["s1", "s2"], "edges": []},
-    )
-    _write_yaml(
-        tmp_path / "pipelines.yaml",
-        [
-            {
-                "pipeline_id": "p1",
-                "name": "main",
-                "description": "disconnected",
-                "workflow_id": "wf1",
-                "start_stage_ids": ["s1"],
-                "end_stage_ids": ["s2"],
-                "allowed_modes": [],
-                "fallback_end_stage_ids": [],
-            }
-        ],
+        {
+            "workflow_id": "wf1",
+            "stages": [
+                {"stage_id": "s1", "name": "one", "type": "agent"},
+                {"stage_id": "s2", "name": "two", "type": "agent"},
+            ],
+            "edges": [],  # No path from s1 to s2
+            "start_stage_ids": ["s1"],
+            "end_stage_ids": ["s2"],
+        },
     )
 
     config, err = load_engine_config(
         {
             "agents": tmp_path / "agents.yaml",
             "tools": tmp_path / "tools.yaml",
-            "stages": tmp_path / "stages.yaml",
             "workflow": tmp_path / "workflow.yaml",
-            "pipelines": tmp_path / "pipelines.yaml",
         }
     )
 
     assert config is None
     assert isinstance(err, EngineError)
-    assert "cannot reach an end node" in err.message
+    # Error should indicate unreachable stages or path issues
+    assert ("cannot reach" in err.message or "Unreachable" in err.message)
 
 
 def test_json_engine_validate_and_repair() -> None:

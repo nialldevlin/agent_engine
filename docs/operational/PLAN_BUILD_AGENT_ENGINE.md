@@ -1,1066 +1,605 @@
-## PLAN_BUILD_AGENT_ENGINE v2.1
+# **PLAN_BUILD_AGENT_ENGINE.md**
 
-*(Aligned with AGENT_ENGINE_OVERVIEW, AGENT_ENGINE_SPEC, RESEARCH, and current repo state)*
+## *Canonical Build Plan for Agent Engine v1*
 
-### Assumptions
-
-* Canonical behavior is defined by **AGENT_ENGINE_OVERVIEW.md**, **AGENT_ENGINE_SPEC.md**, **RESEARCH.md**, and **PROJECT_INTEGRATION_SPEC.md**; any conflicts MUST resolve in favor of those docs in order (SPEC > OVERVIEW > RESEARCH > PROJECT_INTEGRATION).
-* PROJECT_INTEGRATION_SPEC.md defines the external contract between projects and the engine (manifests, API surfaces, invariants).
-* Many core schemas and config loader are already solid; we **refine and wire**, not reboot the world.
-
-Each phase below is intended to be implementable via a **single Haiku / Copilot "Act Mode" prompt** (subject to implementation status below). For each phase you'll feed:
-
-* This phase's section
-* The canonical docs
-* The status report
-* The relevant files listed under "Files to touch"
+### *LLM-Safe, Deterministic, Implementation-Ready*
 
 ---
 
-## Implementation Status Markers
+# **0. Purpose of This Document**
 
-Each phase is marked with one of three statuses:
+This document defines the **complete phase plan** for implementing **Agent Engine v1**, using the canonical architectural contract described in:
 
-* **🟢 HAIKU READY** – Implementation details are clear; Haiku can execute with these specs.
-* **🔵 SONNET DESIGN** – Requires architectural/algorithmic design first; Sonnet designs, then Haiku implements.
-* **🟡 NEEDS INFO** – Missing implementation details or dependencies; cannot proceed until clarified.
+* **AGENT_ENGINE_OVERVIEW.md** 
+* **AGENT_ENGINE_SPEC.md** 
+* **PROJECT_INTEGRATION_SPEC.md** 
+* **RESEARCH.md** (conceptual background only)
 
-Phases are also grouped by implementation tier:
-* **Core Engine Phases** (0-7, 10-11) – Must be complete for spec compliance.
-* **Optional Phases** (12, N+) – Nice-to-have patterns and advanced features.
+The goal of this build plan is:
 
----
+* To provide a **deterministic, hallucination-resistant** implementation roadmap
+* To ensure LLM agents *cannot* deviate from canonical semantics
+* To allow implementation using *any* agent suite (Claude Code Sonnet, Haiku, Qwen 7B, etc.)
+* To declare exactly what constitutes **v1 complete**
+* To isolate all speculative or “not strictly required” features into **Future Work**
 
-## Phase 0 – Repo Cleanup, Guardrails, and Public API Shell
-
-**Goal:** Align the repo skeleton with the canonical docs, mark what's "core engine vs extras", and introduce a stable public façade without deeply changing behavior yet.
-
-**Reference:** Foundational APIs must conform to the external contract defined in PROJECT_INTEGRATION_SPEC.md (Engine class, from_config_dir method, run method).
-
-### Status (2025-12-05)
-
-- ✅ `Engine` facade implemented with manifest validation, runtime wiring, tool handler registration, and public schema re-exports.
-- ✅ README, plan, and tests (`tests/test_imports.py`, `tests/test_basic_llm_agent_example.py`, `tests/test_runtime.py`) now document/publicly verify that only the Engine façade is used.
-- ✅ Tests: `pytest` (full suite) passes after the refactor.
-
-The prior `examples/basic_llm_agent` CLI example has been removed because it no longer reflects the unfinished API backend. A future canonical example will be reintroduced once the runtime APIs stabilize.
-
-### Files to touch
-
-* `src/agent_engine/__init__.py`
-* `src/agent_engine/engine.py` **(new)**
-* `src/agent_engine/config_loader.py`
-* `docs/operational/README.md`
-* (Read-only for context) `examples/basic_llm_agent/cli.py`, `configs/basic_llm_agent/*`
-
-### Key implementations
-
-1. **Engine façade skeleton** ✅ complete
-
-* Created `Engine` class in `engine.py` exposing the minimal top-level API (no complex logic yet, mostly delegating)
-
-2. **Public API boundary** ✅ complete
-
-* Re-export in `__init__.py`
-
-3. **Config and docs alignment** ✅ complete
-
-* Update `docs/operational/README.md` to how to use 'Engine' 
-
-### Invariants & edge cases ✅ complete
-
-* `Engine` must not internally hard-code any particular app behavior; everything must come from manifests and/or TaskSpec. 
-* `Engine.run_one` must be safe even if called repeatedly in a long-lived process (no global state leaks).
-* The new façade **must not break existing tests**; if needed, implement it as thin wrapper around existing pipeline executor.
-
-### Minimum tests ✅ complete
-
-* Add tests in `tests/test_imports.py` 
+This document **does not** contain code.
+This document **must** remain stable and unambiguous during development.
 
 ---
 
-## Phase 1 – Core Schemas, DAG Model, and Manifest System Finalization
+# **1. How to Use This Build Plan With LLM Agents**
 
-**Status: 🟢 HAIKU READY** (schemas largely exist; mechanical refinement & wiring)
+## **1.1 Sonnet (PLAN MODE)**
 
-**Goal:** Lock down the core data model (Task, Stage, Workflow, Node/Edge) and manifest validation such that later phases can safely rely on them.
+Use Claude Code **Sonnet** to generate a detailed `PHASE_<id>_IMPLEMENTATION_PLAN.md` for phases:
 
-Most of this exists and is salvageable; we are tightening behavior and documenting invariants. This phase is critical and must be completed before most other phases can proceed.
+* Phase 0
+* Phase 1
+* Phase 2
+* Phase 4
+* Phase 5
+* Phase 6
+* Phase 9
 
-### References
-* PROJECT_INTEGRATION_SPEC §3-5 (External manifest structure and validation contract)
-* AGENT_ENGINE_OVERVIEW §5 (Workflow Graph & Pipelines)
-* AGENT_ENGINE_SPEC §3.2 (Workflow & Pipeline Executor)
-* RESEARCH.md (DAG semantics and validation rules)
+Because these phases affect core structure, they require Sonnet’s deeper reasoning and long-context planning.
 
-### Files to touch
+### When invoking Sonnet:
 
-* `src/agent_engine/schemas/`:
+* Use your `phase_plan_prompt.txt` or `phase_plan_prompt_webgpt.txt` template.
+* Provide only the files mentioned in `<Context>`.
+* Require Sonnet to output a **step-by-step implementation brief** with:
 
-  * `task.py`, `stage.py`, `workflow.py`, `agent.py`, `tool.py`, `memory.py`, `event.py`, `override.py`, `tool_io.py`, `registry.py`
-* `src/agent_engine/config_loader.py`
-* `tests/test_schemas_models.py`
-* `tests/test_dag_validator.py`
-* `tests/test_config_loader_and_json_engine.py`
+  * explicit file paths
+  * explicit invariants
+  * *no* code
+  * HUMAN vs LLM division of labor
+* Reject any output that:
 
-### Key implementations
+  * invents pipelines
+  * invents node roles
+  * invents routing mechanisms
+  * modifies canonical semantics
+  * alters the architecture
 
-1. **Explicit node / edge semantics**
+## **1.2 Haiku (ACT MODE)**
 
-   * Ensure `WorkflowGraph` and `Stage` schemas clearly encode:
+Use Claude Code **Haiku** (or Qwen 7B locally) to execute implementation steps:
 
-     * Node roles: agent, tool, decision, merge, feedback, generic linear. Map to `StageType` enum values with names that match the plan/spec. 
-     * Edge types: normal, error, conditional, fallback (if present).
-   * Add comments & docstrings clarifying:
+* Small, local code changes
+* File updates specified by the Sonnet Phase Plan
+* Test additions or fixes
+* Manifest normalization
+* Context assembly wiring
+* Telemetry hook insertion
+* Plugin system scaffolding
 
-     * A node can be both “agent node” and “decision node” logically; StageType covers **execution role**, while node wiring (edges) encodes decisions/merges.
+Haiku excels when:
 
-2. **DAG validator completeness**
+* The task is extremely well-scoped
+* The steps are explicitly defined
+* No long reasoning is required
 
-   * Confirm `workflow.py` DAG validator:
+## **1.3 Restrictions for All LLM Agents**
 
-     * Validates no cycles, reachable entry/exit nodes, valid edge targets. 
-     * Enforces that conditional edges originate only from decision stages.
-     * Enforces that merge stages have multiple inbound edges and exactly one outbound edge (unless explicitly marked terminal).
+LLMs must **not**:
 
-3. **Manifest & schema registry**
+* invent or modify engine semantics
+* create pipelines or pipeline selectors
+* treat tools as nodes
+* add new node roles or kinds
+* introduce loops inside the DAG
+* introduce unapproved routing logic
+* mutate tasks from plugins
+* modify canonical manifest fields
+* implement “learned” routing outside Future Work
 
-   * Ensure `registry.py` registers JSON Schema for:
+LLMs **must**:
 
-     * Agents, tools, workflows, pipelines, memory, plugins, overrides, events. 
-   * In `config_loader.py`:
-
-     * Ensure all manifests are validated against the registry and invalid manifests raise structured `EngineError` with `EngineErrorCode.CONFIG_ERROR` (or equivalent). 
-
-4. **Override and event schemas**
-
-   * Clarify `OverrideSpec`, `OverrideKind`, `Event`, `EventType` enums and add comments tying them to later runtime phases (router, context, telemetry).
-   * Include safe-mode flags: `analysis_only`, `dry_run`, and any task-level overrides (per AGENT_ENGINE_SPEC §4.6 and RESEARCH Appendix A).
-
-5. **ToolPlan schema** *(NEW – from canonical docs)*
-
-   * Define `ToolPlan` structure for tool invocation requests from agents (OVERVIEW §8, SPEC §4.3).
-   * Minimal schema skeleton: `{ tool_name: str, arguments: dict, result_field?: str }` (exact structure per RESEARCH.md).
-   * Include `ExecutionInput` and `ExecutionOutput` for recording tool I/O in Tasks (Phase 5 will detail execution).
-
-6. **Built-in tool catalog** *(NEW – from canonical docs)*
-
-   * Document which tools are built-in vs. user-defined (per SPEC §4.3 examples: `filesystem.write_file`, `filesystem.read_file`, `filesystem.list`, `command.run`).
-   * Ensure tool registry can load both built-in and custom tool definitions from manifests.
-
-### Invariants & edge cases
-
-* No manifest surface may bypass schema validation.
-* DAGs with invalid edge types or illegal transitions must fail at config load time, not at runtime.
-* Overrides must be representable entirely via schemas (no hidden magic fields).
-
-### Minimum tests
-
-* Extend `test_schemas_models.py`:
-
-  * Round-trip (create → serialize → validate → deserialize) for all major schemas.
-* Extend `test_dag_validator.py`:
-
-  * Invalid DAG cases: cycles, unreachable terminal, decision node with non-conditional edges, merge with single inbound edge.
+* preserve the DAG as the sole routing structure
+* preserve node roles and their canonical behaviors
+* follow the universal status model
+* follow strict schema validation
+* maintain deterministic execution
 
 ---
 
-## Phase 2 – Pipeline Executor & Task Manager: Robust DAG Execution
+# **2. Build Philosophy and Guarantees**
 
-**Status: 🔵 SONNET DESIGN** (core execution logic; requires design before implementation)
+This build plan enforces:
 
-**Goal:** Bring pipeline execution and task lifecycle up to spec: full DAG traversal, merge behavior, basic error paths, checkpoint resumption.
+### **Determinism**
 
-### References
-* AGENT_ENGINE_OVERVIEW §5 (Workflow Graph & Pipelines)
-* AGENT_ENGINE_SPEC §3.2 (Workflow & Pipeline Executor semantics)
+Execution must be exactly reproducible for given inputs and manifests.
 
-### Design Gaps (Requires Sonnet Input)
-* **Merge semantics**: What is "simple merge policy"? List? Dict keyed by edge source? Aggregation rules? (see RESEARCH for details)
-* **Error recovery matrix**: Complete error taxonomy (JSON errors, tool errors, context errors, routing errors, permissions errors).
-* **Fallback routing**: Precise fallback matrix structure and lookup logic.
+### **Single Source of Truth**
 
-### Files to touch
+The canonical documents define **everything** about:
 
-* `src/agent_engine/runtime/pipeline_executor.py`
-* `src/agent_engine/runtime/task_manager.py`
-* `src/agent_engine/schemas/errors.py`
-* `tests/test_runtime.py`
-* `tests/test_pipeline_dag_execution.py`
-* `tests/test_task_store.py`
+* Routing
+* Node roles
+* Task lifecycle
+* Status semantics
+* Context assembly
+* Tools
+* Memory layering
+* Observability
 
-### Key implementations
+### **Testability**
 
-1. **Executor behavior**
+Every phase ends with a clear, unambiguous definition of “done.”
 
-   * In `PipelineExecutor.run(task: Task) -> Task`:
+### **No Surprises**
 
-     * Implement MERGE stages:
-
-       * Aggregate inbound stage results (e.g., list of outputs or dict keyed by edge source).
-       * Define a simple merge policy (configurable later via manifests).
-     * Implement error path routing:
-
-       * When a stage fails with `EngineError`, consult OnErrorPolicy or equivalent and follow error edges (if defined).
-       * Respect max retries per stage before taking fallback edge or failing task.
-
-2. **Checkpoint resumption**
-
-   * Integrate `TaskManager.load_checkpoint()` with `PipelineExecutor`:
-
-     * Add `resume_task(task_id: str)` helper that loads a task, resumes from last recorded stage, and continues. 
-   * Ensure checkpoints are written at least:
-
-     * After task creation
-     * After each stage finishes
-
-3. **Error model**
-
-   * Ensure `EngineError` and `FailureSignature` carry:
-
-     * Stage id, node type, pipeline id, error category (agent/tool/json/context/etc.).
-   * Executor must attach failure signature to Task and to telemetry (telemetry integration is wired later but API should be ready). 
-
-### Invariants & edge cases
-
-* Executor must always respect DAG constraints; it must not “invent” edges.
-* Task status transitions: `PENDING → RUNNING → (COMPLETED | FAILED | CANCELLED)` and must persist.
-* Merge stages must not drop results silently; if a merge cannot be constructed, raise structured error.
-
-### Minimum tests
-
-* `test_pipeline_dag_execution.py`:
-
-  * Multi-branch DAG with merge node; verify merged output present on Task.
-  * Execution from checkpoint resumes at correct stage.
-* `test_runtime.py`:
-
-  * Failure in intermediate stage triggers error edge or fallback node.
+All routing behavior must come explicitly from the workflow DAG.
+There is no implicit routing and no hidden fallback logic.
 
 ---
 
-## Phase 3 – JSON Engine v1.0: Validation, Repair, and Retries
+# **3. Phase Overview (v1 Complete)**
 
-**Status: 🟡 NEEDS INFO** (depends on Phase 2 error taxonomy design)
+Agent Engine v1 consists of the following phases:
 
-**Goal:** Make the JSON engine match the spec and research: structured validation, tiered repair, retry strategies, clear error categories.
+0. Workspace Audit & Remediation
+1. Canonical Schemas & Manifest Validation
+2. Engine Facade & DAG Loader
+3. Task Model, History, and Status Propagation
+4. Node Execution Skeleton & Tool Invocation
+5. Router v1.0 (Deterministic DAG Routing)
+6. Memory & Context v1
+7. Error Handling, Status Propagation & Exit Behavior
+8. Telemetry & Event Bus
+9. Plugin System v1 (Read-Only Observers)
+10. Example App & Documentation
 
-### References
-* AGENT_ENGINE_OVERVIEW §10 (JSON Engine)
-* AGENT_ENGINE_SPEC §3.5 (JSON Engine completion criteria)
-* RESEARCH.md §5.2, §7 (JSON validation & repair strategies)
-
-### Design Gaps (Blocked by Phase 2)
-* Complete error taxonomy across all runtime components (tool errors, context errors, routing errors beyond JSON-only).
-* Once Phase 2 defines the full error space, Phase 3 refines JSON-specific errors.
-
-### Files to touch
-
-* `src/agent_engine/json_engine.py`
-* `src/agent_engine/schemas/errors.py`
-* `src/agent_engine/utils/json_io.py` (if needed)
-* `tests/test_config_loader_and_json_engine.py`
-* New tests: `tests/test_json_engine_repair.py`
-
-### Key implementations
-
-1. **Error categorization**
-
-   * Define JSON error categories in `EngineErrorCode` or similar:
-
-     * `JSON_SYNTAX_ERROR`
-     * `JSON_SCHEMA_MINOR_MISMATCH`
-     * `JSON_SCHEMA_MAJOR_MISMATCH`
-   * `validate()` returns either structured data or raises `EngineError` with category.
-
-2. **Repair & retry strategy**
-
-   * `repair_and_validate(raw_output, schema)`:
-
-     * Parse raw string → minimal syntax repair (existing behavior).
-     * If syntax OK but schema fails:
-
-       * Apply small, deterministic repairs (fill missing optional fields with defaults, simple type coercions where safe).
-     * Return `(result, repair_metadata)` including error category, repair actions.
-   * Add `attempt_with_retries(call_fn, schema, retry_policy)` helper:
-
-     * Handles up to N retries with escalating strategy: syntax repair → schema repair → re-ask with explicit error message. 
-
-3. **Telemetry hooks**
-
-   * JSON engine should emit events (or at least prepare them) describing error category and chosen strategy (telemetry wiring later).
-
-### Invariants & edge cases
-
-* No “creative” repair: only apply deterministic, schema-based changes.
-* Catastrophic mismatches (empty/garbage output) must bubble up as errors; do not silently mask them.
-
-### Minimum tests
-
-* New `test_json_engine_repair.py`:
-
-  * Syntax-only errors repaired successfully.
-  * Minor schema mismatch (missing optional field) repaired.
-  * Major mismatch triggers escalation (e.g., re-ask simulated via stub).
+All other ideas are explicitly excluded and placed into **Future Work**.
 
 ---
 
-## Phase 4 – Agent Runtime v1.0: Structured Prompts, JSON Enforcement, Token Budgeting
+# **4. Phase Details**
 
-**Status: 🔵 SONNET DESIGN** (core prompt/context logic; requires design before implementation)
-
-**Goal:** Implement a real Agent Runtime that respects spec + research: deterministic prompt building, context assembly, JSON enforcement, basic token budgeting.
-
-### References
-* AGENT_ENGINE_OVERVIEW §7 (Agent Runtime), §9 (Memory & Context)
-* AGENT_ENGINE_SPEC §3.3 (Runtime - Agent Runtime completion criteria)
-* RESEARCH.md §5.1-5.3 (Agent Runtime and context assembly details)
-
-### Design Gaps (Requires Sonnet Input)
-* **Compression algorithm**: Exact HEAD/TAIL preservation strategy and importance scoring for middle compression (token-based? importance-scored?).
-* **Context profile semantics**: How does a profile map to memory selection? Query structure? Ranking/scoring details?
-* **Prompt structure**: Exact prompt template and ordering (system wrapper, task summary, context items, JSON schema instructions).
-* **Token budgeting enforcement**: When context exceeds budget, compression algorithm and thresholds.
-
-### Files to touch
-
-* `src/agent_engine/runtime/agent_runtime.py`
-* `src/agent_engine/runtime/context.py`
-* `src/agent_engine/utils/prompt_builders.py`
-* `src/agent_engine/runtime/llm_client.py` (small adjustments for metadata)
-* `src/agent_engine/json_engine.py` (integration)
-* `tests/test_agent_and_tool_runtime.py`
-* `tests/test_context_integration.py`
-* `tests/test_llm_client.py`
-
-### Key implementations
-
-1. **Structured prompt builder**
-
-   * Implement `build_agent_prompt(task, stage, context_package, agent_def)`:
-
-     * System wrapper (HEAD)
-     * Summary of task and key decisions so far
-     * Relevant memory/context items (via ContextAssembler)
-     * Explicit instructions about JSON schema to produce
-   * Use RESEARCH “HEAD/TAIL, compress middle” guidelines when building the prompt. 
-
-2. **AgentRuntime.run_agent_stage()**
-
-   * Steps:
-
-     * Call `ContextAssembler.build_context()` to get `ContextPackage`.
-     * Build prompt via new prompt builder.
-     * Call `LLMClient.generate()` with metadata including token budget.
-     * Pass raw output through JSON engine `attempt_with_retries(...)`.
-     * Attach JSON result to Task stage output; record token counts, latency.
-
-3. **Token budgeting**
-
-   * Use `utils/token_utils.py` to estimate token counts; enforce:
-
-     * Configurable per-stage budget (from manifests) with simple enforcement:
-
-       * If context > budget, call ContextAssembler with updated request to compress. 
-
-### Invariants & edge cases
-
-* Agent runtime must **not** invent tools or stages; all behavior must come from manifests and schemas.
-* JSON engine failures must surface as structured errors, not raw tracebacks.
-
-### Minimum tests
-
-* `test_agent_and_tool_runtime.py`:
-
-  * Agent stage produces valid JSON according to schema under normal conditions.
-  * JSON syntax error triggers retry and is eventually repaired or escalated.
-* `test_context_integration.py`:
-
-  * When context is too large, compression is applied and HEAD/TAIL preserved.
+Below are the formal definitions of all phases, including goals, restrictions, and success criteria.
 
 ---
 
-## Phase 5 – Tool Runtime v1.0: ToolPlan Execution, Sandbox Integration, Workspace Safety
+# **Phase 0 — Workspace Audit & Remediation**
 
-**Status: 🔵 SONNET DESIGN** (tool execution model & security decisions; requires design before implementation)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Implement Tool Runtime as per spec: ToolPlan parsing, deterministic tool execution, workspace boundaries, integration with security & telemetry.
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §8 (Tool Runtime), §14 (Security & Permissions)
-* AGENT_ENGINE_SPEC §3.3 (Runtime - Tool Runtime completion criteria), §4.3 (Example tools)
-* RESEARCH.md §3.1-3.3 (Tool Runtime and security model details)
+Bring the workspace into exact alignment with canonical architecture and remove all legacy or conflicting structures.
 
-### Design Gaps (Requires Sonnet Input)
-* **ToolPlan structure** (detailed schema): Exact JSON structure for tool invocation requests from agents (minimal schema in Phase 1; full spec needed).
-* **Built-in tool implementations**: Define which tools are engine-provided (filesystem operations, command execution) vs. user-defined.
-* **Tool execution model**: Sequential vs. parallel step execution, multi-step ToolPlan support, error recovery per step.
-* **Security decision logic**: Filesystem root enforcement, network/shell gating per risk level and manifest policies.
+## Tasks
 
-### Files to touch
+### 1. Remove all non-canonical routing concepts
 
-* `src/agent_engine/runtime/tool_runtime.py`
-* `src/agent_engine/runtime/task_manager.py` (recording tool outputs)
-* `src/agent_engine/security.py`
-* `src/agent_engine/utils/filesystem_safety.py`
-* `src/agent_engine/schemas/tool_io.py`, `tool.py`, `memory.py` (if needed)
-* `tests/test_agent_and_tool_runtime.py`
-* `tests/test_plugins_and_patterns.py` (minimal adjustments)
-* `tests/utils/test_filesystem_safety.py`
+* Delete or quarantine any `pipelines.yaml` files.
+* Remove any code referencing “PipelineExecutor”, “pipeline selection”, or multi-pipeline routing.
+* DAG (`workflow.yaml`) becomes the **sole routing definition**.
 
-### Key implementations
+  * Matches PROJECT_INTEGRATION_SPEC. 
 
-1. **ToolPlan parsing & execution**
+### 2. Eliminate all legacy code
 
-   * In `run_tool_stage(task, stage, tool_def, tool_plan: ToolPlan)`:
+* Ensure no imports from previous “king_arthur” or pipeline-era modules remain.
+* Ensure tests do not reference deprecated pipeline semantics.
 
-     * Validate `ToolPlan` structure against schema.
-     * Execute steps sequentially (or clearly reject unsupported multi-step features for now).
-     * Capture inputs/outputs and write into Task’s stage result (using `ExecutionInput` / `ExecutionOutput`). 
+### 3. Refactor file names / modules to match DAG-only semantics
 
-2. **Security integration**
+* `pipeline_executor.py` → `dag_executor.py` (or equivalent).
+* Confirm no file names or comments describe pipelines.
 
-   * Use `security.check_tool_call(tool_def, risk_level, requested_capabilities, task_safe_mode)`:
+### 4. Validate manifests directory structure
 
-     * Enforce filesystem root restrictions using `filesystem_safety` helpers.
-     * Gate network commands and shell execution per risk level and manifest-configured policies. 
+* Must match PROJECT_INTEGRATION_SPEC exactly. 
 
-3. **Workspace mutation tracking**
+### 5. Ensure schemas & registry align with canonical manifests
 
-   * For tools that mutate workspace (e.g., file write):
+* Only register: workflow, agents, tools, memory, plugins (optional), schemas.
+* No pipeline schema.
 
-     * Record summary of changes in Task (and optionally memory).
-     * Add hooks for future rollback (even if rollback not fully implemented yet).
+## Success Criteria
 
-### Invariants & edge cases
-
-* Tools may only execute if declared in manifests and allowed by security policies.
-* Tool runtime must clearly differentiate between:
-
-  * Tool failure (tool error)
-  * Security rejection (permission denied)
-  * Engine error (misconfiguration)
-
-### Minimum tests
-
-* `test_agent_and_tool_runtime.py`:
-
-  * ToolPlan with simple read-only tool runs successfully and writes result.
-  * Dangerous tool (e.g., outside root path) is blocked with clear error.
-* `test_filesystem_safety.py`:
-
-  * Additional tests covering path resolution and root enforcement.
+* `import agent_engine` works without referencing any legacy features.
+* All schema registration matches canonical manifest list.
+* No code path depends on pipelines.
+* Workspace ready for implementation of Phase 1.
 
 ---
 
-## Phase 6 – Memory & Context System v1.0: File-Backed Stores, Context Profiles, Compression
+# **Phase 1 — Canonical Schemas & Manifest Validation**
 
-**Status: 🔵 SONNET DESIGN** (retrieval policies & memory layer architecture; requires design before implementation)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Complete memory stores and context assembler according to overview + research: task/project/global stores, explicit context profiles, compression actually applied.
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §9 (Memory & Context system, five memory layers)
-* AGENT_ENGINE_SPEC §3.4 (Memory & Context completion criteria)
-* RESEARCH.md §1-2 (Memory tiers and retrieval policies)
+Implement all canonical data structures and manifest schemas.
 
-### Design Gaps (Requires Sonnet Input)
-* **Memory layer mapping**: Canonical docs describe five layers (Conversation, RAG, Agent State, Profile, Tool/Environment); map to task/project/global stores (Phase 1 identified three; how do five map to three?).
-* **RAG integration**: Vector database seeding, semantic retrieval, document ingestion pipeline (currently unspecified).
-* **Agent state memory**: Persistent JSON blob schema and storage (distinct from conversation memory).
-* **Retrieval policies**: Exact algorithm for "hybrid" and "recency" policies; importance scoring; token budgeting interaction.
-* **Context profile application**: How profiles (max_tokens, retrieval_policy, sources) translate to actual memory queries.
+## Tasks
 
-### Files to touch
+### 1. Node, Edge, Task schemas
 
-* `src/agent_engine/runtime/context.py`
-* `src/agent_engine/runtime/memory/backend.py`
-* `src/agent_engine/runtime/memory/task_store.py`
-* `src/agent_engine/runtime/memory/project_store.py`
-* `src/agent_engine/runtime/memory/global_store.py`
-* `src/agent_engine/schemas/memory.py`
-* `src/agent_engine/utils/file_context.py`, `token_utils.py` (if needed)
-* `tests/test_memory_backend.py`
-* `tests/test_task_store.py`, `test_project_store.py`, `test_global_store.py`
-* `tests/test_context_integration.py`
+Follow AGENT_ENGINE_SPEC definitions:
 
-### Key implementations
+* Node fields: id, kind, role, schema_in/out, context, tools, continue_on_failure.
+* Node role list must be exactly:
+  `start`, `linear`, `decision`, `branch`, `split`, `merge`, `exit`.
 
-1. **File-backed stores**
+* Edge fields: from, to, label (optional).
+* Task metadata: status, lineage, history, routing metadata.
 
-   * Implement disk-backed versions for task/project/global stores:
 
-     * Stable directory layout (e.g., under configurable `memory_root`).
-     * Simple JSONL or per-task JSON files; reuse `json_io` for robustness. 
+### 2. ToolPlan & tool I/O schemas
 
-2. **Context profiles**
+Strictly structured, deterministic, validated.
 
-   * Extend `MemoryConfig` and/or Context schemas to define **context profiles**:
+### 3. Memory & context profile schemas
 
-     * Fields like `max_tokens`, `include_task_history`, `include_project_docs`, `k_recent_messages`.
-   * `ContextAssembler.build_context(request)` must:
+Match PROJECT_INTEGRATION_SPEC memory.yaml structure. 
 
-     * Interpret the profile.
-     * Choose memory items from task/project/global stores according to policy.
-     * Apply **HEAD/TAIL** policy and explicit middle compression. 
+### 4. Override & event schemas
 
-3. **Compression applied**
+Only for deterministic overrides + observability events.
 
-   * Implement actual compression logic using existing metrics (`importance`, `token_cost` in `ContextItem`). 
-   * Remove TODO path: ensure compressed representation is used in agent prompts.
+### 5. DAG validation
 
-### Invariants & edge cases
+* Enforce acyclicity
+* Enforce role constraints (e.g., decision ≥2 edges, merge ≥2 inbound)
+* Enforce reachability from start to exit
 
-* Memory must be optional but deterministic; if no items match profile, context is still valid.
-* File-backed stores must be robust to partial writes and process restarts (no crash loops on corrupt entries).
+## Success Criteria
 
-### Minimum tests
-
-* `test_task_store`, `test_project_store`, `test_global_store`:
-
-  * Verify persistence across process boundaries (simulate by re-instantiating stores).
-* `test_context_integration`:
-
-  * Context profile with tight token budget results in compressed middle but preserved HEAD/TAIL.
+* All manifests validate strictly.
+* Schema tests pass.
+* DAG validator rejects all illegal structure.
 
 ---
 
-## Phase 7 – Router v1.0: Deterministic Routing, Fallback Matrix, Overrides
+# **Phase 2 — Engine Facade & DAG Loader**
 
-**Status: 🔵 SONNET DESIGN** (routing algorithm & fallback matrix; requires design before implementation)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Implement router to spec with deterministic behavior, error/fallback routing, and override handling (but **without** advanced learned/MoA routing yet; that will be optional later).
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §6 (Routing system)
-* AGENT_ENGINE_SPEC §3.3 (Runtime - Router completion criteria), §4.4-4.7 (Example manifest usage)
-* RESEARCH.md §4.1-4.2 (Routing determinism and fallback logic)
+Provide a fully functional `Engine.from_config_dir()` capable of loading a canonical project.
 
-### Design Gaps (Requires Sonnet Input)
-* **Pipeline selection algorithm**: How are "task mode, tags, and simple scores" evaluated for deterministic pipeline choice?
-* **Fallback matrix structure**: Precise format and lookup logic for `(failure_category, current_stage_type) → fallback_stage_id` mapping.
-* **Override application semantics**: How do safe-mode flags and task-level overrides deterministically alter routing decisions? Traceability on Task?
-* **Edge selection logic**: When multiple edges are available (e.g., from decision nodes), how does router select which to follow?
+## Tasks
 
-### Files to touch
+### 1. Engine façade
 
-* `src/agent_engine/runtime/router.py`
-* `src/agent_engine/schemas/task.py` (RoutingDecision)
-* `src/agent_engine/schemas/override.py`
-* `src/agent_engine/schemas/errors.py` (FailureSignature)
-* `src/agent_engine/runtime/pipeline_executor.py` (router integration)
-* `tests/test_runtime.py`
-* `tests/test_dag_validator.py` (for routing-related constraints)
+Implement public API exactly as PROJECT_INTEGRATION_SPEC defines:
+`Engine.from_config_dir(path)` and `Engine.run(input)`.
 
-### Key implementations
 
-1. **Routing core**
+### 2. Manifest loader
 
-   * `Router.choose_pipeline(task: Task, pipelines: list[Pipeline]) -> Pipeline`:
+* Load workflow, agents, tools, memory, schemas, plugins.
+* Validate using schemas from Phase 1.
 
-     * Deterministic selection based on task mode, tags, and possibly simple scores from manifests.
-   * `Router.next_stage(task, workflow_graph, current_stage, last_result, failure_signature=None)`:
+### 3. DAG construction
 
-     * Normal progression via edges defined in graph.
-     * Error/fallback edges consulted when `failure_signature` present.
+* Build in-memory DAG with nodes + edges strictly following canonical semantics.
+* Verify structural constraints.
 
-2. **Fallback matrix**
+### 4. Error reporting
 
-   * Encode a simple fallback matrix in config (or derived from manifests) mapping:
+* Provide structured, helpful manifest load errors.
 
-     * `(failure_category, current_stage_type) → fallback_stage_id` (optional).
-   * Router consults this when `pipeline_executor` passes an error categorized by JSON engine or runtime. 
+## Success Criteria
 
-3. **Override integration**
-
-   * Before making routing decisions, check for `OverrideSpec` on Task (e.g., “analysis only”, “skip tools”).
-   * Adjust routing accordingly (e.g., avoid tool-heavy pipelines, require review stages).
-
-### Invariants & edge cases
-
-* Router must always respect DAG; it may pick which edge, but never invent edges.
-* Overrides must be applied deterministically and traceably (record decisions on Task).
-
-### Minimum tests
-
-* `test_runtime.py`:
-
-  * When a stage fails, router picks configured fallback node.
-  * Overrides change pipeline choice (e.g., analysis-only pipeline selected).
+* Minimal example config loads without errors.
+* Invalid configs produce deterministic errors.
 
 ---
 
-## Phase 8 – Telemetry & Event Bus v1.0: Sinks, Cost Tracking, Wiring
+# **Phase 3 — Task Model, History, and Status Propagation**
 
-**Status: 🟢 HAIKU READY** (mechanical wiring of event emission and sinks, once event types are defined)
+*(Haiku implementation, Sonnet optional)*
 
-**Goal:** Turn the current in-memory telemetry stub into the observability backbone described in the overview/spec.
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §11 (Telemetry & Event Bus)
-* AGENT_ENGINE_SPEC §3.6 (Telemetry & Events completion criteria)
-* RESEARCH.md §6-7 (Event types and observability)
+Implement the canonical Task data structure and lineage rules.
 
-### Note on Cost Estimation
-* Cost per model must be configured externally (cost tables per provider/model); engine does not compute costs itself, only tracks token counts for cost calculation by sinks.
-* See Phase 10 for LLM adapter cost tracking integration.
+Matches AGENT_ENGINE_SPEC §2.1 and OVERVIEW §1.1.
 
-### Files to touch
+## Tasks
 
-* `src/agent_engine/telemetry.py`
-* `src/agent_engine/schemas/event.py`
-* `src/agent_engine/runtime/agent_runtime.py`
-* `src/agent_engine/runtime/tool_runtime.py`
-* `src/agent_engine/runtime/pipeline_executor.py`
-* `src/agent_engine/runtime/task_manager.py`
-* `src/agent_engine/runtime/llm_client.py`
-* `tests/test_llm_client.py`
-* `tests/test_runtime.py`
-* `tests/test_plugins_and_patterns.py` (if they depend on events)
+* Implement status model (`success`, `failure`, `partial`).
+* Implement history entries recording input, output, tools, timestamps.
+* Implement lineage rules: clones & subtasks.
+* Parent completion rules for Branch and Split.
 
-### Key implementations
+## Success Criteria
 
-1. **TelemetryBus + sinks**
-
-   * Implement `TelemetryBus` with:
-
-     * In-memory store (existing)
-     * File sink (JSONL)
-     * Stdout sink
-   * Events include:
-
-     * Task created, stage started/finished, agent/tool called, memory retrieved, routing decision, errors, cost/time metrics. 
-
-2. **Cost & token metrics**
-
-   * Extend `LLMClient` responses to include `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_estimate`.
-   * Emit telemetry events carrying these metrics for each agent/tool call. 
-
-3. **Wiring from runtimes**
-
-   * Agent runtime, tool runtime, pipeline executor, and task manager must all emit appropriate events through `TelemetryBus`.
-
-### Invariants & edge cases
-
-* Telemetry must not crash the engine; sink failures should degrade gracefully (e.g., log + continue).
-* Sensitive payloads must be redacted or metadata-only, as per future privacy design.
-
-### Minimum tests
-
-* `test_runtime.py`:
-
-  * Running a simple pipeline produces expected sequence of telemetry events.
-* `test_llm_client.py`:
-
-  * Cost and token metrics propagated correctly.
+* Tests validate correct lineage and status propagation.
+* History is complete and deterministic.
 
 ---
 
-## Phase 9 – Plugin & Hook System v1.0
+# **Phase 4 — Node Execution Skeleton & Tool Invocation**
 
-**Status: 🟢 HAIKU READY** (mechanical plugin registration and event subscription wiring)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Implement hook surfaces and plugin manager so that external code can observe and modify behavior without changing core engine.
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §12 (Plugin & Hook System)
-* AGENT_ENGINE_SPEC §3.7 (Plugin System completion criteria)
-* RESEARCH.md §3.2, §5 (Hook surfaces and plugin integration points)
+Implement the lifecycle of a single node execution.
 
-### Files to touch
+Matches AGENT_ENGINE_SPEC §3.2.
 
-* `src/agent_engine/plugins/manager.py`
-* `src/agent_engine/telemetry.py` (for event subscription)
-* `src/agent_engine/runtime/pipeline_executor.py`
-* `src/agent_engine/runtime/agent_runtime.py`
-* `src/agent_engine/runtime/tool_runtime.py`
-* `src/agent_engine/runtime/context.py` (optional hooks)
-* `src/agent_engine/schemas/override.py` (if plugin-configurable)
-* `tests/test_plugins_and_patterns.py`
 
-### Key implementations
+## Tasks
 
-1. **Hook surfaces**
+* Context assembly (using Phase 6 hooks later).
+* Deterministic vs agent-driven execution paths.
+* Schema validation of node outputs.
+* ToolPlan invocation & tool permission enforcement.
+* Failure behavior (`continue_on_failure`, `fail_on_failure`).
 
-   * Define hook points:
+## Success Criteria
 
-     * before/after task
-     * before/after stage
-     * before/after agent
-     * before/after tool
-     * on error / on task completion
-   * Represent hooks as simple callables with typed payloads (e.g., `HookContext` objects).
-
-2. **PluginManager**
-
-   * Load plugin definitions from manifest (via config loader).
-   * Register plugins, subscribe them to hooks/events.
-   * Provide simple APIs:
-
-     * `manager.register(plugin)`
-     * `manager.emit(hook_name, context)`
-
-3. **Integration**
-
-   * Pipeline executor and runtimes call plugin hooks at well-defined points; plugin failures must not crash engine by default.
-
-### Invariants & edge cases
-
-* Hooks must be clearly documented and stable; breaking them should be treated as a breaking change.
-* Plugins must not be able to bypass core security invariants (e.g., they can veto a tool call but not silently execute arbitrary ones).
-
-### Minimum tests
-
-* `test_plugins_and_patterns.py`:
-
-  * Simple plugin that logs hook invocations; verify hooks fire in correct order.
-  * Plugin that vetoes a tool call results in tool not being executed.
+* Correct execution of simple linear workflows with tools + LLMs.
+* Output validation errors handled deterministically.
 
 ---
 
-## Phase 10 – LLM Adapter Layer v1.0: Multi-Provider, Streaming, Token/Cost Accounting
+# **Phase 5 — Router v1.0 (Deterministic DAG Routing)**
 
-**Status: 🟢 HAIKU READY** (once LLMClient interface finalized; mostly provider-specific implementations)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Complete the LLM adapter layer to match overview/spec: backend-agnostic interface, multiple providers, token/cost tracking, streaming support.
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §13 (LLM Backend Interface)
-* AGENT_ENGINE_SPEC §3.8 (LLM Adapter completion criteria)
-* RESEARCH.md §3-5 (Provider-specific considerations)
+Implement the canonical DAG router.
+Matches AGENT_ENGINE_SPEC §3.1 and OVERVIEW §1.3–1.5.
 
-### Additional Details (from Canonical Docs)
-* **Streaming support**: Phase overview mentions "streaming (even if not yet used)"; implement streaming interface in adapters but agent runtime (Phase 4) uses non-streaming for now.
-* **Cost estimation**: Cost tables should be externally configurable per provider/model; engine tracks `prompt_tokens`, `completion_tokens`, `total_tokens` and lets plugins compute cost via external tables.
-* **Supported providers**: Anthropic, OpenAI, Ollama (per plan); other providers can be added later.
+## Tasks
 
-### Files to touch
+### Routing semantics per role
 
-* `src/agent_engine/runtime/llm_client.py`
-* `src/agent_engine/schemas/agent.py` (if backend configuration fields needed)
-* `src/agent_engine/config_loader.py` (LLM config support)
-* `tests/test_llm_client.py`
-* `tests/test_basic_llm_agent_example.py`
+* Start: select default or explicit
+* Linear: single outbound
+* Decision: interpret output → pick labeled edge
+* Branch: spawn **clones**
+* Split: spawn **subtasks**
+* Merge: wait for all inbound results
+* Exit: halt (read-only)
 
-### Key implementations
+### Error routing
 
-1. **Common interface**
+* Use explicit **error edges only**
+* No secret fallback paths
 
-   * Finalize `LLMClient` protocol:
+## Success Criteria
 
-     * `generate(prompt: Prompt, *, temperature: float, max_tokens: int, ...) -> LLMResult`
-     * `stream_generate(...) -> Iterable[LLMChunk]`
-   * `LLMResult` must include:
-
-     * `text`, `raw`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_estimate`.
-
-2. **Adapters**
-
-   * Implement:
-
-     * `AnthropicLLMClient` (existing, refined)
-     * `OllamaLLMClient`
-     * `OpenAILLMClient` (new)
-   * Configuration from manifests (model names, API keys via env/config).
-
-3. **Streaming integration (minimal)**
-
-   * Implement streaming in adapters (even if not yet used by Agent Runtime) with a simple interface; ensure non-streaming paths still work.
-
-### Invariants & edge cases
-
-* LLM adapters must not throw provider-specific exceptions; they should map into `EngineError` categories.
-* Token and cost calculations must be deterministic for a given provider/version.
-
-### Minimum tests
-
-* `test_llm_client.py`:
-
-  * Mocked adapters for all providers.
-  * Token and cost fields present and sane.
-* `test_basic_llm_agent_example.py`:
-
-  * Example can switch between providers by changing manifest/config.
+* All canonical node role rules behave exactly as specified.
+* No routing occurs outside DAG edges.
+* Branch/split/merge scenarios pass tests.
 
 ---
 
-## Phase 11 – Security Model v1.0: Permissions, Safe Modes, Audit Logging
+# **Phase 6 — Memory & Context v1**
 
-**Status: 🔵 SONNET DESIGN** (permissions model architecture; requires design before implementation)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Upgrade the partial security layer into a proper permissions system as per overview + research, wired through Tool Runtime and, where relevant, Agent Runtime.
+## Goal
 
-### References
-* AGENT_ENGINE_OVERVIEW §14 (Security & Permissions)
-* AGENT_ENGINE_SPEC §3.3 (Runtime - security component), §4.3 (Example tool permissions)
-* RESEARCH.md Appendix A (Permissions & Safe Modes)
+Implement memory stores and the context assembler.
 
-### Design Gaps (Requires Sonnet Input)
-* **Permission model granularity**: Filesystem (root + subpaths), network (allow/deny list), shell execution flags; default + per-agent + per-tool overrides.
-* **Safe-mode enforcement**: How `analysis_only` and `dry_run` flags block mutation operations in tools.
-* **Audit event schema**: What permission checks and denials are logged; sensitivity redaction policy.
+Matches OVERVIEW §1.5 and PROJECT_INTEGRATION_SPEC memory.yaml.
 
-### Files to touch
+## Tasks
 
-* `src/agent_engine/security.py`
-* `src/agent_engine/utils/filesystem_safety.py`
-* `src/agent_engine/runtime/tool_runtime.py`
-* `src/agent_engine/schemas/tool.py`, `agent.py`, `memory.py` (permissions & safe-mode fields)
-* `src/agent_engine/telemetry.py`
-* `tests/utils/test_filesystem_safety.py`
-* `tests/test_agent_and_tool_runtime.py`
-* `tests/test_runtime.py`
+* Implement task/project/global memory.
+* Implement context profiles with retrieval policies.
+* Implement token budgeting + HEAD/TAIL compression.
+* Implement context assembly for each node execution.
 
-### Key implementations
+## Success Criteria
 
-1. **Permissions model**
-
-   * Define security policies:
-
-     * Filesystem scopes (root + allowed subpaths).
-     * Network access flags.
-     * Shell execution toggles.
-   * Attach policies to:
-
-     * Tool definitions.
-     * Agent definitions (what tools they may call).
-
-2. **Safe modes & overrides**
-
-   * Support flags like `analysis_only`, `dry_run` via overrides and/or Task mode.
-   * Ensure Tool Runtime enforces these safe modes (e.g., log-only vs actual write).
-
-3. **Audit logging**
-
-   * Emit telemetry events for:
-
-     * Permission checks
-     * Denials
-     * Potentially sensitive tool calls
-
-### Invariants & edge cases
-
-* No tool may run outside its configured capability set or allowed filesystem/network scope.
-* Denials must be explicit and auditable.
-
-### Minimum tests
-
-* `test_agent_and_tool_runtime.py`:
-
-  * Tools blocked by safe-mode flags.
-* `test_filesystem_safety.py`:
-
-  * Paths outside allowed root are rejected.
+* Deterministic context slices for any task/node.
+* Tests verify token budgeting + retrieval logic.
 
 ---
 
-## Phase 12 – Patterns Library (Optional) & Manifest Templates
+# **Phase 7 — Error Handling, Status Propagation & Exit Behavior**
 
-**Status: 🟢 HAIKU READY** (template implementations once core engine APIs stable)
+*(Haiku implementation)*
 
-**Goal:** Provide optional pattern manifests (committee, supervisor, chat) that are **strictly separated** from the core engine and can be used as examples.
+## Goal
 
-**Mark this phase as OPTIONAL / Phase N+; not required for core completion.**
+Finalize all error-handling semantics and ensure exit nodes behave canonically.
 
-### References
-* AGENT_ENGINE_SPEC §3.9 (Patterns Library - optional but clean)
-* AGENT_ENGINE_OVERVIEW §1 (Patterns library as optional manifest templates)
+Matches AGENT_ENGINE_SPEC §3.4 and OVERVIEW semantics.
 
-### Pattern Implementations (from Canonical Docs)
-* **Committee-of-agents pattern**: Multiple agents voting or reaching consensus
-* **Supervisor + worker pattern**: One coordinator agent, multiple specialist workers
-* **Chat pattern**: Conversational agent with memory and turn-taking (NEW – from canonical docs)
+## Tasks
 
-All patterns must:
-* Rely only on public `Engine` APIs + manifests
-* Be implemented as helper functions / manifests, not built-in behavior
-* Have no core engine imports or dependencies
-* Be disabled unless explicitly authored in `plugins.yaml` or manifest
+* Node-level failure logic
+* Task-level failure/partial propagation
+* Merge interaction with failures
+* Exit node behavior (structured output only, no LLM, no tools)
 
-### Files to touch
+## Success Criteria
 
-* `src/agent_engine/patterns/committee.py`, `supervisor.py`, `chat.py` (NEW)
-* `configs/patterns/*` (new example manifests)
-* `tests/test_plugins_and_patterns.py`
-
-### Key implementations
-
-* Implement simple helper functions or templates for:
-
-  * Committee-of-agents pattern
-  * Supervisor + worker pattern
-  * Chat pattern (conversational loop with memory)
-* Ensure:
-
-  * These rely only on public Engine APIs + manifests.
-  * They are not required by any tests for the core engine (only by pattern-specific tests).
+* Failures and partials propagate exactly per spec.
+* All exit nodes behave read-only and deterministic.
 
 ---
 
-## Phase 13 – Example App & Public API-Only Usage
+# **Phase 8 — Telemetry & Event Bus**
 
-**Status: 🟢 HAIKU READY** (CLI glue code; manifests drive all behavior)
+*(Haiku implementation, Sonnet optional)*
 
-**Goal:** Ensure there is at least one example app that uses only the public Engine façade and public config surfaces. Example manifests demonstrate all major features and conform to the integration contract.
+## Goal
 
-### References
-* PROJECT_INTEGRATION_SPEC §1-9 (External contract: manifests, API surfaces, validation)
-* AGENT_ENGINE_SPEC §4 (Example Project Structure & Manifests)
-* AGENT_ENGINE_OVERVIEW §1, §2 (Engine responsibilities and configuration)
+Add observability hooks for internal introspection and plugin consumption.
 
-### Detailed Manifest Structure (from Canonical Docs)
-The example should include the full manifest suite from SPEC §4:
-* **agents.yaml**: Agent definitions with models, context profiles, tool lists, output schemas
-* **tools.yaml**: Tool definitions with types, filesystem roots, command allowlists
-* **workflow.yaml**: DAG nodes (agent, tool, decision, merge) and edges with conditions
-* **pipelines.yaml**: Pipeline templates mapping node types to stage sequences
-* **memory.yaml**: Task/project/global stores and context profile configurations
-* **plugins.yaml**: Telemetry loggers and optional cost tracking plugins
+Matches AGENT_ENGINE_SPEC §6.
 
-Example should mirror the "Code Gremlin" spec but simplified (e.g., one agent instead of three).
 
-### Files to touch
+## Tasks
 
-* `examples/basic_llm_agent/cli.py`
-* `configs/basic_llm_agent/agents.yaml` (refined per spec)
-* `configs/basic_llm_agent/tools.yaml` (refined per spec)
-* `configs/basic_llm_agent/workflow.yaml`
-* `configs/basic_llm_agent/pipelines.yaml`
-* `configs/basic_llm_agent/memory.yaml`
-* `configs/basic_llm_agent/plugins.yaml`
-* `tests/test_basic_llm_agent_example.py`
-* `docs/operational/README.md`
+* Implement event bus
+* Emit events for:
 
-### Key implementations
+  * task start/end
+  * node start/end
+  * routing decisions
+  * tool calls
+  * context assembly
+  * clone/subtask creation
+* Attach telemetry to DAG executor + router + node executor
 
-* Refactor `cli.py` to:
+## Success Criteria
 
-  * Instantiate `Engine` via `Engine.from_config_dir("configs/basic_llm_agent")`.
-  * Use `Engine.run_one` or `Engine.create_task` + `Engine.run_task`.
-* Manifests should be complete, matching SPEC §4 example structure.
-
-### Invariants & edge cases
-
-* Example must not import from `runtime.*` directly.
-* Changing manifests should allow reconfiguring the workflow without code changes.
-* All manifests must validate against engine schemas.
-
-### Minimum tests
-
-* `test_basic_llm_agent_example.py`:
-
-  * Confirm example uses Engine façade and that end-to-end behavior still works.
-  * Verify all manifests validate and load correctly.
-  * Simple execution: create task → run pipeline → verify output structure.
+* All major engine actions produce deterministic events.
+* Telemetry tests confirm correct event payloads.
 
 ---
 
-## Phase 14 – Tests, Hardening, and Minimal Benchmarks
+# **Phase 9 — Plugin System v1 (Read-Only Observers)**
 
-**Status: 🟢 HAIKU READY** (test writing once behaviors are defined in prior phases)
+*(Sonnet-plan + Haiku implementation)*
 
-**Goal:** Close coverage gaps identified in the status report, add edge-case tests, and introduce minimal performance/robustness checks.
+## Goal
 
-### Files to touch
+Implement plugin architecture for read-only engine observers.
 
-* `tests/*` (multiple)
-* Optionally new `tests/test_performance_basic.py`
-* `Makefile` / `pyproject.toml` (optional test targets)
+Matches PROJECT_INTEGRATION_SPEC plugins.yaml semantics.
 
-### Key implementations
 
-* Add tests for:
+## Tasks
 
-  * Error/retry paths in executor and JSON engine.
-  * Context compression and paging decisions.
-  * Plugin system & hooks under failure.
-  * Checkpoint save/load of large tasks.
-  * Multi-task concurrency (simple parallel runs).
-* Add a minimal benchmark-like test:
+* `plugins.yaml` loader
+* Plugin interface:
+  `on_event(event: EngineEvent) -> None`
+* Register plugins with event bus
+* Guarantee plugins:
 
-  * Run a simple pipeline N times and assert time and memory are within reasonable bounds (no leaks).
+  * cannot mutate task state
+  * cannot modify routing
+  * cannot modify the DAG
+  * cannot access internal runtime modules directly
 
-### Invariants & edge cases
+## Success Criteria
 
-* All phases’ new behavior must be covered by at least basic tests; no critical subsystem left untested on failure paths.
-* Keep performance tests lightweight enough for normal CI runs.
-
----
-
-## Phase N+ (Optional Advanced Features from RESEARCH)
-
-These are explicitly **optional** and should be clearly marked as experimental features that depend on future research:
-
-* **Learned / MoA routing** (Mixture-of-agents, learned routers).
-* **Learned retrieval policies for context** (dense retrievers, bandits).
-* **Agent evolution** (manifest mutation, fitness-based selection).
-* **RL-style safety training for tool use.**
-* **Advanced patterns (ReAct debate, PromptBreeder, etc.).**
-
-These should each become their own later phases that **plug into** the already-complete engine via telemetry, plugins, and existing schemas, not by rewriting the core.
+* Plugins receive deterministic events.
+* Engine remains fully deterministic regardless of plugins.
+* Plugin failures never alter routing or task behavior.
 
 ---
 
-## Implementation Summary by Tier
+# **Phase 10 — Example App & Documentation**
 
-### 🟢 HAIKU READY – Immediate Execution (No Design Blocker)
-| Phase | Title | Dependencies |
-|-------|-------|--------------|
-| 0 | Repo Cleanup & API Shell | ✅ Done |
-| 1 | Core Schemas & DAG Model | ✅ Done (precondition for 2+) |
-| 8 | Telemetry & Event Bus | Phase 2 error taxonomy |
-| 9 | Plugin & Hook System | Phase 8 event types |
-| 10 | LLM Adapter Layer | None |
-| 12 | Patterns Library | Phases 2–11 (core engine stable) |
-| 13 | Example App & Manifests | Phases 2–11 (core engine stable) |
-| 14 | Tests & Hardening | All prior phases for behavior specs |
+*(Haiku implementation)*
 
-### 🔵 SONNET DESIGN – Requires Design Input Before Implementation
-| Phase | Title | Key Design Decisions |
-|-------|-------|---------------------|
-| 2 | Pipeline Executor & Task Manager | Merge semantics, error recovery matrix, fallback routing |
-| 4 | Agent Runtime v1.0 | Prompt structure, compression algorithm, context profile application |
-| 5 | Tool Runtime v1.0 | ToolPlan schema (detailed), tool execution model, security decision logic |
-| 6 | Memory & Context System | Five-layer memory mapping, RAG integration, retrieval policies |
-| 7 | Router v1.0 | Pipeline selection algorithm, fallback matrix structure, override application |
-| 11 | Security Model v1.0 | Permission granularity, safe-mode enforcement, audit schema |
+## Goal
 
-### 🟡 NEEDS INFO – Blocked by Other Phases
-| Phase | Title | Blocker |
-|-------|-------|---------|
-| 3 | JSON Engine v1.0 | Phase 2 (error taxonomy definition) |
+Provide a minimal, canonical reference implementation.
 
-### 📌 OPTIONAL – Core Engine Complete Without These
-| Phase | Title | Note |
-|-------|-------|------|
-| 12 | Patterns Library | Optional pattern templates; engine runs fine without |
-| N+ | Advanced Features | Experimental research features; plug into stable core |
+## Tasks
 
----
+* Build an example project with:
 
-## Implementation Order (Recommended)
+  * workflow.yaml
+  * agents.yaml
+  * tools.yaml
+  * memory.yaml
+  * schemas/
+  * plugins.yaml (stub)
+* Add CLI runner demonstrating:
+  `Engine.from_config_dir().run(input)`
+* Update documentation to match AGENT_ENGINE_SPEC & PROJECT_INTEGRATION_SPEC.
+* Provide diagrams of:
 
-1. **✅ Phase 0-1**: Repo cleanup and schemas (foundation)
-2. **🔵 Sonnet Design Work**: Phases 2, 4–7, 11 (design critical paths concurrently if possible)
-3. **Phase 2**: Pipeline Executor (once designed; unlocks testing of later phases)
-4. **Phases 3, 5**: JSON Engine, Tool Runtime (once Phase 2 defines error model)
-5. **Phases 4, 6**: Agent Runtime, Memory System (design-dependent)
-6. **Phase 7**: Router (integrates with phases 2–6)
-7. **Phase 8**: Telemetry (wires through 2–7)
-8. **Phase 9-11**: Plugins, LLM Adapters, Security
-9. **Phases 13-14**: Example app, tests (final polish)
-10. **Phase 12, N+**: Patterns and optional features (if time permits)
+  * DAG structure
+  * node lifecycle
+  * routing semantics
+  * task lineage
+  * plugin flow
+
+## Success Criteria
+
+* Example app runs end-to-end.
+* Docs are internally consistent and match canonical architecture.
+* No reference to pipelines or deprecated features appears.
 
 ---
 
-## Relationship to Canonical Docs
+# **5. Non-Goals for v1**
 
-The plan now explicitly cross-references all four canonical documents:
-* **AGENT_ENGINE_OVERVIEW** – High-level architecture and responsibilities
-* **AGENT_ENGINE_SPEC** – Definition of Done and acceptance criteria
-* **RESEARCH.md** – Detailed algorithmic and design details (referenced within phase descriptions)
-* **PROJECT_INTEGRATION_SPEC** – External contract between projects and engine (manifests, API surfaces, invariants)
+To prevent LLM drift or hallucination:
 
-Phases that require **Sonnet Design** will produce mini-design docs answering the specific "Design Gaps" listed, which will then guide Haiku implementation.
+Agent Engine v1 **must not** implement:
 
-The integration specification (PROJECT_INTEGRATION_SPEC) is the authoritative source for what external projects can rely on. Internal engine implementations (Phases 0-14) must ensure the engine honors this contract.
+* learned or MoA routing
+* active plugins that influence routing
+* multi-DAG routing
+* dynamic pipeline selection
+* retry loops inside the DAG
+* conversational loops inside the DAG
+* automatic tool selection
+* schema inference
+* dynamic DAG modification
+
+All of these belong strictly in **Future Work**.
+
+---
+
+# **6. Future Work (Beyond v1 Scope)**
+
+This section collects all speculative or research-oriented ideas.
+They are explicitly *not part of the v1 build* and must not be implemented by LLMs during v1.
+
+## **FW-1: Multi-Agent Patterns Library**
+
+(committee, supervisor/worker, debate, reviews)
+These patterns must be implemented *outside* the DAG using the public Engine API.
+
+## **FW-2: Learned / MoA Router Variants**
+
+Using telemetry, classifiers, or model-of-agents routing.
+These must wrap the deterministic router rather than replace it.
+
+## **FW-3: Adaptive Context Budgeting**
+
+Auto-tuning context profiles based on token usage and telemetry.
+
+## **FW-4: Advanced Plugin Types**
+
+Plugins that propose suggestions, not decisions:
+
+* “Consider using agent X instead of Y”
+* “Consider alternate start node”
+  These should only be enabled via explicit user control.
+
+## **FW-5: Distributed Execution & Remote Nodes**
+
+Execution of deterministic nodes or agent nodes across distributed backends.
+
+## **FW-6: Interactive Debugging & Replay Tools**
+
+UI or CLI tools for navigating task history and replaying per-node execution.
+
+## **FW-7: DAG Authoring Tools**
+
+Visual editors, schema-aware IDE plugins, etc.
+
+---
+
+# **7. Definition of Done for Agent Engine v1**
+
+Agent Engine is **complete** when:
+
+* All phases 0–10 are implemented
+* All canonical documents are satisfied
+* DAG execution matches the formal semantics exactly
+* Tool invocation, routing, and context assembly are deterministic
+* Status propagation rules behave per spec
+* Telemetry emits complete traces
+* Plugins can observe but never influence execution
+* Example app runs successfully
+* All tests pass with no reference to legacy features
+
+---
+
+# **End of PLAN_BUILD_AGENT_ENGINE.md**

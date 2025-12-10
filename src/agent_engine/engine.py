@@ -7,7 +7,7 @@ from agent_engine.config_loader import EngineConfig, load_engine_config
 from agent_engine.plugins import PluginManager
 from agent_engine.runtime.agent_runtime import AgentRuntime
 from agent_engine.runtime.context import ContextAssembler
-from agent_engine.runtime.pipeline_executor import PipelineExecutor
+from agent_engine.runtime.dag_executor import DAGExecutor
 from agent_engine.runtime.router import Router
 from agent_engine.runtime.task_manager import TaskManager
 from agent_engine.runtime.tool_runtime import ToolRuntime
@@ -20,10 +20,10 @@ class Engine:
     """Facade that runs manifest-driven Agent Engine workloads.
 
     Example applications must use Engine and public schemas only; runtime internals (router,
-    task manager, pipeline executor, etc.) must not be imported directly.
+    task manager, dag executor, etc.) must not be imported directly.
     """
 
-    _REQUIRED_MANIFESTS = ("agents", "tools", "stages", "workflow", "pipelines")
+    _REQUIRED_MANIFESTS = ("agents", "tools", "workflow")
 
     @classmethod
     def from_config_dir(
@@ -75,7 +75,7 @@ class Engine:
         context_assembler: Optional[ContextAssembler] = None,
         agent_runtime: Optional[AgentRuntime] = None,
         tool_runtime: Optional[ToolRuntime] = None,
-        pipeline_executor: Optional[PipelineExecutor] = None,
+        dag_executor: Optional[DAGExecutor] = None,
     ):
         """Initialize the Engine with resolved runtime components."""
         self.config = config
@@ -85,7 +85,7 @@ class Engine:
 
         self.task_manager = task_manager or TaskManager()
         self.router = router or Router(
-            workflow=config.workflow, pipelines=config.pipelines, stages=config.stages
+            workflow=config.workflow, stages=config.stages
         )
         self.context_assembler = context_assembler or ContextAssembler(memory_config=config.memory)
         self.agent_runtime = agent_runtime or AgentRuntime(llm_client=self.llm_client)
@@ -93,7 +93,7 @@ class Engine:
             tools=config.tools,
             llm_client=self.llm_client,
         )
-        self.pipeline_executor = pipeline_executor or PipelineExecutor(
+        self.dag_executor = dag_executor or DAGExecutor(
             task_manager=self.task_manager,
             router=self.router,
             context_assembler=self.context_assembler,
@@ -124,14 +124,11 @@ class Engine:
                 request=input,
                 mode=mode_enum,
             )
-        pipeline = self.router.choose_pipeline(task_spec=task_spec)
-        return self.task_manager.create_task(spec=task_spec, pipeline_id=pipeline.pipeline_id)
+        return self.task_manager.create_task(spec=task_spec)
 
     def run_task(self, task: Task) -> Task:
-        """Run a Task through its configured pipeline."""
-        if not task.pipeline_id:
-            raise ValueError("Task must have a pipeline_id before execution.")
-        return self.pipeline_executor.run(task=task, pipeline_id=task.pipeline_id)
+        """Run a Task through the workflow DAG."""
+        return self.dag_executor.run(task=task)
 
     def run_one(self, input: str | TaskSpec, mode: str | TaskMode = "default") -> Task:
         """Convenience helper that creates and runs a task in one call."""

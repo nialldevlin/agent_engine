@@ -28,7 +28,7 @@ from agent_engine.schemas import (
 
 def test_task_spec_and_task_instantiation() -> None:
     spec = TaskSpec(task_spec_id="spec-1", request="Fix bug", mode=TaskMode.ANALYSIS_ONLY)
-    task = Task(task_id="task-1", spec=spec, pipeline_id="pipe-1")
+    task = Task(task_id="task-1", spec=spec)
     assert task.status == TaskStatus.PENDING
     assert task.spec.request == "Fix bug"
 
@@ -166,21 +166,5 @@ def test_task_mode_safe_modes() -> None:
     assert TaskMode.REVIEW.value == "review"
 
 
-def test_pipeline_round_trip() -> None:
-    """Test Pipeline schema round-trip serialization."""
-    from agent_engine.schemas import Pipeline
-
-    pipeline = Pipeline(
-        pipeline_id="pipe-1",
-        name="main",
-        description="Main pipeline",
-        workflow_id="wf1",
-        start_stage_ids=["start"],
-        end_stage_ids=["end"],
-        allowed_modes=["analysis_only", "implement"],
-    )
-    payload = pipeline.model_dump()
-    restored, err = validate("pipeline", payload)
-    assert err is None
-    assert restored.pipeline_id == "pipe-1"
-    assert "analysis_only" in restored.allowed_modes
+# DEPRECATED: Pipeline schema is no longer part of canonical architecture
+# The test_pipeline_round_trip test has been removed as Pipeline is not exported

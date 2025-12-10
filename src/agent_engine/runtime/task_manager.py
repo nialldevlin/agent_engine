@@ -61,12 +61,11 @@ def _extract_project_id(task_id: str) -> str:
 class TaskManager:
     tasks: Dict[str, Task] = field(default_factory=dict)
 
-    def create_task(self, spec: TaskSpec, pipeline_id: str, task_id: str | None = None) -> Task:
+    def create_task(self, spec: TaskSpec, task_id: str | None = None) -> Task:
         task = Task(
             task_id=task_id or _generate_task_id(spec),
             spec=spec,
             status=TaskStatus.PENDING,
-            pipeline_id=pipeline_id,
             created_at=_now_iso(),
             updated_at=_now_iso(),
         )
@@ -273,23 +272,22 @@ class TaskManager:
         storage_root: Path = Path(".agent_engine/tasks")
     ) -> Tuple[Optional[Dict[str, Any]], Optional[EngineError]]:
         """Get task metadata without loading full task into memory.
-        
-        Reads only required fields: task_id, status, pipeline_id, timestamps.
+
+        Reads only required fields: task_id, status, timestamps.
         Lightweight operation for querying task history.
-        
+
         Args:
             task_id: Task identifier
             storage_root: Base directory for task storage
-            
+
         Returns:
             (metadata_dict, None) on success
             (None, EngineError) on failure
-            
+
         Metadata dict structure:
             {
                 "task_id": str,
                 "status": str,
-                "pipeline_id": str,
                 "created_at": Optional[str],
                 "updated_at": Optional[str]
             }
@@ -324,7 +322,6 @@ class TaskManager:
         metadata = {
             "task_id": task_data.get("task_id"),
             "status": task_data.get("status"),
-            "pipeline_id": task_data.get("pipeline_id"),
             "created_at": task_data.get("created_at"),
             "updated_at": task_data.get("updated_at")
         }

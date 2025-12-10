@@ -74,7 +74,6 @@ class Task(SchemaBase):
     task_id: str
     spec: TaskSpec
     status: TaskStatus = Field(default=TaskStatus.PENDING)
-    pipeline_id: str
     current_stage_id: Optional[str] = Field(default=None)
     stage_results: Dict[str, StageExecutionRecord] = Field(default_factory=dict)
     routing_trace: List[RoutingDecision] = Field(default_factory=list)
