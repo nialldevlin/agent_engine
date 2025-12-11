@@ -12,6 +12,7 @@ from agent_engine.runtime.deterministic_registry import DeterministicRegistry
 from agent_engine.runtime.artifact_store import ArtifactStore
 from agent_engine.runtime.metadata_collector import collect_engine_metadata
 from agent_engine.runtime.evaluator import Evaluator
+from agent_engine.runtime.metrics_collector import MetricsCollector
 
 __all__ = [
     "AgentRuntime",
@@ -29,6 +30,7 @@ __all__ = [
     "ArtifactStore",
     "collect_engine_metadata",
     "Evaluator",
+    "MetricsCollector",
 ]
 
 

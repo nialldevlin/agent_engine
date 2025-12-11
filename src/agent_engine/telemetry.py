@@ -6,11 +6,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, List, Optional
 from zoneinfo import ZoneInfo
+import time
 
-from agent_engine.schemas import Event, EventType
+from agent_engine.schemas import Event, EventType, MetricSample
 
 if TYPE_CHECKING:
     from agent_engine.plugin_registry import PluginRegistry
+    from agent_engine.runtime.metrics_collector import MetricsCollector
 
 
 def _now_iso() -> str:
@@ -23,6 +25,12 @@ class TelemetryBus:
     events: List[Event] = field(default_factory=list)
     strict: bool = False
     plugin_registry: Optional[PluginRegistry] = field(default=None)
+    metrics_collector: Optional[MetricsCollector] = field(default=None)
+
+    def __post_init__(self):
+        """Initialize start time tracking dicts."""
+        self._node_start_times: dict[str, float] = {}
+        self._tool_start_times: dict[str, float] = {}
 
     def emit(self, event: Event) -> None:
         """Emit event to bus and dispatch to plugins.
@@ -91,6 +99,11 @@ class TelemetryBus:
     # Node Events
     def node_started(self, task_id: str, node_id: str, role: str, kind: str, input_data: Any) -> None:
         """Emit node started event."""
+        # Store start time for duration calculation
+        key = f"{task_id}:{node_id}"
+        self._node_start_times[key] = time.time()
+
+        # Emit event
         self.emit(Event(
             event_id=f"node_started-{len(self.events)}",
             task_id=task_id,
@@ -105,8 +118,30 @@ class TelemetryBus:
             }
         ))
 
+        # Record counter metric
+        if self.metrics_collector:
+            self.metrics_collector.record_counter(
+                "node_execution_count",
+                tags={"task_id": task_id, "node_id": node_id, "role": role, "kind": kind}
+            )
+
     def node_completed(self, task_id: str, node_id: str, output: Any, status: str) -> None:
         """Emit node completed event."""
+        # Calculate duration and record timer metric
+        key = f"{task_id}:{node_id}"
+        if key in self._node_start_times:
+            duration_ms = (time.time() - self._node_start_times[key]) * 1000
+            del self._node_start_times[key]
+
+            # Record timer metric
+            if self.metrics_collector:
+                self.metrics_collector.record_timer(
+                    "node_execution_duration",
+                    duration_ms,
+                    tags={"task_id": task_id, "node_id": node_id, "status": status}
+                )
+
+        # Emit event
         self.emit(Event(
             event_id=f"node_completed-{len(self.events)}",
             task_id=task_id,
@@ -198,6 +233,11 @@ class TelemetryBus:
     # Tool Events
     def tool_invoked(self, task_id: str, node_id: str, tool_id: str, inputs: Any) -> None:
         """Emit tool invoked event."""
+        # Store tool start time
+        key = f"{task_id}:{node_id}:{tool_id}"
+        self._tool_start_times[key] = time.time()
+
+        # Emit event
         self.emit(Event(
             event_id=f"tool_invoked-{len(self.events)}",
             task_id=task_id,
@@ -211,8 +251,30 @@ class TelemetryBus:
             }
         ))
 
+        # Record counter metric
+        if self.metrics_collector:
+            self.metrics_collector.record_counter(
+                "tool_invocation_count",
+                tags={"task_id": task_id, "tool_name": tool_id}
+            )
+
     def tool_completed(self, task_id: str, node_id: str, tool_id: str, output: Any, status: str) -> None:
         """Emit tool completed event."""
+        # Calculate duration and record timer metric
+        key = f"{task_id}:{node_id}:{tool_id}"
+        if key in self._tool_start_times:
+            duration_ms = (time.time() - self._tool_start_times[key]) * 1000
+            del self._tool_start_times[key]
+
+            # Record timer metric
+            if self.metrics_collector:
+                self.metrics_collector.record_timer(
+                    "tool_invocation_duration",
+                    duration_ms,
+                    tags={"task_id": task_id, "tool_name": tool_id}
+                )
+
+        # Emit event
         self.emit(Event(
             event_id=f"tool_completed-{len(self.events)}",
             task_id=task_id,
@@ -303,3 +365,9 @@ class TelemetryBus:
                 "lineage": lineage.model_dump() if hasattr(lineage, 'model_dump') else str(lineage)
             }
         ))
+
+    def get_metrics(self) -> List[MetricSample]:
+        """Get all collected metrics."""
+        if self.metrics_collector:
+            return self.metrics_collector.get_samples()
+        return []

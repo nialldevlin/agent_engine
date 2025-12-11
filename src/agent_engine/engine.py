@@ -9,6 +9,8 @@ from .manifest_loader import (
     load_plugins_manifest,
     load_schemas
 )
+from .metrics_loader import load_metrics_manifest, parse_metrics
+from .runtime import MetricsCollector
 from .schema_validator import (
     validate_nodes,
     validate_edges,
@@ -20,7 +22,7 @@ from .schema_validator import (
 from .memory_stores import MemoryStore, initialize_memory_stores, initialize_context_profiles
 from .adapters import AdapterRegistry, initialize_adapters
 from .schemas.memory import ContextProfile
-from .schemas import Event, EventType, EngineMetadata
+from .schemas import Event, EventType, EngineMetadata, MetricSample
 from .runtime.task_manager import TaskManager
 from .runtime.node_executor import NodeExecutor
 from .runtime.router import Router
@@ -52,7 +54,8 @@ class Engine:
         context_profiles: Dict[str, ContextProfile],
         adapters: AdapterRegistry,
         plugins: List[Dict],
-        metadata: Optional[EngineMetadata] = None
+        metadata: Optional[EngineMetadata] = None,
+        metrics_collector: Optional[MetricsCollector] = None
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
@@ -65,6 +68,7 @@ class Engine:
         self.adapters = adapters
         self.plugins = plugins
         self.metadata = metadata
+        self.metrics_collector = metrics_collector
 
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager()
@@ -75,8 +79,8 @@ class Engine:
         # Initialize plugin registry (Phase 9)
         self.plugin_registry = PluginRegistry()
 
-        # Initialize telemetry (Phase 8) with plugin support
-        self.telemetry = TelemetryBus(plugin_registry=self.plugin_registry)
+        # Initialize telemetry (Phase 8) with plugin support and metrics
+        self.telemetry = TelemetryBus(plugin_registry=self.plugin_registry, metrics_collector=metrics_collector)
 
         # Load plugins from config directory (Phase 9)
         self._load_plugins(config_dir)
@@ -154,6 +158,7 @@ class Engine:
         memory_data = load_memory_manifest(path)  # Optional
         plugins_data = load_plugins_manifest(path)  # Optional
         schemas = load_schemas(path)
+        metrics_data = load_metrics_manifest(path)  # Optional (Phase 13)
 
         # Step 2: Validate manifest data
         nodes = validate_nodes(workflow_data.get('nodes', []), 'workflow.yaml')
@@ -191,6 +196,12 @@ class Engine:
         # Phase 11: Collect engine metadata
         metadata = collect_engine_metadata(path, adapters)
 
+        # Phase 13: Load metrics configuration
+        metrics_profiles = parse_metrics(metrics_data)
+        # Use first enabled profile or default
+        metrics_profile = next((p for p in metrics_profiles if p.enabled), None)
+        metrics_collector = MetricsCollector(metrics_profile)
+
         # Step 8: Return engine
         return cls(
             config_dir=path,
@@ -202,7 +213,8 @@ class Engine:
             context_profiles=context_profiles,
             adapters=adapters,
             plugins=plugins,
-            metadata=metadata
+            metadata=metadata,
+            metrics_collector=metrics_collector
         )
 
     def run(self, input: Any, start_node_id: Optional[str] = None) -> Dict[str, Any]:
@@ -298,6 +310,22 @@ class Engine:
             EngineMetadata instance or None if not available
         """
         return self.metadata
+
+    def get_metrics(self) -> List[MetricSample]:
+        """Get all collected metrics.
+
+        Returns:
+            List of MetricSample objects collected during execution
+        """
+        return self.telemetry.get_metrics()
+
+    def get_metrics_collector(self) -> Optional[MetricsCollector]:
+        """Get the metrics collector.
+
+        Returns:
+            MetricsCollector instance or None if not available
+        """
+        return self.metrics_collector
 
     def _load_plugins(self, config_dir: str) -> None:
         """Load plugins from config directory.

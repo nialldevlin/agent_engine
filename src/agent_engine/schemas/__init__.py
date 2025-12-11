@@ -54,6 +54,7 @@ from .evaluation import (
     EvaluationStatus,
     EvaluationSuite,
 )
+from .metrics import MetricType, MetricConfig, MetricsProfile, MetricSample
 
 __all__ = [
     "AgentDefinition",
@@ -129,4 +130,8 @@ __all__ = [
     "EvaluationResult",
     "EvaluationStatus",
     "EvaluationSuite",
+    "MetricType",
+    "MetricConfig",
+    "MetricsProfile",
+    "MetricSample",
 ]
