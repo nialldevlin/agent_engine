@@ -20,7 +20,7 @@ from .schema_validator import (
 from .memory_stores import MemoryStore, initialize_memory_stores, initialize_context_profiles
 from .adapters import AdapterRegistry, initialize_adapters
 from .schemas.memory import ContextProfile
-from .schemas import Event, EventType
+from .schemas import Event, EventType, EngineMetadata
 from .runtime.task_manager import TaskManager
 from .runtime.node_executor import NodeExecutor
 from .runtime.router import Router
@@ -29,6 +29,7 @@ from .runtime.tool_runtime import ToolRuntime
 from .runtime.context import ContextAssembler
 from .runtime.deterministic_registry import DeterministicRegistry
 from .runtime.artifact_store import ArtifactStore
+from .runtime.metadata_collector import collect_engine_metadata
 from .telemetry import TelemetryBus
 from .plugin_registry import PluginRegistry
 from .plugin_loader import PluginLoader
@@ -50,7 +51,8 @@ class Engine:
         memory_stores: Dict[str, MemoryStore],
         context_profiles: Dict[str, ContextProfile],
         adapters: AdapterRegistry,
-        plugins: List[Dict]
+        plugins: List[Dict],
+        metadata: Optional[EngineMetadata] = None
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
@@ -62,6 +64,7 @@ class Engine:
         self.context_profiles = context_profiles
         self.adapters = adapters
         self.plugins = plugins
+        self.metadata = metadata
 
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager()
@@ -106,7 +109,8 @@ class Engine:
             json_engine=self.json_engine,
             deterministic_registry=self.deterministic_registry,
             telemetry=self.telemetry,
-            artifact_store=self.artifact_store
+            artifact_store=self.artifact_store,
+            metadata=self.metadata
         )
 
         # Initialize router (Phase 5)
@@ -114,7 +118,8 @@ class Engine:
             dag=self.workflow,
             task_manager=self.task_manager,
             node_executor=self.node_executor,
-            telemetry=self.telemetry
+            telemetry=self.telemetry,
+            metadata=self.metadata
         )
 
     @classmethod
@@ -183,6 +188,9 @@ class Engine:
         # Step 7: Load plugins
         plugins = plugins_data.get('plugins', []) if plugins_data else []
 
+        # Phase 11: Collect engine metadata
+        metadata = collect_engine_metadata(path, adapters)
+
         # Step 8: Return engine
         return cls(
             config_dir=path,
@@ -193,7 +201,8 @@ class Engine:
             memory_stores=memory_stores,
             context_profiles=context_profiles,
             adapters=adapters,
-            plugins=plugins
+            plugins=plugins,
+            metadata=metadata
         )
 
     def run(self, input: Any, start_node_id: Optional[str] = None) -> Dict[str, Any]:
@@ -281,6 +290,14 @@ class Engine:
             ArtifactStore instance
         """
         return self.artifact_store
+
+    def get_metadata(self) -> Optional[EngineMetadata]:
+        """Get engine metadata collected during initialization.
+
+        Returns:
+            EngineMetadata instance or None if not available
+        """
+        return self.metadata
 
     def _load_plugins(self, config_dir: str) -> None:
         """Load plugins from config directory.

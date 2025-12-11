@@ -48,7 +48,8 @@ class NodeExecutor:
         json_engine,
         deterministic_registry,
         telemetry=None,
-        artifact_store=None
+        artifact_store=None,
+        metadata=None
     ):
         self.agent_runtime = agent_runtime
         self.tool_runtime = tool_runtime
@@ -57,6 +58,7 @@ class NodeExecutor:
         self.deterministic_registry = deterministic_registry
         self.telemetry = telemetry
         self.artifact_store = artifact_store
+        self.metadata = metadata
 
     def execute_node(
         self,

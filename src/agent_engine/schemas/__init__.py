@@ -44,6 +44,7 @@ from .tool_io import ExecutionInput, ExecutionOutput, GatherContextInput, Gather
 from .workflow import Edge, WorkflowGraph
 from .router import MergeInputItem, WorkItem, WorkItemKind, MergeWaitState
 from .artifact import ArtifactType, ArtifactMetadata, ArtifactRecord
+from .metadata import EngineMetadata
 
 __all__ = [
     "AgentDefinition",
@@ -111,4 +112,5 @@ __all__ = [
     "ArtifactType",
     "ArtifactMetadata",
     "ArtifactRecord",
+    "EngineMetadata",
 ]

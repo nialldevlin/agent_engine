@@ -25,7 +25,7 @@ class Router:
     Handles all 7 canonical node roles: START, LINEAR, DECISION, BRANCH, SPLIT, MERGE, EXIT.
     """
 
-    def __init__(self, dag: DAG, task_manager, node_executor, telemetry=None):
+    def __init__(self, dag: DAG, task_manager, node_executor, telemetry=None, metadata=None):
         """Initialize router with DAG and runtime dependencies.
 
         Args:
@@ -33,11 +33,13 @@ class Router:
             task_manager: TaskManager instance for task lifecycle operations
             node_executor: NodeExecutor instance for single-node execution
             telemetry: Optional TelemetryBus instance for event emission
+            metadata: Optional EngineMetadata instance for event metadata (Phase 11)
         """
         self.dag = dag
         self.task_manager = task_manager
         self.node_executor = node_executor
         self.telemetry = telemetry
+        self.metadata = metadata
 
         # Execution state
         self.work_queue: List[tuple] = []  # List of (task_id, node_id) tuples
