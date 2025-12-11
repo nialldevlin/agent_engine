@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional
+from agent_engine.schemas import AdapterMetadata, AdapterType
 
 
 class AdapterRegistry:
@@ -24,6 +25,43 @@ class AdapterRegistry:
     def get_llm_provider(self, provider_id: str) -> Optional[Dict]:
         """Get LLM provider config by ID."""
         return self.llm_providers.get(provider_id)
+
+    def get_adapter_metadata(self) -> List[AdapterMetadata]:
+        """Get metadata for all registered adapters.
+
+        Returns list of AdapterMetadata for both tools and LLM providers.
+        For Phase 15, returns stub metadata with empty versions and hashes.
+
+        Returns:
+            List of AdapterMetadata instances for all adapters
+        """
+        metadata_list = []
+
+        # Collect LLM provider adapters
+        for provider_id in self.llm_providers.keys():
+            metadata_list.append(
+                AdapterMetadata(
+                    adapter_id=provider_id,
+                    adapter_type=AdapterType.LLM,
+                    version="",
+                    config_hash="",
+                    enabled=True
+                )
+            )
+
+        # Collect tool adapters
+        for tool_id in self.tools.keys():
+            metadata_list.append(
+                AdapterMetadata(
+                    adapter_id=tool_id,
+                    adapter_type=AdapterType.TOOL,
+                    version="",
+                    config_hash="",
+                    enabled=True
+                )
+            )
+
+        return metadata_list
 
 
 def initialize_adapters(agents: List[Dict], tools: List[Dict]) -> AdapterRegistry:

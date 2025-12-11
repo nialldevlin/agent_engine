@@ -34,6 +34,7 @@ from .runtime.context import ContextAssembler
 from .runtime.deterministic_registry import DeterministicRegistry
 from .runtime.artifact_store import ArtifactStore
 from .runtime.metadata_collector import collect_engine_metadata
+from .runtime.inspector import Inspector
 from .telemetry import TelemetryBus
 from .plugin_registry import PluginRegistry
 from .plugin_loader import PluginLoader
@@ -393,3 +394,81 @@ class Engine:
             artifact_store=self.artifact_store,
             telemetry=self.telemetry
         )
+
+    def create_inspector(self) -> Inspector:
+        """Create an inspector for read-only task queries.
+
+        Phase 16: Inspector provides read-only access to task state,
+        history, artifacts, and events without mutation capabilities.
+
+        Returns:
+            Inspector instance configured with this engine's task manager
+        """
+        return Inspector(self.task_manager)
+
+    def run_multiple(self, inputs: List[Any], start_node_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Execute multiple inputs sequentially.
+
+        Phase 17: Runs each input through the workflow in sequence,
+        collecting results. No concurrent execution (sequential only).
+
+        Args:
+            inputs: List of JSON-serializable input data
+            start_node_id: Optional explicit start node ID (uses default if None)
+
+        Returns:
+            List of result dicts, one per input:
+            [
+                {"task_id": str, "status": str, "output": Any, "history": List},
+                ...
+            ]
+
+        Raises:
+            ValueError: If any input is not JSON-serializable
+        """
+        import json
+
+        results = []
+        for input_data in inputs:
+            # Validate input is JSON-serializable
+            try:
+                json.dumps(input_data)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Input must be JSON-serializable: {e}")
+
+            # Execute via router (Phase 5)
+            completed_task = self.router.execute_task(input_data, start_node_id)
+
+            # Format return value
+            results.append({
+                "task_id": completed_task.task_id if hasattr(completed_task, 'task_id') else str(completed_task.id),
+                "status": completed_task.status.value if hasattr(completed_task.status, 'value') else str(completed_task.status),
+                "output": completed_task.current_output if hasattr(completed_task, 'current_output') else None,
+                "history": [record.dict() if hasattr(record, 'dict') else record for record in (completed_task.history if hasattr(completed_task, 'history') else [])]
+            })
+
+        return results
+
+    def get_all_task_ids(self) -> List[str]:
+        """Get all task IDs currently tracked.
+
+        Phase 17: Returns list of task identifiers in memory.
+
+        Returns:
+            List of task ID strings
+        """
+        return list(self.task_manager.tasks.keys())
+
+    def get_task_summary(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get summary of a task.
+
+        Phase 17: Convenience method using Inspector to get task summary.
+
+        Args:
+            task_id: Task identifier
+
+        Returns:
+            Summary dict or None if task not found
+        """
+        inspector = self.create_inspector()
+        return inspector.get_task_summary(task_id)

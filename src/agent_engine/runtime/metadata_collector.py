@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from typing import Dict, Optional
 
 from agent_engine import __version__
-from agent_engine.schemas import EngineMetadata
+from agent_engine.schemas import EngineMetadata, AdapterMetadata
 
 
 def compute_file_hash(file_path: str) -> str:
@@ -72,18 +72,47 @@ def collect_manifest_hashes(config_dir: str) -> Dict[str, str]:
 def collect_adapter_versions(adapter_registry=None) -> Dict[str, str]:
     """Collect versions from registered adapters.
 
-    For Phase 11, this returns empty dict since adapters don't expose versions yet.
-    Future phases can enhance adapter registry to track versions.
+    For Phase 15, uses AdapterRegistry.get_adapter_metadata() to collect versions.
 
     Args:
         adapter_registry: AdapterRegistry instance (optional)
 
     Returns:
-        Dictionary mapping adapter name to version string
+        Dictionary mapping adapter ID to version string
     """
-    # Phase 11: Return empty dict (adapters don't have version metadata yet)
-    # Future phases can add version tracking to AdapterRegistry
-    return {}
+    if not adapter_registry:
+        return {}
+
+    try:
+        adapter_list = adapter_registry.get_adapter_metadata()
+        return {
+            adapter.adapter_id: adapter.version
+            for adapter in adapter_list
+            if adapter.version
+        }
+    except Exception:
+        return {}
+
+
+def collect_adapter_metadata(adapter_registry=None) -> list:
+    """Collect full metadata for all registered adapters.
+
+    Gathers complete AdapterMetadata instances for integration into
+    EngineMetadata. For Phase 15, returns list of all adapter metadata.
+
+    Args:
+        adapter_registry: AdapterRegistry instance (optional)
+
+    Returns:
+        List of AdapterMetadata instances for all adapters
+    """
+    if not adapter_registry:
+        return []
+
+    try:
+        return adapter_registry.get_adapter_metadata()
+    except Exception:
+        return []
 
 
 def collect_engine_metadata(
@@ -93,8 +122,8 @@ def collect_engine_metadata(
     """Collect all engine metadata for the current load.
 
     Gathers comprehensive metadata including engine version, manifest hashes,
-    schema version, adapter versions, and timestamp. Metadata is immutable
-    once collected.
+    schema version, adapter versions, adapter metadata, and timestamp.
+    Metadata is immutable once collected.
 
     Args:
         config_dir: Path to configuration directory
@@ -111,12 +140,14 @@ def collect_engine_metadata(
 
     manifest_hashes = collect_manifest_hashes(config_dir)
     adapter_versions = collect_adapter_versions(adapter_registry) if adapter_registry else {}
+    adapter_metadata = collect_adapter_metadata(adapter_registry) if adapter_registry else []
 
     metadata = EngineMetadata(
         engine_version=__version__,
         manifest_hashes=manifest_hashes,
         schema_version=__version__,  # Use engine version as schema version
         adapter_versions=adapter_versions,
+        adapter_metadata=adapter_metadata,
         load_timestamp=datetime.now(ZoneInfo("UTC")).isoformat(),
         config_dir=config_dir
     )

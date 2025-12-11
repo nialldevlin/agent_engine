@@ -633,3 +633,58 @@ class TaskManager:
         if task:
             task.current_output = output
             task.updated_at = _now_iso()
+
+    def get_all_tasks(self) -> List[Task]:
+        """Get all tasks in memory.
+
+        Phase 17: Returns list of all Task instances currently tracked.
+
+        Returns:
+            List of Task objects
+        """
+        return list(self.tasks.values())
+
+    def get_tasks_by_status(self, status: UniversalStatus) -> List[Task]:
+        """Get all tasks with a specific status.
+
+        Phase 17: Filters tasks by status for monitoring and reporting.
+
+        Args:
+            status: UniversalStatus to filter by
+
+        Returns:
+            List of Task objects matching the status
+        """
+        return [
+            task for task in self.tasks.values()
+            if task.status == status
+        ]
+
+    def get_task_count(self) -> int:
+        """Get total count of tasks in memory.
+
+        Phase 17: Returns number of tracked tasks.
+
+        Returns:
+            Total task count
+        """
+        return len(self.tasks)
+
+    def clear_completed_tasks(self) -> int:
+        """Remove completed tasks from memory.
+
+        Phase 17: Cleans up completed tasks to manage memory.
+        Does not affect persisted checkpoints.
+
+        Returns:
+            Number of tasks removed
+        """
+        completed_ids = [
+            task_id for task_id, task in self.tasks.items()
+            if task.status == UniversalStatus.COMPLETED
+        ]
+
+        for task_id in completed_ids:
+            del self.tasks[task_id]
+
+        return len(completed_ids)

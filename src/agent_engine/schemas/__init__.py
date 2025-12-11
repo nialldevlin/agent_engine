@@ -45,6 +45,7 @@ from .workflow import Edge, WorkflowGraph
 from .router import MergeInputItem, WorkItem, WorkItemKind, MergeWaitState
 from .artifact import ArtifactType, ArtifactMetadata, ArtifactRecord
 from .metadata import EngineMetadata
+from .adapter import AdapterType, AdapterMetadata
 from .evaluation import (
     Assertion,
     AssertionType,
@@ -124,6 +125,8 @@ __all__ = [
     "ArtifactMetadata",
     "ArtifactRecord",
     "EngineMetadata",
+    "AdapterType",
+    "AdapterMetadata",
     "Assertion",
     "AssertionType",
     "AssertionResult",

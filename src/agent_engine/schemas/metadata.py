@@ -5,7 +5,7 @@ adapter versions) for every load and execution.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -36,6 +36,10 @@ class EngineMetadata:
 
     # Config directory path
     config_dir: str = ""
+
+    # Adapter metadata from Phase 15
+    adapter_metadata: List = field(default_factory=list)
+    # List of AdapterMetadata instances, but using List to avoid circular import
 
     # Additional metadata for extensibility
     additional: Dict[str, str] = field(default_factory=dict)
