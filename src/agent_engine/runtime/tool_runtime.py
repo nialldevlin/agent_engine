@@ -19,12 +19,14 @@ class ToolRuntime:
         llm_client=None,
         telemetry=None,
         artifact_store=None,
+        policy_evaluator=None,
     ) -> None:
         self.tools = tools
         self.tool_handlers = tool_handlers or {}
         self.llm_client = llm_client
         self.telemetry = telemetry
         self.artifact_store = artifact_store
+        self.policy_evaluator = policy_evaluator
 
     def run_tool_stage(self, task: Task, node: Node, context_package) -> Tuple[Any | None, EngineError | None]:
         if not node.tools:
@@ -138,6 +140,19 @@ class ToolRuntime:
                     severity=Severity.ERROR
                 )
                 return tool_calls, error
+
+            # Check policy evaluator (Phase 14)
+            if self.policy_evaluator:
+                allowed, reason = self.policy_evaluator.check_tool_allowed(tool_id, task.task_id)
+                if not allowed:
+                    error = EngineError(
+                        error_id="tool_policy_denied",
+                        code=EngineErrorCode.SECURITY,
+                        message=f"Tool '{tool_id}' denied by policy: {reason}",
+                        source=EngineErrorSource.TOOL_RUNTIME,
+                        severity=Severity.ERROR
+                    )
+                    return tool_calls, error
 
             # Emit tool invoked event
             if self.telemetry:

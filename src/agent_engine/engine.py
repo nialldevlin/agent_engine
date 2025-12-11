@@ -10,7 +10,9 @@ from .manifest_loader import (
     load_schemas
 )
 from .metrics_loader import load_metrics_manifest, parse_metrics
+from .policy_loader import load_policy_manifest, parse_policies
 from .runtime import MetricsCollector
+from .runtime.policy_evaluator import PolicyEvaluator
 from .schema_validator import (
     validate_nodes,
     validate_edges,
@@ -55,7 +57,8 @@ class Engine:
         adapters: AdapterRegistry,
         plugins: List[Dict],
         metadata: Optional[EngineMetadata] = None,
-        metrics_collector: Optional[MetricsCollector] = None
+        metrics_collector: Optional[MetricsCollector] = None,
+        policy_evaluator: Optional[PolicyEvaluator] = None,
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
@@ -69,6 +72,7 @@ class Engine:
         self.plugins = plugins
         self.metadata = metadata
         self.metrics_collector = metrics_collector
+        self.policy_evaluator = policy_evaluator
 
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager()
@@ -95,7 +99,8 @@ class Engine:
             tool_handlers=None,
             llm_client=None,
             telemetry=self.telemetry,
-            artifact_store=self.artifact_store
+            artifact_store=self.artifact_store,
+            policy_evaluator=self.policy_evaluator,
         )
 
         # ContextAssembler - use a stub for now
@@ -202,8 +207,12 @@ class Engine:
         metrics_profile = next((p for p in metrics_profiles if p.enabled), None)
         metrics_collector = MetricsCollector(metrics_profile)
 
+        # Phase 14: Load policies
+        policy_data = load_policy_manifest(path)
+        policy_sets = parse_policies(policy_data)
+
         # Step 8: Return engine
-        return cls(
+        engine = cls(
             config_dir=path,
             workflow=dag,
             agents=agents,
@@ -214,8 +223,16 @@ class Engine:
             adapters=adapters,
             plugins=plugins,
             metadata=metadata,
-            metrics_collector=metrics_collector
+            metrics_collector=metrics_collector,
+            policy_evaluator=None,  # Initialized below
         )
+
+        # Initialize policy evaluator with telemetry after engine creation
+        engine.policy_evaluator = PolicyEvaluator(policy_sets, engine.telemetry)
+        # Update tool runtime with policy evaluator
+        engine.tool_runtime.policy_evaluator = engine.policy_evaluator
+
+        return engine
 
     def run(self, input: Any, start_node_id: Optional[str] = None) -> Dict[str, Any]:
         """Execute workflow using Phase 5 Router.

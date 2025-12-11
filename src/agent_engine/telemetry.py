@@ -366,6 +366,35 @@ class TelemetryBus:
             }
         ))
 
+    # Policy Events (Phase 14)
+    def emit_policy_denied(self, target: str, reason: str, task_id: str = "") -> None:
+        """Emit policy denied event.
+
+        Args:
+            target: Target that was denied (tool name, etc.)
+            reason: Reason for denial
+            task_id: Optional task ID
+        """
+        self.emit(Event(
+            event_id=f"policy_denied-{len(self.events)}",
+            task_id=task_id or None,
+            stage_id=None,
+            type=EventType.ERROR,
+            timestamp=_now_iso(),
+            payload={
+                "event": "policy_denied",
+                "target": target,
+                "reason": reason,
+            }
+        ))
+
+        # Record counter metric
+        if self.metrics_collector:
+            self.metrics_collector.record_counter(
+                "policy_denial_count",
+                tags={"target": target}
+            )
+
     def get_metrics(self) -> List[MetricSample]:
         """Get all collected metrics."""
         if self.metrics_collector:

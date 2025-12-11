@@ -13,6 +13,7 @@ from agent_engine.runtime.artifact_store import ArtifactStore
 from agent_engine.runtime.metadata_collector import collect_engine_metadata
 from agent_engine.runtime.evaluator import Evaluator
 from agent_engine.runtime.metrics_collector import MetricsCollector
+from agent_engine.runtime.policy_evaluator import PolicyEvaluator
 
 __all__ = [
     "AgentRuntime",
@@ -31,6 +32,7 @@ __all__ = [
     "collect_engine_metadata",
     "Evaluator",
     "MetricsCollector",
+    "PolicyEvaluator",
 ]
 
 
