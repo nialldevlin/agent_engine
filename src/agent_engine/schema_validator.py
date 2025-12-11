@@ -9,9 +9,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import ValidationError
 
+from .dag import DAG
 from .exceptions import SchemaValidationError
 from .schemas.memory import ContextProfile, ContextProfileSource
-from .schemas.stage import Node
+from .schemas.stage import Node, NodeRole, NodeKind
 from .schemas.workflow import Edge
 
 
@@ -200,3 +201,65 @@ def validate_memory_config(
                 raise SchemaValidationError(file_name, field_path, str(e))
 
     return memory_data
+
+
+def validate_exit_nodes(dag: DAG) -> None:
+    """Validate exit node constraints per AGENT_ENGINE_SPEC §3.1.
+
+    Exit node requirements:
+    - Must have kind=DETERMINISTIC (cannot be AGENT)
+    - Must have 0 outbound edges
+    - Must have ≥1 inbound edges
+    - Cannot specify tools (tools list must be empty)
+    - always_fail flag only meaningful for EXIT nodes
+
+    Args:
+        dag: The DAG to validate
+
+    Raises:
+        SchemaValidationError: If exit node violates constraints
+    """
+    for node in dag.nodes.values():
+        if node.role == NodeRole.EXIT:
+            # Must be deterministic
+            if node.kind != NodeKind.DETERMINISTIC:
+                raise SchemaValidationError(
+                    "workflow.yaml",
+                    f"nodes.{node.stage_id}",
+                    f"Exit node {node.stage_id}: must be DETERMINISTIC (cannot be AGENT)"
+                )
+
+            # Cannot have tools
+            if node.tools:
+                raise SchemaValidationError(
+                    "workflow.yaml",
+                    f"nodes.{node.stage_id}",
+                    f"Exit node {node.stage_id}: cannot specify tools (must be read-only)"
+                )
+
+            # Must have ≥1 inbound edges
+            inbound = dag.get_inbound_edges(node.stage_id)
+            if not inbound:
+                raise SchemaValidationError(
+                    "workflow.yaml",
+                    f"nodes.{node.stage_id}",
+                    f"Exit node {node.stage_id}: must have at least 1 inbound edge"
+                )
+
+            # Must have 0 outbound edges
+            outbound = dag.get_outbound_edges(node.stage_id)
+            if outbound:
+                raise SchemaValidationError(
+                    "workflow.yaml",
+                    f"nodes.{node.stage_id}",
+                    f"Exit node {node.stage_id}: cannot have outbound edges"
+                )
+
+        else:
+            # always_fail only valid for EXIT nodes
+            if node.always_fail:
+                raise SchemaValidationError(
+                    "workflow.yaml",
+                    f"nodes.{node.stage_id}",
+                    f"Node {node.stage_id}: always_fail=True only valid for EXIT nodes"
+                )

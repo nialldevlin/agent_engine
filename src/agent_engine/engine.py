@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .dag import DAG
 from .manifest_loader import (
@@ -13,11 +14,13 @@ from .schema_validator import (
     validate_edges,
     validate_agents,
     validate_tools,
-    validate_memory_config
+    validate_memory_config,
+    validate_exit_nodes
 )
 from .memory_stores import MemoryStore, initialize_memory_stores, initialize_context_profiles
 from .adapters import AdapterRegistry, initialize_adapters
 from .schemas.memory import ContextProfile
+from .schemas import Event, EventType
 from .runtime.task_manager import TaskManager
 from .runtime.node_executor import NodeExecutor
 from .runtime.router import Router
@@ -25,6 +28,9 @@ from .runtime.agent_runtime import AgentRuntime
 from .runtime.tool_runtime import ToolRuntime
 from .runtime.context import ContextAssembler
 from .runtime.deterministic_registry import DeterministicRegistry
+from .telemetry import TelemetryBus
+from .plugin_registry import PluginRegistry
+from .plugin_loader import PluginLoader
 
 
 class Engine:
@@ -59,12 +65,26 @@ class Engine:
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager()
 
+        # Initialize plugin registry (Phase 9)
+        self.plugin_registry = PluginRegistry()
+
+        # Initialize telemetry (Phase 8) with plugin support
+        self.telemetry = TelemetryBus(plugin_registry=self.plugin_registry)
+
+        # Load plugins from config directory (Phase 9)
+        self._load_plugins(config_dir)
+
         # AgentRuntime expects llm_client and template_version
         self.agent_runtime = AgentRuntime(llm_client=None, template_version="v1")
 
         # ToolRuntime expects tools dict and tool_handlers
         tools_dict = {t['id']: t for t in tools} if tools else {}
-        self.tool_runtime = ToolRuntime(tools=tools_dict, tool_handlers=None, llm_client=None)
+        self.tool_runtime = ToolRuntime(
+            tools=tools_dict,
+            tool_handlers=None,
+            llm_client=None,
+            telemetry=self.telemetry
+        )
 
         # ContextAssembler - use a stub for now
         self.context_assembler = None  # TODO: Initialize proper ContextAssembler
@@ -79,14 +99,16 @@ class Engine:
             tool_runtime=self.tool_runtime,
             context_assembler=self.context_assembler,
             json_engine=self.json_engine,
-            deterministic_registry=self.deterministic_registry
+            deterministic_registry=self.deterministic_registry,
+            telemetry=self.telemetry
         )
 
         # Initialize router (Phase 5)
         self.router = Router(
             dag=self.workflow,
             task_manager=self.task_manager,
-            node_executor=self.node_executor
+            node_executor=self.node_executor,
+            telemetry=self.telemetry
         )
 
     @classmethod
@@ -141,6 +163,9 @@ class Engine:
 
         # Step 4: Validate DAG
         dag.validate()
+
+        # Step 4a: Validate exit nodes (Phase 7)
+        validate_exit_nodes(dag)
 
         # Step 5: Initialize memory stores
         memory_stores = initialize_memory_stores(memory_config)
@@ -200,3 +225,68 @@ class Engine:
             "output": completed_task.current_output,
             "history": [record.dict() for record in completed_task.history]
         }
+
+    def get_events(self) -> List[Event]:
+        """Get all telemetry events.
+
+        Returns:
+            List of Event objects in emission order
+        """
+        return self.telemetry.events.copy()
+
+    def get_events_by_type(self, event_type: EventType) -> List[Event]:
+        """Get events filtered by type.
+
+        Args:
+            event_type: EventType to filter by
+
+        Returns:
+            List of matching Event objects
+        """
+        return [e for e in self.telemetry.events if e.type == event_type]
+
+    def get_events_by_task(self, task_id: str) -> List[Event]:
+        """Get events for a specific task.
+
+        Args:
+            task_id: Task ID to filter by
+
+        Returns:
+            List of Event objects for this task
+        """
+        return [e for e in self.telemetry.events if e.task_id == task_id]
+
+    def clear_events(self) -> None:
+        """Clear all telemetry events."""
+        self.telemetry.events.clear()
+
+    def get_plugin_registry(self) -> PluginRegistry:
+        """Get plugin registry for direct plugin management.
+
+        Returns:
+            PluginRegistry instance
+        """
+        return self.plugin_registry
+
+    def _load_plugins(self, config_dir: str) -> None:
+        """Load plugins from config directory.
+
+        Args:
+            config_dir: Configuration directory path
+
+        Raises:
+            ValueError: If plugin loading fails
+        """
+        plugins_yaml = Path(config_dir) / "plugins.yaml"
+        if not plugins_yaml.exists():
+            return
+
+        try:
+            loader = PluginLoader()
+            plugins = loader.load_plugins_from_yaml(plugins_yaml)
+
+            for plugin in plugins:
+                self.plugin_registry.register(plugin)
+
+        except ValueError as e:
+            raise ValueError(f"Failed to load plugins: {e}")

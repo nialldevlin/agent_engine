@@ -279,53 +279,85 @@ class TaskManager:
         """Check if parent task can complete based on clone completion rules.
 
         Per AGENT_ENGINE_SPEC §2.1: Parent completes when ANY one clone succeeds.
+        Per Phase 7: If some clones fail but parent allows partial, parent enters PARTIAL.
 
         Args:
             parent_id: Parent task ID
 
         Returns:
-            True if at least one clone has COMPLETED status, False otherwise
+            True if at least one clone has reached terminal state (COMPLETED, FAILED, or PARTIAL)
         """
-        children = self.get_children(parent_id)
-
-        # No children = not complete
-        if not children:
+        parent = self.tasks.get(parent_id)
+        if not parent or not parent.child_task_ids:
             return False
 
-        # Filter for clones only
-        clones = [c for c in children if c.lineage_type == "clone"]
+        completed_clones = []
+        failed_clones = []
 
-        # At least one clone must be COMPLETED
-        return any(
-            clone.status == UniversalStatus.COMPLETED
-            for clone in clones
-        )
+        for child_id in parent.child_task_ids:
+            child = self.tasks.get(child_id)
+            if child and child.lineage_type == "clone":
+                if child.status == UniversalStatus.COMPLETED:
+                    completed_clones.append(child)
+                elif child.status == UniversalStatus.FAILED:
+                    failed_clones.append(child)
+
+        # Parent succeeds if any clone succeeds
+        if completed_clones:
+            parent.status = UniversalStatus.COMPLETED
+            return True
+
+        # Parent fails if all clones fail
+        if failed_clones and len(failed_clones) == len(parent.child_task_ids):
+            parent.status = UniversalStatus.FAILED
+            return True
+
+        return False
 
     def check_subtask_completion(self, parent_id: str) -> bool:
         """Check if parent task can complete based on subtask completion rules.
 
         Per AGENT_ENGINE_SPEC §2.1: Parent completes when ALL subtasks succeed.
+        Per Phase 7: If some subtasks fail but not all, parent enters PARTIAL.
 
         Args:
             parent_id: Parent task ID
 
         Returns:
-            True if all subtasks have COMPLETED status, False otherwise
+            True if all subtasks have reached terminal state, False otherwise
         """
-        children = self.get_children(parent_id)
-
-        # No children = not complete
-        if not children:
+        parent = self.tasks.get(parent_id)
+        if not parent or not parent.child_task_ids:
             return False
 
-        # Filter for subtasks only
-        subtasks = [c for c in children if c.lineage_type == "subtask"]
+        completed_subtasks = []
+        failed_subtasks = []
 
-        # All subtasks must be COMPLETED
-        return all(
-            subtask.status == UniversalStatus.COMPLETED
-            for subtask in subtasks
-        )
+        for child_id in parent.child_task_ids:
+            child = self.tasks.get(child_id)
+            if child and child.lineage_type == "subtask":
+                if child.status == UniversalStatus.COMPLETED:
+                    completed_subtasks.append(child)
+                elif child.status == UniversalStatus.FAILED:
+                    failed_subtasks.append(child)
+                else:
+                    return False  # Still have pending subtasks
+
+        # All subtasks terminal - determine parent status
+        total = len(parent.child_task_ids)
+
+        if len(completed_subtasks) == total:
+            # All succeeded
+            parent.status = UniversalStatus.COMPLETED
+            return True
+        elif len(failed_subtasks) == total:
+            # All failed
+            parent.status = UniversalStatus.FAILED
+            return True
+        else:
+            # Mixed success/failure
+            parent.status = UniversalStatus.PARTIAL
+            return True
 
     def save_checkpoint(
         self,
@@ -527,7 +559,7 @@ class TaskManager:
         # 1. Build path
         project_id = _extract_project_id(task_id)
         task_file = storage_root / project_id / f"{task_id}.json"
-        
+
         # 2. Check file exists
         if not task_file.exists():
             return None, EngineError(
@@ -537,7 +569,7 @@ class TaskManager:
                 source=EngineErrorSource.TASK_MANAGER,
                 severity=Severity.ERROR
             )
-        
+
         # 3. Read and parse JSON
         try:
             task_data = json.loads(task_file.read_text())
@@ -549,7 +581,7 @@ class TaskManager:
                 source=EngineErrorSource.TASK_MANAGER,
                 severity=Severity.ERROR
             )
-        
+
         # 4. Extract metadata fields only
         metadata = {
             "task_id": task_data.get("task_id"),
@@ -557,5 +589,47 @@ class TaskManager:
             "created_at": task_data.get("created_at"),
             "updated_at": task_data.get("updated_at")
         }
-        
+
         return metadata, None
+
+    def update_task_status(self, task_id: str, status: UniversalStatus) -> None:
+        """Update task status.
+
+        Per Phase 7, centralizes task status updates for observability and consistency.
+
+        Args:
+            task_id: Task to update
+            status: New status value
+        """
+        task = self.tasks.get(task_id)
+        if task:
+            task.status = status
+            task.updated_at = _now_iso()
+
+    def update_task_lifecycle(self, task_id: str, lifecycle: TaskLifecycle) -> None:
+        """Update task lifecycle.
+
+        Per Phase 7, centralizes task lifecycle updates.
+
+        Args:
+            task_id: Task to update
+            lifecycle: New lifecycle value
+        """
+        task = self.tasks.get(task_id)
+        if task:
+            task.lifecycle = lifecycle
+            task.updated_at = _now_iso()
+
+    def update_task_output(self, task_id: str, output: Any) -> None:
+        """Update task current output.
+
+        Per Phase 7, centralizes task output updates.
+
+        Args:
+            task_id: Task to update
+            output: New output value
+        """
+        task = self.tasks.get(task_id)
+        if task:
+            task.current_output = output
+            task.updated_at = _now_iso()

@@ -25,17 +25,19 @@ class Router:
     Handles all 7 canonical node roles: START, LINEAR, DECISION, BRANCH, SPLIT, MERGE, EXIT.
     """
 
-    def __init__(self, dag: DAG, task_manager, node_executor):
+    def __init__(self, dag: DAG, task_manager, node_executor, telemetry=None):
         """Initialize router with DAG and runtime dependencies.
 
         Args:
             dag: The workflow DAG with nodes and edges
             task_manager: TaskManager instance for task lifecycle operations
             node_executor: NodeExecutor instance for single-node execution
+            telemetry: Optional TelemetryBus instance for event emission
         """
         self.dag = dag
         self.task_manager = task_manager
         self.node_executor = node_executor
+        self.telemetry = telemetry
 
         # Execution state
         self.work_queue: List[tuple] = []  # List of (task_id, node_id) tuples
@@ -137,6 +139,27 @@ class Router:
 
             # Execute node
             record, output = self.node_executor.execute_node(task, node)
+
+            # Update task history
+            task.history.append(record)
+
+            # Check if node failed (Phase 7: continue_on_failure)
+            node_failed = (record.node_status == UniversalStatus.FAILED)
+
+            if node_failed:
+                # Node failed - check continue_on_failure
+                if node.continue_on_failure:
+                    # Continue execution despite failure
+                    # Task status may become PARTIAL if this was critical
+                    # For now, continue to routing
+                    pass
+                else:
+                    # Halt execution - fail the task
+                    task.status = UniversalStatus.FAILED
+                    task.lifecycle = TaskLifecycle.CONCLUDED
+                    return task  # Stop execution
+
+            # Update current output if execution succeeded
             if output is not None:
                 task.current_output = output
 
@@ -191,7 +214,18 @@ class Router:
             raise EngineError(
                 f"LINEAR node '{node.stage_id}' must have exactly 1 outbound edge, has {len(edges)}"
             )
-        return edges[0].to_node_id
+        next_node_id = edges[0].to_node_id
+
+        # Emit routing decision event
+        if self.telemetry:
+            self.telemetry.routing_decision(
+                task_id=task.task_id,
+                node_id=node.stage_id,
+                decision="linear",
+                next_node_id=next_node_id
+            )
+
+        return next_node_id
 
     def _route_decision(self, task: Task, node: Node, output: Any) -> str:
         """Route from DECISION node (select one of multiple edges)."""
@@ -207,7 +241,18 @@ class Router:
         # Match against edge labels
         for edge in edges:
             if edge.label == selected_label:
-                return edge.to_node_id
+                next_node_id = edge.to_node_id
+
+                # Emit routing decision event
+                if self.telemetry:
+                    self.telemetry.routing_decision(
+                        task_id=task.task_id,
+                        node_id=node.stage_id,
+                        decision=selected_label,
+                        next_node_id=next_node_id
+                    )
+
+                return next_node_id
 
         # No match found
         valid_labels = [e.label for e in edges if e.label]
@@ -248,6 +293,8 @@ class Router:
         if task.task_id not in self.parent_children:
             self.parent_children[task.task_id] = set()
 
+        clone_ids = []
+
         # Create clone for each outbound edge
         for i, edge in enumerate(edges):
             clone = self.task_manager.create_clone(
@@ -255,8 +302,30 @@ class Router:
                 branch_node_id=node.stage_id,
                 branch_label=edge.label or f"branch_{i}"
             )
+            clone_ids.append(clone.task_id)
             self.parent_children[task.task_id].add(clone.task_id)
             self._enqueue_work(clone.task_id, edge.to_node_id)
+
+        # Emit branch event
+        if self.telemetry:
+            self.telemetry.routing_branch(
+                task_id=task.task_id,
+                node_id=node.stage_id,
+                clone_count=len(clone_ids),
+                clone_ids=clone_ids
+            )
+
+        # Emit clone created events
+        if self.telemetry:
+            for clone_id in clone_ids:
+                clone = self.task_manager.get_task(clone_id)
+                if clone and clone.lineage:
+                    self.telemetry.clone_created(
+                        parent_task_id=task.task_id,
+                        clone_id=clone_id,
+                        node_id=node.stage_id,
+                        lineage=clone.lineage
+                    )
 
         # No next node for parent (clones continue execution)
         return None
@@ -288,6 +357,8 @@ class Router:
         if task.task_id not in self.parent_children:
             self.parent_children[task.task_id] = set()
 
+        subtask_ids = []
+
         # Create subtask for each input
         for i, subtask_input in enumerate(subtask_inputs):
             # Determine which edge to use (round-robin if multiple edges)
@@ -299,14 +370,39 @@ class Router:
                 split_label=edge.label or f"subtask_{i}",
                 subtask_input=subtask_input
             )
+            subtask_ids.append(subtask.task_id)
             self.parent_children[task.task_id].add(subtask.task_id)
             self._enqueue_work(subtask.task_id, edge.to_node_id)
+
+        # Emit split event
+        if self.telemetry:
+            self.telemetry.routing_split(
+                task_id=task.task_id,
+                node_id=node.stage_id,
+                subtask_count=len(subtask_ids),
+                subtask_ids=subtask_ids
+            )
+
+        # Emit subtask created events
+        if self.telemetry:
+            for subtask_id in subtask_ids:
+                subtask = self.task_manager.get_task(subtask_id)
+                if subtask and subtask.lineage:
+                    self.telemetry.subtask_created(
+                        parent_task_id=task.task_id,
+                        subtask_id=subtask_id,
+                        node_id=node.stage_id,
+                        lineage=subtask.lineage
+                    )
 
         # No next node for parent (subtasks continue execution)
         return None
 
     def _route_merge(self, task: Task, node: Node) -> str:
-        """Route from MERGE node (wait for all inbound, then recombine)."""
+        """Route from MERGE node (wait for all inbound, then recombine).
+
+        Per Phase 7: Handle merge failure modes per node configuration.
+        """
         parent_id = task.parent_task_id or task.task_id
 
         # Check if merge is ready (all required inputs arrived)
@@ -317,11 +413,48 @@ class Router:
         # Assemble merge inputs from all completed children
         merge_inputs = self._assemble_merge_inputs(node.stage_id, parent_id)
 
-        # Create merge payload
-        merge_payload = {"merge_inputs": [item.dict() for item in merge_inputs]}
+        # Check for failures in upstream tasks (Phase 7)
+        failed_inputs = [inp for inp in merge_inputs if inp.status == UniversalStatus.FAILED]
+        successful_inputs = [inp for inp in merge_inputs if inp.status == UniversalStatus.COMPLETED]
+
+        # Emit merge event
+        input_statuses = [inp.status for inp in merge_inputs]
+        if self.telemetry:
+            self.telemetry.routing_merge(
+                task_id=task.task_id,
+                node_id=node.stage_id,
+                input_count=len(merge_inputs),
+                input_statuses=input_statuses
+            )
+
+        # Apply merge failure mode (Phase 7)
+        failure_mode = node.merge_failure_mode or "fail_on_any"
 
         # Get parent task
         parent_task = self.task_manager.get_task(parent_id)
+
+        if failure_mode == "fail_on_any":
+            if failed_inputs:
+                # Fail the merge task
+                parent_task.status = UniversalStatus.FAILED
+                # Continue to routing, but task is marked as failed
+
+        elif failure_mode == "ignore_failures":
+            # Only pass successful inputs to merge node
+            merge_inputs = successful_inputs
+            # Task status remains based on merge output
+
+        elif failure_mode == "partial":
+            if failed_inputs and successful_inputs:
+                # Mixed success/failure → PARTIAL
+                parent_task.status = UniversalStatus.PARTIAL
+            elif failed_inputs:
+                # All failed → FAILED
+                parent_task.status = UniversalStatus.FAILED
+            # else: all successful → keep status as is
+
+        # Create merge payload
+        merge_payload = {"merge_inputs": [item.dict() for item in merge_inputs]}
 
         # Execute merge node with assembled input
         merge_record, merge_output = self.node_executor.execute_node(parent_task, node)
@@ -402,6 +535,10 @@ class Router:
         # Set final status if not already set
         if task.status == UniversalStatus.PENDING:
             task.status = UniversalStatus.COMPLETED
+
+        # Apply always_fail override if specified (Phase 7)
+        if node.always_fail:
+            task.status = UniversalStatus.FAILED
 
         # Check parent completion if this is a clone/subtask
         if task.parent_task_id:

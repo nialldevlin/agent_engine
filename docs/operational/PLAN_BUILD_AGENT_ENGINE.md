@@ -759,6 +759,8 @@ Matches AGENT_ENGINE_SPEC §3.4 and OVERVIEW semantics.
 
 *(Haiku implementation, Sonnet optional)*
 
+**Status: ✅ COMPLETE**
+
 ## Goal
 
 Add observability hooks for internal introspection and plugin consumption.
@@ -766,23 +768,33 @@ Add observability hooks for internal introspection and plugin consumption.
 Matches AGENT_ENGINE_SPEC §6.
 
 
-## Tasks
+## Tasks (ALL COMPLETE)
 
-* Implement event bus
-* Emit events for:
+* ✅ Enhance TelemetryBus with structured event methods
+* ✅ Emit events for:
 
-  * task start/end
-  * node start/end
-  * routing decisions
-  * tool calls
-  * context assembly
+  * task start/end/failed
+  * node start/end/failed
+  * routing decisions, branch, split, merge
+  * tool invoked/completed/failed
+  * context assembly success/failure
   * clone/subtask creation
-* Attach telemetry to DAG executor + router + node executor
+* ✅ Attach telemetry to Router with full event emission
+* ✅ Attach telemetry to NodeExecutor with event hooks
+* ✅ Attach telemetry to ToolRuntime for tool execution events
+* ✅ Pass telemetry instance through Engine to all components
+* ✅ Add telemetry access methods to Engine (get_events, get_events_by_type, get_events_by_task, clear_events)
 
-## Success Criteria
+## Success Criteria (ALL MET)
 
-* All major engine actions produce deterministic events.
-* Telemetry tests confirm correct event payloads.
+* ✅ All major engine actions produce deterministic events
+* ✅ 29 comprehensive telemetry tests covering all event types
+* ✅ Event payloads are structured and JSON-serializable
+* ✅ Events include task_id, node_id, timestamps, and detailed context
+* ✅ Event emission never affects execution flow
+* ✅ Events maintain deterministic ordering matching execution sequence
+* ✅ Documentation updated with Phase 8 section in README.md
+* ✅ All telemetry tests passing (29/29)
 
 ---
 
@@ -790,35 +802,124 @@ Matches AGENT_ENGINE_SPEC §6.
 
 *(Sonnet-plan + Haiku implementation)*
 
-## Goal
+## Status
 
-Implement plugin architecture for read-only engine observers.
+**✅ COMPLETE (2025-12-10)**
 
-Matches PROJECT_INTEGRATION_SPEC plugins.yaml semantics.
+Detailed implementation plan: [PHASE_9_IMPLEMENTATION_PLAN.md](./PHASE_9_IMPLEMENTATION_PLAN.md)
 
+## Summary of Changes
 
-## Tasks
+### Plugin Schema & Interface
+- **PluginBase**: ABC with on_event(), on_startup(), on_shutdown() methods
+- **PluginConfig**: Configuration dataclass with validation
+- Exported in schemas module for public use
 
-* `plugins.yaml` loader
-* Plugin interface:
-  `on_event(event: EngineEvent) -> None`
-* Register plugins with event bus
-* Guarantee plugins:
+### Plugin Loader
+- **PluginLoader**: Loads plugins from plugins.yaml with dynamic import
+- Validates plugin configs and module paths
+- Handles disabled plugins gracefully
+- Clear error messages for missing/invalid plugins
 
-  * cannot mutate task state
-  * cannot modify routing
-  * cannot modify the DAG
-  * cannot access internal runtime modules directly
+### Plugin Registry
+- **PluginRegistry**: Manages plugin registration, unregistration, and event dispatch
+- Event immutability: Deep copies passed to plugins
+- Error isolation: Plugin exceptions caught and logged
+- Sequential dispatch: Plugins called synchronously per event
 
-## Success Criteria
+### TelemetryBus Integration
+- Added optional `plugin_registry` parameter to TelemetryBus
+- Events automatically dispatched to all registered plugins on emission
+- Backward compatible (optional registry parameter)
 
-* Plugins receive deterministic events.
-* Engine remains fully deterministic regardless of plugins.
-* Plugin failures never alter routing or task behavior.
+### Engine Integration
+- Engine initializes PluginRegistry during construction
+- Loads plugins.yaml automatically if present (optional file)
+- Plugins registered before node execution begins
+- Added `get_plugin_registry()` method for runtime plugin access
+
+### Example Plugin
+- **ExampleLoggingPlugin**: Demonstrates read-only observation pattern
+- Shows best practices: no mutation, proper error handling
+
+### Test Coverage
+- **35 new comprehensive tests** covering:
+  - Plugin schema validation (8 tests)
+  - Plugin loader (10 tests)
+  - Plugin registry (10 tests)
+  - Telemetry integration (2 tests)
+  - Plugin isolation guarantees (5 tests)
+- All tests passing (35/35)
+
+### Documentation
+- Updated README with Phase 9 Plugin System section
+- Plugin creation examples and lifecycle documentation
+- Plugin registry access methods documented
+- plugins.yaml format updated with Phase 9 details
+- Implementation Status updated
+
+## Acceptance Criteria Met
+✅ Plugin schema (PluginConfig, PluginBase)
+✅ Plugin loader with dynamic import
+✅ Plugin registry with registration/dispatch
+✅ TelemetryBus integration
+✅ Engine plugin initialization
+✅ Plugin isolation guarantees enforced
+✅ 35+ plugin tests passing
+✅ Documentation complete
+✅ No regressions to existing tests (696 passing)
 
 ---
 
-# **Phase 10 — Example App & Documentation**
+# **Phase 10 — Agent Engine CLI Shell (Reusable REPL Framework)**
+
+*(Sonnet-plan + Haiku implementation)*
+
+## Goal
+
+Create a shared, extensible CLI chat/REPL framework that any Agent Engine project can leverage before tailoring higher-level apps.
+
+## Tasks
+
+* Implement `src/agent_engine/cli/` with a reusable REPL that:
+  * Maintains multi-turn sessions and persistent task context per profile
+  * Allows prompt editing, retrying, and rerunning previous turns
+  * Registers built-in commands (`/help`, `/mode`, `/attach`, etc.)
+  * Supports rich file interactions (open/write/edit/new/view/diff/apply_patch)
+  * Provides a lightweight terminal viewer/editor (nano/Vim lite experience)
+  * Lets apps attach files or metadata as context for `Engine.run()`
+  * Offers optional overrides for system prompt, execution settings, and telemetry hooks
+* Define CLI profiles per project that specify:
+  * Custom commands and input mappings
+  * Presentation rules for Engine outputs
+  * Default `config_dir`, telemetry integration, and session policies
+  * Hooks for adding app-specific commands/extensions
+* Enable runtime profile switching via `/mode <profile>` plus validation
+* Surface telemetry from Phase 8 events (task/node start/end, tool usage) inside the CLI view
+* Introduce typed CLI exception hierarchy (`CliError`, `CommandError`) for clean error reporting
+
+## Requirements / Invariants
+
+* CLI code must reside under `src/agent_engine/cli/` and expose a shared REPL entry point.
+* The REPL must integrate with Phase 8 telemetry so users can observe agent activity inline.
+* Profiles must be declaratively defined (e.g., `cli_profiles.yaml`) and loaded when the CLI starts.
+* Commands must be extensible: apps can register new commands without editing core CLI logic.
+* File operations (open/write/edit/diff/apply_patch) should work against a project workspace and guard against unsafe writes.
+* Session state (history, attached files, last prompt) persists across turns unless explicitly reset.
+* System prompt/settings overrides must be scoped by profile and allow runtime tweaks from the REPL.
+* Telemetry events must be surfaced before and after each `Engine.run()` invocation, including errors.
+
+## Success Criteria
+
+* REPL supports multi-turn conversations with prompt history editing, reruns, and retries.
+* `/mode` switches profiles at runtime and applies their command/customization rules.
+* Files can be opened, edited, diffed, and patched; attached files become contextual inputs for Engine runs.
+* Commands emit structured telemetry and raise typed `CliError`/`CommandError` when invalid.
+* CLI exposes hooks for app-specific commands while keeping core logic reusable.
+* Documentation updates describe how to extend the shell and use the new profiles.
+* Phase 11 example app consumes this CLI framework for its runner.
+
+# **Phase 11 — Example App & Documentation**
 
 *(Haiku implementation)*
 

@@ -237,16 +237,25 @@ If memory.yaml is not provided, the engine automatically creates:
 
 ### plugins.yaml
 
-Defines read-only observer plugins for logging, metrics, and telemetry.
+Defines read-only observer plugins for logging, metrics, and telemetry (Phase 9).
 
-Plugins are loaded during initialization and receive notification events without modifying engine state.
+Plugins are loaded during initialization and receive notification events without modifying engine state. Plugins observe all engine events but cannot mutate task state, modify routing, or affect execution flow.
+
+**Plugin Fields:**
+- `id` - Unique plugin identifier
+- `module` - Python module path to plugin class (e.g., "my_plugins.LoggingPlugin")
+- `enabled` - Boolean, whether plugin is loaded (default: true)
+- `config` - Optional plugin-specific configuration dict
 
 Example:
 ```yaml
 plugins:
   - id: "logger_plugin"
-    module: "my_plugins.logger"
-    config: {}
+    module: "my_plugins.LoggingPlugin"
+    enabled: true
+    config:
+      log_level: "INFO"
+      log_all_events: true
 ```
 
 ## Error Handling
@@ -318,27 +327,237 @@ result = engine.run({"request": "test"})
 print(result)
 ```
 
-## Phase 2 Status
+## Telemetry & Event Bus (Phase 8)
 
-**Current Implementation:** Engine initialization and manifest loading.
+The engine provides comprehensive event emission for all major operations, enabling introspection, debugging, and plugin integration.
 
-**Available:**
-- Manifest loading and validation for workflow, agents, tools, memory, and plugins
-- DAG construction with adjacency structures and reachability analysis
-- Comprehensive schema validation against canonical constraints
-- Memory store initialization (stubs)
-- Tool and LLM adapter registration
-- Comprehensive error handling with detailed context
-- Plugin system initialization
+### Event Types
 
-**Not Yet Implemented (Future Phases):**
-- Workflow execution and node traversal (Phase 4)
-- Memory retrieval and context assembly (Phase 6)
-- Tool invocation and execution (Phase 4)
-- LLM agent calls and reasoning (Phase 4)
-- Decision routing and conditional branching (Phase 5)
+The engine emits the following event types, each with structured payloads:
 
-The `Engine.run()` method currently returns an initialization stub confirming successful setup. Full execution will be implemented in Phase 4 and beyond.
+#### Task Events
+- `task_started` - Emitted when a task begins execution
+  - Includes: task_id, spec, mode, timestamp
+- `task_completed` - Emitted when a task succeeds
+  - Includes: task_id, status, lifecycle, output, timestamp
+- `task_failed` - Emitted when a task fails
+  - Includes: task_id, error, timestamp
+
+#### Node Events
+- `node_started` - Emitted before each node execution
+  - Includes: task_id, node_id, role, kind, input, timestamp
+- `node_completed` - Emitted after successful node execution
+  - Includes: task_id, node_id, output, status, timestamp
+- `node_failed` - Emitted after failed node execution
+  - Includes: task_id, node_id, error, timestamp
+
+#### Routing Events
+- `routing_decision` - Routing decision made at LINEAR or DECISION node
+  - Includes: task_id, node_id, decision, next_node_id, timestamp
+- `routing_branch` - Clone creation at BRANCH node
+  - Includes: task_id, node_id, clone_count, clone_ids, timestamp
+- `routing_split` - Subtask creation at SPLIT node
+  - Includes: task_id, node_id, subtask_count, subtask_ids, timestamp
+- `routing_merge` - Merge operation at MERGE node
+  - Includes: task_id, node_id, input_count, input_statuses, timestamp
+
+#### Tool Events
+- `tool_invoked` - Before tool execution
+  - Includes: task_id, node_id, tool_id, inputs, timestamp
+- `tool_completed` - After successful tool execution
+  - Includes: task_id, node_id, tool_id, output, status, timestamp
+- `tool_failed` - After tool execution failure
+  - Includes: task_id, node_id, tool_id, error, timestamp
+
+#### Context Events
+- `context_assembled` - After successful context assembly
+  - Includes: task_id, node_id, profile_id, item_count, token_count, timestamp
+- `context_failed` - On context assembly error
+  - Includes: task_id, node_id, error, timestamp
+
+#### Clone/Subtask Events
+- `clone_created` - Emitted for each clone created by BRANCH
+  - Includes: parent_task_id, clone_id, node_id, lineage, timestamp
+- `subtask_created` - Emitted for each subtask created by SPLIT
+  - Includes: parent_task_id, subtask_id, node_id, lineage, timestamp
+
+### Accessing Telemetry
+
+The Engine provides methods to access and filter events:
+
+```python
+from agent_engine import Engine
+from agent_engine.schemas import EventType
+
+engine = Engine.from_config_dir("my_project")
+result = engine.run({"request": "analyze codebase"})
+
+# Get all events
+all_events = engine.get_events()
+print(f"Total events: {len(all_events)}")
+
+# Filter by event type
+task_events = engine.get_events_by_type(EventType.TASK)
+node_events = engine.get_events_by_type(EventType.STAGE)
+routing_events = engine.get_events_by_type(EventType.ROUTING)
+
+# Filter by task
+task_id = result["task_id"]
+task_events = engine.get_events_by_task(task_id)
+
+# Clear events (if needed)
+engine.clear_events()
+```
+
+### Event Ordering and Timestamps
+
+- **Ordering**: Events are emitted in execution order and stored in a list
+- **Timestamps**: All events have ISO-8601 timestamps in UTC
+- **Determinism**: Same execution input produces same event sequence (modulo timestamps)
+
+### Example: Complete Event Trace
+
+```python
+engine = Engine.from_config_dir("my_project")
+result = engine.run({"request": "analyze codebase"})
+
+# Inspect the complete execution trace
+for event in engine.get_events():
+    print(f"{event.timestamp} - {event.payload['event']} "
+          f"(task: {event.task_id}, node: {event.stage_id})")
+
+# Output:
+# 2024-01-15T10:30:45.123Z - task_started (task: task-abc123, node: None)
+# 2024-01-15T10:30:45.124Z - node_started (task: task-abc123, node: start)
+# 2024-01-15T10:30:45.125Z - context_assembled (task: task-abc123, node: start)
+# 2024-01-15T10:30:45.126Z - node_completed (task: task-abc123, node: start)
+# 2024-01-15T10:30:45.127Z - routing_decision (task: task-abc123, node: start)
+# 2024-01-15T10:30:45.128Z - node_started (task: task-abc123, node: process)
+# ...
+```
+
+### Implementation Details
+
+- **No Side Effects**: Event emission never affects execution flow
+- **Thread-Safe**: Telemetry bus can be accessed safely during execution
+- **Serializable**: All event payloads are JSON-serializable for logging/export
+- **Optional**: Telemetry can be disabled by passing `telemetry=None` to components
+
+## Plugin System v1 (Phase 9)
+
+The engine provides a read-only plugin system for observing and responding to engine events without modifying execution flow, task state, or routing decisions.
+
+### Creating a Plugin
+
+Plugins inherit from `PluginBase` and implement the `on_event()` method to observe events:
+
+```python
+from agent_engine.schemas import PluginBase, Event
+
+class LoggingPlugin(PluginBase):
+    """Example plugin that logs all events."""
+
+    def __init__(self, plugin_id: str, config: dict = None):
+        super().__init__(plugin_id, config)
+        self.event_count = 0
+
+    def on_startup(self) -> None:
+        """Called when plugin is registered."""
+        print(f"Plugin {self.plugin_id} started")
+
+    def on_event(self, event: Event) -> None:
+        """Handle engine event (read-only).
+
+        Important: Plugin must not modify event or access engine internals.
+        """
+        self.event_count += 1
+        print(f"Event {self.event_count}: {event.type.value}")
+
+    def on_shutdown(self) -> None:
+        """Called when plugin is unregistered."""
+        print(f"Plugin processed {self.event_count} events")
+```
+
+### Registering Plugins
+
+Plugins are configured in `plugins.yaml` and automatically loaded during engine initialization:
+
+```yaml
+plugins:
+  - id: "logging"
+    module: "my_app.LoggingPlugin"
+    enabled: true
+    config:
+      log_level: "INFO"
+```
+
+The module path must be in format: `package.module.ClassName`
+
+### Plugin Lifecycle
+
+1. **on_startup()** - Called when plugin is registered (optional override)
+2. **on_event(event)** - Called for each event emitted by engine (required implementation)
+3. **on_shutdown()** - Called when plugin is unregistered (optional override)
+
+### Plugin Isolation Guarantees
+
+Plugins are strictly isolated from engine internals:
+
+- **Read-Only Events**: Events passed to plugins are immutable deep copies
+- **Error Isolation**: Plugin exceptions are caught and logged; never affect engine execution
+- **No State Mutation**: Plugins cannot mutate task state, DAG structure, or routing decisions
+- **Sequential Dispatch**: Plugins are called synchronously after each event; dispatching is deterministic
+
+### Plugin Configuration
+
+Each plugin receives optional configuration from `plugins.yaml`:
+
+```python
+class MetricsPlugin(PluginBase):
+    def __init__(self, plugin_id: str, config: dict = None):
+        super().__init__(plugin_id, config)
+        self.sample_rate = self.config.get("sample_rate", 1.0)
+        self.buffer_size = self.config.get("buffer_size", 100)
+```
+
+### Accessing Plugins from Code
+
+After engine initialization, you can access the plugin registry:
+
+```python
+engine = Engine.from_config_dir("config")
+
+# Get plugin registry
+registry = engine.get_plugin_registry()
+
+# List all plugins
+plugin_ids = registry.list_plugins()
+
+# Get specific plugin
+plugin = registry.get_plugin("logging")
+
+# Manually register plugin
+from my_app import CustomPlugin
+custom = CustomPlugin("custom")
+registry.register(custom)
+
+# Unregister plugin
+registry.unregister("custom")
+```
+
+## Implementation Status
+
+**Phase 1: Canonical Schemas & Manifest Validation** - ✅ Complete
+**Phase 2: Engine Facade & DAG Loader** - ✅ Complete
+**Phase 3: Task Management & Lineage** - ✅ Complete
+**Phase 4: Node Execution & Tool Invocation** - ✅ Complete
+**Phase 5: Router v1.0 (Deterministic DAG Routing)** - ✅ Complete
+**Phase 6: Context Assembly & Memory** - ✅ Complete
+**Phase 7: Node Failure Handling & Lifecycle** - ✅ Complete
+**Phase 8: Telemetry & Event Bus** - ✅ Complete
+**Phase 9: Plugin System v1 (Read-Only Observers)** - ✅ Complete
+
+Full workflow execution with all phases is now operational, including comprehensive telemetry, observability, and plugin system for extensibility.
 
 ## Development
 

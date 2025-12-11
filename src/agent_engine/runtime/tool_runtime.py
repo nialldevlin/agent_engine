@@ -17,10 +17,12 @@ class ToolRuntime:
         tools: Dict[str, ToolDefinition],
         tool_handlers: Dict[str, Callable[[Dict[str, Any]], Any]] | None = None,
         llm_client=None,
+        telemetry=None,
     ) -> None:
         self.tools = tools
         self.tool_handlers = tool_handlers or {}
         self.llm_client = llm_client
+        self.telemetry = telemetry
 
     def run_tool_stage(self, task: Task, node: Node, context_package) -> Tuple[Any | None, EngineError | None]:
         if not node.tools:
@@ -135,6 +137,15 @@ class ToolRuntime:
                 )
                 return tool_calls, error
 
+            # Emit tool invoked event
+            if self.telemetry:
+                self.telemetry.tool_invoked(
+                    task_id=task.task_id,
+                    node_id=node.stage_id,
+                    tool_id=tool_id,
+                    inputs=inputs
+                )
+
             # Execute tool
             started_at = self._now_iso()
             output = None
@@ -167,6 +178,24 @@ class ToolRuntime:
                     source=EngineErrorSource.TOOL_RUNTIME,
                     severity=Severity.ERROR
                 )
+
+            # Emit tool completed or failed event
+            if self.telemetry:
+                if tool_error:
+                    self.telemetry.tool_failed(
+                        task_id=task.task_id,
+                        node_id=node.stage_id,
+                        tool_id=tool_id,
+                        error=tool_error
+                    )
+                else:
+                    self.telemetry.tool_completed(
+                        task_id=task.task_id,
+                        node_id=node.stage_id,
+                        tool_id=tool_id,
+                        output=output,
+                        status="success"
+                    )
 
             # Create ToolCallRecord
             call_record = ToolCallRecord(

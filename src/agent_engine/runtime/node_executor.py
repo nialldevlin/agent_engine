@@ -45,13 +45,15 @@ class NodeExecutor:
         tool_runtime,
         context_assembler,
         json_engine,
-        deterministic_registry
+        deterministic_registry,
+        telemetry=None
     ):
         self.agent_runtime = agent_runtime
         self.tool_runtime = tool_runtime
         self.context_assembler = context_assembler
         self.json_engine = json_engine
         self.deterministic_registry = deterministic_registry
+        self.telemetry = telemetry
 
     def execute_node(
         self,
@@ -71,6 +73,30 @@ class NodeExecutor:
         """
         started_at = _now_iso()
 
+        # Emit node started event
+        if self.telemetry:
+            self.telemetry.node_started(
+                task_id=task.task_id,
+                node_id=node.stage_id,
+                role=node.role.value,
+                kind=node.kind.value,
+                input_data=task.current_output
+            )
+
+        # Validate EXIT node constraints before execution
+        if node.role == NodeRole.EXIT:
+            validation_error = self._validate_exit_node_execution(task, node)
+            if validation_error:
+                record = self._create_error_record(
+                    node=node,
+                    input_payload=task.current_output,
+                    error=validation_error,
+                    started_at=started_at,
+                    context_profile_id=node.context,
+                    context_metadata={}
+                )
+                return record, None
+
         # Step 1: Validate input (if schema present)
         input_payload = task.current_output
         if node.inputs_schema_id:
@@ -88,30 +114,81 @@ class NodeExecutor:
             input_payload = validated_input
 
         # Step 2: Assemble context
-        try:
-            context_package = self.context_assembler.build_context(
-                task,
-                self._default_context_request(task)
-            )
-            context_profile_id = node.context if node.context not in ["global", "none"] else node.context
-            context_metadata = self._get_context_metadata(context_package)
-        except Exception as e:
-            error = EngineError(
-                error_id="context_assembly_failed",
-                code=EngineErrorCode.UNKNOWN,
-                message=f"Context assembly failed: {e}",
-                source=EngineErrorSource.RUNTIME,
-                severity=Severity.ERROR
-            )
-            record = self._create_error_record(
-                node=node,
-                input_payload=input_payload,
-                error=error,
-                started_at=started_at,
-                context_profile_id=node.context,
-                context_metadata={}
-            )
-            return record, None
+        context_package = None
+        context_profile_id = node.context
+        context_metadata = {}
+
+        if node.context and node.context != "none":
+            try:
+                # Check if assembler supports new profile-based API
+                if hasattr(self.context_assembler, 'resolve_context_profile') and hasattr(self.context_assembler, 'build_context_for_profile'):
+                    # Use new profile-based context assembly
+                    profile = self.context_assembler.resolve_context_profile(
+                        node.context,
+                        profiles=getattr(self.context_assembler, 'context_profiles', {})
+                    )
+
+                    if profile:
+                        context_package = self.context_assembler.build_context_for_profile(
+                            task, profile
+                        )
+                        context_metadata = self._get_context_metadata(context_package)
+                    else:
+                        # Profile is None (context == "none")
+                        context_package = None
+                elif hasattr(self.context_assembler, 'build_context'):
+                    # Fall back to legacy context assembly API
+                    context_package = self.context_assembler.build_context(
+                        task,
+                        self._default_context_request(task)
+                    )
+                    context_metadata = self._get_context_metadata(context_package)
+                else:
+                    # No context assembly available
+                    context_package = None
+
+            except Exception as e:
+                error = EngineError(
+                    error_id="context_assembly_failed",
+                    code=EngineErrorCode.UNKNOWN,
+                    message=f"Context assembly failed: {e}",
+                    source=EngineErrorSource.RUNTIME,
+                    severity=Severity.ERROR
+                )
+
+                # Emit context failed event
+                if self.telemetry:
+                    self.telemetry.context_failed(
+                        task_id=task.task_id,
+                        node_id=node.stage_id,
+                        error=error
+                    )
+
+                record = self._create_error_record(
+                    node=node,
+                    input_payload=input_payload,
+                    error=error,
+                    started_at=started_at,
+                    context_profile_id=node.context,
+                    context_metadata={}
+                )
+                return record, None
+
+            # Emit context assembled event if successful
+            if self.telemetry and context_package:
+                item_count = len(context_package.items) if hasattr(context_package, 'items') else 0
+                token_count = sum(i.token_cost or 0 for i in context_package.items) if hasattr(context_package, 'items') else 0
+
+                self.telemetry.context_assembled(
+                    task_id=task.task_id,
+                    node_id=node.stage_id,
+                    profile_id=context_profile_id or "none",
+                    item_count=item_count,
+                    token_count=token_count
+                )
+        else:
+            # No context required for this node
+            context_package = None
 
         # Step 3: Execute node (agent or deterministic)
         if node.kind == NodeKind.AGENT:
@@ -122,6 +199,14 @@ class NodeExecutor:
 
         # If execution failed, return error record
         if error:
+            # Emit node failed event
+            if self.telemetry:
+                self.telemetry.node_failed(
+                    task_id=task.task_id,
+                    node_id=node.stage_id,
+                    error=error
+                )
+
             record = self._create_error_record(
                 node=node,
                 input_payload=input_payload,
@@ -137,6 +222,14 @@ class NodeExecutor:
         if node.outputs_schema_id:
             validated_output, validation_error = self._validate_output(node, output)
             if validation_error:
+                # Emit node failed event
+                if self.telemetry:
+                    self.telemetry.node_failed(
+                        task_id=task.task_id,
+                        node_id=node.stage_id,
+                        error=validation_error
+                    )
+
                 record = self._create_error_record(
                     node=node,
                     input_payload=input_payload,
@@ -166,6 +259,15 @@ class NodeExecutor:
             started_at=started_at,
             completed_at=_now_iso()
         )
+
+        # Emit node completed event
+        if self.telemetry:
+            self.telemetry.node_completed(
+                task_id=task.task_id,
+                node_id=node.stage_id,
+                output=output,
+                status=record.node_status.value
+            )
 
         return record, output
 
@@ -374,3 +476,42 @@ class NodeExecutor:
             'items_count': len(context_package.items) if hasattr(context_package, 'items') else 0
         }
         return metadata
+
+    def _validate_exit_node_execution(self, task: Task, node: Node) -> Optional[EngineError]:
+        """Validate exit node execution constraints.
+
+        Per AGENT_ENGINE_SPEC §3.1:
+        - Exit nodes must be deterministic
+        - Cannot invoke agents or tools
+        - Task status must be set before reaching exit
+
+        Args:
+            task: Task reaching exit node
+            node: The exit node to validate
+
+        Returns:
+            EngineError if validation fails, None otherwise
+        """
+        # Must be deterministic (already validated at DAG load, but double-check)
+        if node.kind != NodeKind.DETERMINISTIC:
+            return EngineError(
+                error_id="exit_node_agent_error",
+                code=EngineErrorCode.INVALID_NODE,
+                message=f"Exit node {node.stage_id} cannot be AGENT (must be DETERMINISTIC)",
+                source=EngineErrorSource.RUNTIME,
+                severity=Severity.ERROR,
+                stage_id=node.stage_id
+            )
+
+        # Task status must be set
+        if task.status == UniversalStatus.PENDING:
+            return EngineError(
+                error_id="exit_status_not_set",
+                code=EngineErrorCode.VALIDATION,
+                message=f"Exit node {node.stage_id}: task.status not set (still PENDING)",
+                source=EngineErrorSource.RUNTIME,
+                severity=Severity.ERROR,
+                stage_id=node.stage_id
+            )
+
+        return None

@@ -4,6 +4,7 @@ from .agent import AgentDefinition, AgentRole, Emphasis, AgentManifest, ToolBias
 from .base import SchemaBase, Severity
 from .errors import EngineError, EngineErrorCode, EngineErrorSource, FailureCode, FailureSignature
 from .event import Event, EventType
+from .plugin import PluginBase, PluginConfig
 from .memory import (
     CompressionPolicy,
     ContextFingerprint,
@@ -59,6 +60,8 @@ __all__ = [
     "FailureSignature",
     "Event",
     "EventType",
+    "PluginBase",
+    "PluginConfig",
     "CompressionPolicy",
     "ContextFingerprint",
     "ContextItem",

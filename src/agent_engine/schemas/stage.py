@@ -116,10 +116,15 @@ class Node(SchemaBase):
         outputs_schema_id: Optional schema ID for validating node outputs.
         continue_on_failure: If True, continue execution even if this node fails.
                             If False (default), stop on node failure.
+        always_fail: For EXIT nodes only. If True, overrides task.status to FAILED
+                     regardless of current status. Used for error exit nodes that
+                     should always report failure.
         context: Context profile ID, or literal 'global' or 'none'.
                  Controls which memory layers are visible to this node.
         merge: Merge-specific configuration (strategy, aggregation rules, etc.).
                Only used and required when role == MERGE.
+        merge_failure_mode: How merge handles failures: 'fail_on_any' (default),
+                           'ignore_failures', or 'partial'.
         metadata: Additional node-specific data (e.g., retry hints, monitoring tags).
     """
 
@@ -151,6 +156,10 @@ class Node(SchemaBase):
         default=False,
         description="If True, continue execution even if this node fails"
     )
+    always_fail: bool = Field(
+        default=False,
+        description="If True (EXIT nodes only), override task status to FAILED"
+    )
     context: str = Field(
         ...,
         description="Context profile ID, or literal 'global' or 'none'"
@@ -158,6 +167,10 @@ class Node(SchemaBase):
     merge: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Merge-specific configuration (strategy, aggregation rules, etc.); only used when role == 'merge'"
+    )
+    merge_failure_mode: Optional[str] = Field(
+        default="fail_on_any",
+        description="How merge handles failures: 'fail_on_any', 'ignore_failures', 'partial'"
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,

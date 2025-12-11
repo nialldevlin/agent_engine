@@ -95,13 +95,20 @@ class UniversalStatus(str, Enum):
     - IN_PROGRESS: Currently executing (actively being processed).
     - COMPLETED: Finished successfully (all work done, no errors).
     - FAILED: Finished with unrecoverable error.
+    - PARTIAL: Finished with partial success (some children failed, some succeeded).
     - CANCELLED: Explicitly halted before normal completion.
     - BLOCKED: Cannot proceed due to unmet dependency or resource constraint.
+
+    Partial Status Semantics:
+    - Task enters PARTIAL when some subtasks/clones fail but parent allows continuation.
+    - Merge nodes may produce PARTIAL status when recombining mixed success/failure results.
+    - PARTIAL is distinct from FAILED: some work succeeded, some did not.
     """
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    PARTIAL = "partial"
     CANCELLED = "cancelled"
     BLOCKED = "blocked"
 
