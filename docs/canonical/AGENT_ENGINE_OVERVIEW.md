@@ -325,7 +325,65 @@ A typical execution begins when a user request arrives. The engine selects the d
 
 ---
 
-## **8. Design Principles**
+## **8. Supporting Subsystems**
+
+Agent Engine ships with a set of auxiliary subsystems that support auditability, observability, governance, and extensibility without altering the canonical DAG semantics described above.
+
+### **8.1 Artifact & Output Storage Subsystem**
+
+Every Task automatically materializes its validated outputs, tool artifacts, and telemetry snapshots into an artifact store. The subsystem indexes artifacts by task ID, node ID, and execution timestamp, allowing projects to retrieve the same structured data deterministically—whether for debugging, auditing, or feed-back into evaluations.
+
+### **8.2 Engine Metadata & Versioning**
+
+The engine maintains immutable metadata for every run, including engine version, manifest hashes, schema revisions, and adapter fingerprints. Metadata accompanies task history and artifacts so downstream tooling can verify that a given DAG execution used the expected manifest snapshot and runtime components.
+
+### **8.3 Evaluation & Regression System**
+
+Projects declare evaluation harnesses that replay canonical Tasks with known inputs, verify outputs against golden data, and record pass/fail status in the artifact store. Regression suites run deterministically using the same DAG, context profiles, and tool permissions, delivering reproducible confidence metrics before new code paths go live.
+
+### **8.4 Performance Profiling & Metrics Layer**
+
+Profiling collects timing, resource, and concurrency metrics per node, per tool invocation, and per Task. These signals stream through the telemetry bus for dashboards and alerting, helping operators ensure the engine meets SLAs without changing routing behavior or schemas.
+
+### **8.5 Security & Policy Layer**
+
+A dedicated policy evaluator monitors tool use, context visibility, and execution scopes for every node. Policies express constraints on data sources, tool permissions, and agent affordances so that deterministic semantics and DAG routing remain intact while enforcing project-specific security requirements.
+
+### **8.6 Provider & Adapter Management Layer**
+
+LLM providers, tool handlers, and other adapters register through a central provider registry. The management layer tracks adapter versions, credentials, and health and surfaces them to nodes that request them via manifests. Projects can swap providers without touching the DAG or node logic.
+
+### **8.7 Debugger / Inspector Mode**
+
+An inspector mode builds on the structured execution trace, allowing operators to pause, step, or replay individual nodes and view context payloads without mutating Tasks. It reuses telemetry and artifact information to remain fully deterministic and replayable.
+
+### **8.8 Multi-Task Execution Model**
+
+Agent Engine supports multiple Tasks running concurrently within a single process or across distributed workers, each with isolated history, memory, and artifact state. The multisession scheduler coordinates these Tasks without introducing hidden DAG routing or implicit synchronization.
+
+### **8.9 CLI Framework**
+
+The shared CLI (located under `src/agent_engine/cli/`) exposes a reusable REPL for interacting with any Agent Engine project. It supports profiles, prompt editing, command registries, file attachments, telemetry surfacing, and engine overrides while still funneling every user interaction through `Engine.run()` so the underlying DAG semantics remain canonical.
+
+### **8.10 Persistent Memory & Artifact Storage**
+
+Persistent task, project, and global memory layers keep their state on durable stores (file-backed, SQLite, or other append-only logs) configured via `memory.yaml`. The subsystem complements artifact storage by ensuring every Task’s historic outputs, tool results, and attached memory snapshots remain addressable for audits, replays, and evaluations without altering DAG routing semantics.
+
+### **8.11 Secrets & Provider Credential Management**
+
+Secret loaders and provider credential handlers wrap adapters to deliver encrypted credentials, API keys, or bearer tokens. Declarative manifests map secrets to providers, and the runtime injects them through the adapter registry while enforcing the existing node/tool permissions and routing constraints.
+
+### **8.12 Multi-Task Execution Layer**
+
+A cooperative scheduler orchestrates multiple concurrently running Tasks, each with isolated history, memory, artifacts, and telemetry. Optional queue-based scheduling and throttling keep execution deterministic and scoped per Task without introducing new DAG behaviors.
+
+### **8.13 Packaging & Deployment Templates**
+
+Reusable deployment templates describe the recommended directory structure, manifest versioning, environment bootstrapping, and reproducible packaging steps. Teams can copy these templates to standardize how Agent Engine projects are deployed while the engine itself remains unchanged.
+
+---
+
+## **9. Design Principles**
 
 Agent Engine adheres to principles of declarative configuration, strict validation, strong separation of concerns, transparent execution, and deterministic routing through the DAG. The engine avoids implicit logic and instead relies solely on manifests to define behavior. Parallelism, context visibility, status propagation, and termination semantics are always explicit.
 
@@ -333,7 +391,7 @@ See **docs/canonical/RESEARCH.md** for additional conceptual background and rati
 
 ---
 
-## **9. Glossary**
+## **10. Glossary**
 
 * **Task** — A unit of work flowing through the DAG.
 * **Clone** — A parallel copy of a Task created by a Branch node.

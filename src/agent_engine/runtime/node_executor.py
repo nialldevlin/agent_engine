@@ -17,6 +17,7 @@ from agent_engine.schemas import (
     StageExecutionRecord,
     Task,
     UniversalStatus,
+    ArtifactType,
 )
 
 
@@ -46,7 +47,8 @@ class NodeExecutor:
         context_assembler,
         json_engine,
         deterministic_registry,
-        telemetry=None
+        telemetry=None,
+        artifact_store=None
     ):
         self.agent_runtime = agent_runtime
         self.tool_runtime = tool_runtime
@@ -54,6 +56,7 @@ class NodeExecutor:
         self.json_engine = json_engine
         self.deterministic_registry = deterministic_registry
         self.telemetry = telemetry
+        self.artifact_store = artifact_store
 
     def execute_node(
         self,
@@ -259,6 +262,21 @@ class NodeExecutor:
             started_at=started_at,
             completed_at=_now_iso()
         )
+
+        # Store artifact if artifact store is available
+        if self.artifact_store:
+            self.artifact_store.store_artifact(
+                task_id=task.task_id,
+                artifact_type=ArtifactType.NODE_OUTPUT,
+                payload=output,
+                node_id=node.stage_id,
+                schema_ref=node.outputs_schema_id,
+                additional_metadata={
+                    "node_role": node.role.value,
+                    "node_kind": node.kind.value,
+                    "execution_status": record.node_status.value if record.node_status else None
+                }
+            )
 
         # Emit node completed event
         if self.telemetry:

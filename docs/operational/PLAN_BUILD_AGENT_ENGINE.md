@@ -150,7 +150,20 @@ Agent Engine v1 consists of the following phases:
 7. Error Handling, Status Propagation & Exit Behavior
 8. Telemetry & Event Bus
 9. Plugin System v1 (Read-Only Observers)
-10. Example App & Documentation
+10. Artifact Storage Subsystem
+11. Engine Metadata & Versioning
+12. Evaluation & Regression System
+13. Performance Profiling & Metrics Layer
+14. Security & Policy Layer
+15. Provider / Adapter Management Layer
+16. Debugger / Inspector Mode
+17. Multi-Task Execution Model
+18. CLI Framework (Reusable REPL)
+19. Persistent Memory & Artifact Storage
+20. Secrets & Provider Credential Management
+21. Multi-Task Execution Layer
+22. Packaging & Deployment Templates
+23. Example App & Documentation
 
 All other ideas are explicitly excluded and placed into **Future Work**.
 
@@ -871,7 +884,213 @@ Detailed implementation plan: [PHASE_9_IMPLEMENTATION_PLAN.md](./PHASE_9_IMPLEME
 
 ---
 
-# **Phase 10 — Agent Engine CLI Shell (Reusable REPL Framework)**
+# **Phase 10 — Artifact Storage Subsystem**
+
+*(Haiku implementation)*
+
+## Status
+
+**✅ COMPLETE (2025-12-10)**
+
+## Goal
+
+Add a central artifact store that records validated node outputs, tool results, and telemetry snapshots for every Task without changing DAG routing.
+
+## Summary of Changes
+
+### Artifact Schema
+- **ArtifactType**: Enum for NODE_OUTPUT, TOOL_RESULT, TELEMETRY_SNAPSHOT
+- **ArtifactMetadata**: Complete metadata with artifact_id (UUID), task_id, node_id, type, timestamp, schema_ref, additional_metadata
+- **ArtifactRecord**: Combines metadata with payload
+
+### Artifact Store Implementation
+- **ArtifactStore** (`src/agent_engine/runtime/artifact_store.py`): In-memory storage with triple indexing
+  - Main index: artifact_id → ArtifactRecord
+  - Task index: task_id → List[artifact_id]
+  - Node index: node_id → List[artifact_id]
+- **Storage API**: `store_artifact()`, `get_artifact()`, `get_artifacts_by_task()`, `get_artifacts_by_node()`, `get_artifacts_by_type()`, `clear()`
+- **UUID Generation**: Deterministic artifact IDs for tracking
+- **UTC Timestamps**: ISO-8601 timestamps for all artifacts
+
+### Integration Points
+- **NodeExecutor**: After output validation, stores NODE_OUTPUT artifacts with node_role, node_kind, execution_status metadata
+- **ToolRuntime**: After each tool execution, stores TOOL_RESULT artifacts with tool_name, arguments, result, and status
+- **Engine**: Initializes ArtifactStore, wires to all components, exposes via `get_artifact_store()` method
+
+### Test Coverage
+- **25 comprehensive tests** (`test_phase10_artifact_storage.py`):
+  - 5 schema tests (metadata, records, types, optional fields, complex payloads)
+  - 10 store tests (CRUD operations, indexing, filtering, clearing)
+  - 10 integration tests (NodeExecutor, ToolRuntime, metadata correctness, retrieval APIs)
+- **128 Phase 6-9 tests** still passing (no regressions)
+
+### Files Created
+- `src/agent_engine/schemas/artifact.py` - Artifact schemas
+- `src/agent_engine/runtime/artifact_store.py` - Artifact storage implementation
+- `tests/test_phase10_artifact_storage.py` - Comprehensive test suite
+
+### Files Modified
+- `src/agent_engine/schemas/__init__.py` - Export artifact schemas
+- `src/agent_engine/runtime/__init__.py` - Export ArtifactStore
+- `src/agent_engine/runtime/node_executor.py` - Integrate artifact storage
+- `src/agent_engine/runtime/tool_runtime.py` - Integrate tool result storage
+- `src/agent_engine/engine.py` - Initialize and expose artifact store
+
+## Acceptance Criteria Met
+
+✅ Every node writes validated output to artifact store with deterministic metadata
+✅ Tool artifacts stored after each tool execution
+✅ Telemetry snapshots can be stored (TELEMETRY_SNAPSHOT type supported)
+✅ Artifacts queryable by task_id, node_id, and artifact_type
+✅ Rich metadata including schema_ref, timestamps, additional context
+✅ Optional integration (artifact_store=None is safe)
+✅ 25 artifact storage tests passing
+✅ All existing tests passing (128 Phase 6-9 tests)
+✅ Public API via `engine.get_artifact_store()`
+
+---
+
+# **Phase 11 — Engine Metadata & Versioning Layer**
+
+*(Haiku implementation)*
+
+## Goal
+
+Record immutable metadata (engine version, manifest hashes, schema revisions, adapter versions) for every load and execution so downstream tooling can verify the runtime state.
+
+## Tasks
+
+* Collect metadata during manifest loading and DAG validation.
+* Attach metadata to telemetry events, artifacts, and Task histories.
+* Store metadata in a dedicated manifest (`engine_metadata.yaml`) per PROJECT_INTEGRATION_SPEC §6.2.
+
+## Success Criteria
+
+* Every execution emits metadata describing engine version and manifest/hash fingerprint.
+* Metadata persists in telemetry and artifact records for later verification.
+* Tooling can detect mismatched manifest versions using recorded metadata.
+
+# **Phase 12 — Evaluation & Regression System**
+
+*(Haiku implementation)*
+
+## Goal
+
+Implement evaluation hooks that replay canonical Tasks against golden expectations to guard regression-free behavior.
+
+## Tasks
+
+* Parse evaluation definitions from `evaluations.yaml` (PROJECT_INTEGRATION_SPEC §6.3), including inputs, assertions, and expected outputs.
+* Route evaluations through the standard DAG, context assembly, and tool permission checks.
+* Record evaluation results (pass/fail) in the artifact store and telemetry.
+
+## Success Criteria
+
+* Evaluation suites run deterministically with manifest-defined inputs.
+* Failures emit structured telemetry and artifacts for debugging.
+* Regression runs use recorded artifacts and metadata for reproducibility.
+
+# **Phase 13 — Performance Profiling & Metrics Layer**
+
+*(Haiku implementation)*
+
+## Goal
+
+Instrument the engine with profiling hooks for stage durations, tool usage, and queueing while feeding structured metrics through telemetry.
+
+## Tasks
+
+* Implement timers and counters configured via `metrics.yaml` (PROJECT_INTEGRATION_SPEC §6.4).
+* Tag telemetry events with profiling metadata and throughput indicators.
+* Surface metrics to dashboards without altering DAG semantics.
+
+## Success Criteria
+
+* Profiling data exists for each node execution and tool invocation.
+* Metrics configuration determines which signals are emitted.
+* Metrics remain deterministic and do not change routing.
+
+# **Phase 14 — Security & Policy Layer**
+
+*(Haiku implementation)*
+
+## Goal
+
+Enforce declarative policies governing context visibility, tool permissions, and execution scope per node without modifying DAG semantics.
+
+## Tasks
+
+* Parse `policy.yaml` policies (PROJECT_INTEGRATION_SPEC §6.5) tied to nodes, tools, or contexts.
+* Evaluate policies before each node execution and log denials in Task history.
+* Surface policy verdicts through telemetry and artifact records.
+
+## Success Criteria
+
+* Policies can restrict tool usage or context visibility without altering routing.
+* Policy denials are recorded and surfaced deterministically.
+* Policy evaluation integrates with inspector/debug modes.
+
+# **Phase 15 — Provider / Adapter Management Layer**
+
+*(Haiku implementation)*
+
+## Goal
+
+Manage adapters for LLM providers, tools, and telemetry sinks through a central registry so nodes request implementations declaratively.
+
+## Tasks
+
+* Build a provider registry reading `providers.yaml` (PROJECT_INTEGRATION_SPEC §6.6).
+* Track adapter versions, credentials, and health metadata.
+* Route manifest-defined agents and tools to the resolved adapters.
+
+## Success Criteria
+
+* Each agent or tool references a provider adapter without embedding provider logic.
+* Adapter metadata stores version and credential fingerprints.
+* Provider registry participates in telemetry and CLI inspection.
+
+# **Phase 16 — Debugger / Inspector Mode**
+
+*(Haiku implementation)*
+
+## Goal
+
+Provide an inspector overlay that replays telemetry, artifacts, and history for stepping through Tasks without state mutation.
+
+## Tasks
+
+* Implement inspector hooks configurable via `inspector.yaml` (PROJECT_INTEGRATION_SPEC §6.7).
+* Allow pausing between nodes, replaying contexts, and surfacing artifacts.
+* Integrate with telemetry and artifact stores for deterministic inspection.
+
+## Success Criteria
+
+* Inspector mode can replay any Task using stored artifacts/history.
+* Users can pause, step, and resume without affecting DAG semantics.
+* Telemetry surfaces the inspector's decisions for audits.
+
+# **Phase 17 — Multi-Task Execution Model**
+
+*(Haiku implementation)*
+
+## Goal
+
+Coordinate multiple concurrent Tasks with isolated histories, memory, telemetry, and artifacts while preserving deterministic DAG behavior.
+
+## Tasks
+
+* Support Task scheduling policies declared in `execution.yaml` (PROJECT_INTEGRATION_SPEC §6.8).
+* Ensure memory, artifacts, and telemetry are namespaced per Task/session.
+* Extend CLI, telemetry, and inspector hooks to operate per Task context.
+
+## Success Criteria
+
+* Multiple Tasks run concurrently with no shared mutable history.
+* Scheduling respects declared concurrency and isolation settings.
+* CLI and inspector surfaces Task-specific context.
+
+# **Phase 18 — CLI Framework (Reusable REPL)**
 
 *(Sonnet-plan + Haiku implementation)*
 
@@ -917,9 +1136,92 @@ Create a shared, extensible CLI chat/REPL framework that any Agent Engine projec
 * Commands emit structured telemetry and raise typed `CliError`/`CommandError` when invalid.
 * CLI exposes hooks for app-specific commands while keeping core logic reusable.
 * Documentation updates describe how to extend the shell and use the new profiles.
-* Phase 11 example app consumes this CLI framework for its runner.
 
-# **Phase 11 — Example App & Documentation**
+# **Phase 19 — Persistent Memory & Artifact Storage**
+
+*(Haiku implementation)*
+
+## Goal
+
+Provide durable persistence for global, project, and task memory while continuing to capture artifacts for every node execution.
+
+## Tasks
+
+* Extend `memory.yaml` to declare file-backed or SQLite-backed stores for task/project/global layers and specify retention policies.
+* Ensure each node’s validated output and tool artifacts are written into the artifact store together with memory checkpoints.
+* Validate persistence writes against telemetry so inspectors and evaluations can replay the same data.
+* Keep DAG semantics unchanged while persisting every memory layer and artifact snapshot.
+
+## Success Criteria
+
+* Declarative memory definitions persist to durable stores and survive restarts.
+* Artifacts and memory snapshots are queryable by Task/node identity for debugging or replay.
+* Telemetry records reflect persistence metadata without altering routing or execution.
+
+# **Phase 20 — Secrets & Provider Credential Management**
+
+*(Haiku implementation)*
+
+## Goal
+
+Securely load secrets, map them to provider credentials, and integrate the material with the adapter registry without touching the router.
+
+## Tasks
+
+* Implement secret loaders that decrypt or fetch credentials per provider using entries from `provider_credentials.yaml`.
+* Define provider credential interfaces that allow adapters to request API keys, certificates, or OAuth tokens transparently.
+* Wire credentials into the adapter registry so agent and tool nodes receive the right secrets before execution.
+* Log credential metadata in telemetry while retaining deterministic node behavior.
+
+## Success Criteria
+
+* Secrets are injected only through the adapter registry and do not leak into DAG definitions.
+* Provider adapters receive credentials before invocation and can validate permissions.
+* Credential loading emits structured telemetry for auditing without changing routing rules.
+
+# **Phase 21 — Multi-Task Execution Layer**
+
+*(Haiku implementation)*
+
+## Goal
+
+Enable cooperative scheduling of multiple concurrently running Tasks with isolated memory, history, telemetry, and artifacts.
+
+## Tasks
+
+* Build a scheduler that can dispatch Tasks concurrently, honoring optional `scheduler.yaml` policies (execution order, queue depth, concurrency limits).
+* Ensure each Task retains isolated history, memory, telemetry, and artifact namespaces while the scheduler coordinates progress.
+* Provide optional queue-based scheduling knobs for bursting or rate-limiting.
+* Keep DAG semantics untouched; scheduling only coordinates Task ordering and resource isolation.
+
+## Success Criteria
+
+* Multiple Tasks can execute concurrently without sharing mutable history or memory.
+* Scheduler policies control concurrency and queueing without inferring new routes.
+* CLI, telemetry, and inspector views respect Task isolation during concurrent runs.
+
+# **Phase 22 — Packaging & Deployment Templates**
+
+*(Haiku implementation, optional)*
+
+## Goal
+
+Offer recommended packaging and deployment templates that capture layout, manifest versions, environment bootstrap scripts, and reproducible guidance.
+
+## Tasks
+
+* Document the recommended repository layout, manifest versioning strategy, and environment bootstrap commands for Agent Engine projects.
+* Provide deployment templates or scripts that reproduce the same runtime stack across environments.
+* Link packaging metadata to telemetry/metadata stores so deployments can be validated post-facto.
+* Keep the templates optional and separate from core DAG semantics.
+
+## Success Criteria
+
+* Teams can follow the templates to reproduce deployments reliably.
+* Deployment metadata (versions, hashes, bootstrap commands) is recorded for auditability.
+* Templates do not interfere with canonical routing or existing nodes.
+
+# **Phase 23 — Example App & Documentation**
 
 *(Haiku implementation)*
 
@@ -930,7 +1232,6 @@ Provide a minimal, canonical reference implementation.
 ## Tasks
 
 * Build an example project with:
-
   * workflow.yaml
   * agents.yaml
   * tools.yaml
@@ -941,7 +1242,6 @@ Provide a minimal, canonical reference implementation.
   `Engine.from_config_dir().run(input)`
 * Update documentation to match AGENT_ENGINE_SPEC & PROJECT_INTEGRATION_SPEC.
 * Provide diagrams of:
-
   * DAG structure
   * node lifecycle
   * routing semantics
@@ -1021,7 +1321,7 @@ Visual editors, schema-aware IDE plugins, etc.
 
 Agent Engine is **complete** when:
 
-* All phases 0–10 are implemented
+ * All phases 0–23 are implemented
 * All canonical documents are satisfied
 * DAG execution matches the formal semantics exactly
 * Tool invocation, routing, and context assembly are deterministic

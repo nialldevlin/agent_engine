@@ -9,6 +9,7 @@ from agent_engine.runtime.task_manager import TaskManager
 from agent_engine.runtime.tool_runtime import ToolRuntime
 from agent_engine.runtime.node_executor import NodeExecutor
 from agent_engine.runtime.deterministic_registry import DeterministicRegistry
+from agent_engine.runtime.artifact_store import ArtifactStore
 
 __all__ = [
     "AgentRuntime",
@@ -23,6 +24,7 @@ __all__ = [
     "ToolRuntime",
     "NodeExecutor",
     "DeterministicRegistry",
+    "ArtifactStore",
 ]
 
 

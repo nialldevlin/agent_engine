@@ -205,9 +205,64 @@ Agent Engine guarantees:
 - Schemas strictly enforced  
 - Reproducible execution traces  
 
+## 6. Extended Feature Manifests
+
+Beyond the core manifests, projects may opt into additional configuration files to enable the new subsystems without modifying DAG semantics.
+
+### 6.1 artifacts.yaml (Artifact & Output Storage)
+
+Defines storage bindings for task outputs, tool artifacts, and telemetry snapshots. Each entry names an artifact bucket, retention policy, and indexing rules so the engine can persist validated results alongside task history.
+
+### 6.2 engine_metadata.yaml (Metadata & Versioning)
+
+Declares engine version tags, manifest SHA fingerprints, schema revisions, and provider adapter versions. The engine records this metadata for every load and exposes it through telemetry and artifacts.
+
+### 6.3 evaluations.yaml (Evaluation & Regression)
+
+Describes deterministic evaluation rigs and regression suites: input payloads, expected schema outputs, and pass/fail assertions. These evaluations run through the same DAG and tool permissions and write results to the artifact store.
+
+### 6.4 metrics.yaml (Performance Profiling & Metrics)
+
+Controls which stages, tools, and telemetry sinks emit profiling data. Projects can toggle timers, resource counters, and queue metrics so operators can monitor performance without changing routing rules.
+
+### 6.5 policy.yaml (Security & Policy Layer)
+
+Specifies declarative policies that restrict tool access, context visibility, and execution scope per node or project. The engine evaluates these policies before each stage; violations are logged but do not alter the DAG.
+
+### 6.6 providers.yaml (Provider & Adapter Management)
+
+Lists LLM providers, tool backends, telemetry endpoints, credentials, and adapter configuration. Nodes reference these adapters through manifest fields, allowing the registry to resolve providers without modifying node logic.
+
+### 6.7 inspector.yaml (Debugger / Inspector Mode)
+
+Enables inspector hooks, including allowed telemetry events, pause checkpoints, and replay policies. Inspector mode reads artifacts and history to step through Tasks without introducing side effects.
+
+### 6.8 execution.yaml (Multi-Task Execution Model)
+
+Configures Task concurrency limits, session isolation policies, and scheduling hints. The engine uses these directives to run multiple Tasks concurrently while preserving history, memory, and artifact isolation.
+
+### 6.9 cli_profiles.yaml (CLI Framework)
+
+Describes CLI profiles—custom commands, input-to-`Engine.run()` mappings, presentation rules, default `config_dir`, and telemetry overlays. Profiles allow the shared CLI shell to serve multiple Agent Engine apps without altering the runtime.
+
+### 6.10 persistent_memory.yaml (Persistent Memory)
+
+Specifies durable stores for task/project/global memory, including file-backed, SQLite, or append-only log targets. Projects declare retention policies, serialization formats, and context visibility rules so the engine can reload memory without mutating DAG semantics.
+
+### 6.11 provider_credentials.yaml (Secrets & Providers)
+
+Lists encrypted secrets, credential references, and provider bindings. Each entry indicates which adapter consumes the credential, the expected type (API key, certificate, OAuth token), and optional rotation metadata. The engine resolves credentials through the adapter registry before agent/tool execution.
+
+### 6.12 scheduler.yaml (Multi-Task Execution)
+
+Configures cooperative scheduling policies, queue-based execution parameters, concurrency limits, and Task isolation hints. These directives allow multiple Tasks to run concurrently while keeping history, memory, and artifacts segregated according to PROJECT_INTEGRATION_SPEC §6.10.
+
+### 6.13 deployment.yaml (Packaging & Deployment)
+
+Captures recommended directory layout, manifest version tags, environment bootstrap commands, and reproducible deployment checklists. This metadata helps teams align on packaging and runtime expectations without touching canonical DAG behavior.
 ---
 
-## 6. Running the Engine
+## 7. Running the Engine
 
 Project code typically looks like:
 
@@ -228,7 +283,7 @@ The return object includes:
 
 ---
 
-## 7. Example Project Layout
+## 8. Example Project Layout
 
 ```
 my_agent_app/
@@ -246,7 +301,7 @@ my_agent_app/
 
 ---
 
-## 8. Compliance Requirements
+## 9. Compliance Requirements
 
 A project is compliant when:
 
@@ -258,7 +313,7 @@ A project is compliant when:
 
 ---
 
-## 9. Versioning & Stability
+## 10. Versioning & Stability
 
 This document is part of the canonical contract.  
 Changes that modify required fields, node semantics, or DAG structure are **breaking changes**.

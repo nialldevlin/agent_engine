@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from agent_engine.json_engine import validate
-from agent_engine.schemas import EngineError, EngineErrorCode, EngineErrorSource, Node, Severity, Task, ToolCallRecord, ToolDefinition, ToolKind
+from agent_engine.schemas import EngineError, EngineErrorCode, EngineErrorSource, Node, Severity, Task, ToolCallRecord, ToolDefinition, ToolKind, ArtifactType
 from agent_engine.security import check_tool_call
 
 
@@ -18,11 +18,13 @@ class ToolRuntime:
         tool_handlers: Dict[str, Callable[[Dict[str, Any]], Any]] | None = None,
         llm_client=None,
         telemetry=None,
+        artifact_store=None,
     ) -> None:
         self.tools = tools
         self.tool_handlers = tool_handlers or {}
         self.llm_client = llm_client
         self.telemetry = telemetry
+        self.artifact_store = artifact_store
 
     def run_tool_stage(self, task: Task, node: Node, context_package) -> Tuple[Any | None, EngineError | None]:
         if not node.tools:
@@ -210,6 +212,24 @@ class ToolRuntime:
                 metadata={'reason': reason, 'kind': kind}
             )
             tool_calls.append(call_record)
+
+            # Store artifact if artifact store is available
+            if self.artifact_store:
+                self.artifact_store.store_artifact(
+                    task_id=task.task_id,
+                    artifact_type=ArtifactType.TOOL_RESULT,
+                    payload={
+                        "tool_name": tool_id,
+                        "arguments": inputs,
+                        "result": output
+                    },
+                    node_id=node.stage_id,
+                    schema_ref=None,  # Tools don't have schema refs yet
+                    additional_metadata={
+                        "tool_call_id": call_record.call_id,
+                        "status": "success" if tool_error is None else "failure"
+                    }
+                )
 
             # If tool failed due to misuse, stop execution
             if tool_error and tool_error.code == EngineErrorCode.SECURITY:

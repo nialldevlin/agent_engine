@@ -28,6 +28,7 @@ from .runtime.agent_runtime import AgentRuntime
 from .runtime.tool_runtime import ToolRuntime
 from .runtime.context import ContextAssembler
 from .runtime.deterministic_registry import DeterministicRegistry
+from .runtime.artifact_store import ArtifactStore
 from .telemetry import TelemetryBus
 from .plugin_registry import PluginRegistry
 from .plugin_loader import PluginLoader
@@ -65,6 +66,9 @@ class Engine:
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager()
 
+        # Initialize artifact store (Phase 10)
+        self.artifact_store = ArtifactStore()
+
         # Initialize plugin registry (Phase 9)
         self.plugin_registry = PluginRegistry()
 
@@ -83,7 +87,8 @@ class Engine:
             tools=tools_dict,
             tool_handlers=None,
             llm_client=None,
-            telemetry=self.telemetry
+            telemetry=self.telemetry,
+            artifact_store=self.artifact_store
         )
 
         # ContextAssembler - use a stub for now
@@ -100,7 +105,8 @@ class Engine:
             context_assembler=self.context_assembler,
             json_engine=self.json_engine,
             deterministic_registry=self.deterministic_registry,
-            telemetry=self.telemetry
+            telemetry=self.telemetry,
+            artifact_store=self.artifact_store
         )
 
         # Initialize router (Phase 5)
@@ -267,6 +273,14 @@ class Engine:
             PluginRegistry instance
         """
         return self.plugin_registry
+
+    def get_artifact_store(self) -> ArtifactStore:
+        """Access the artifact store.
+
+        Returns:
+            ArtifactStore instance
+        """
+        return self.artifact_store
 
     def _load_plugins(self, config_dir: str) -> None:
         """Load plugins from config directory.

@@ -283,4 +283,47 @@ Agent Engine is complete when:
 
 ---
 
+## 10. Additional Operational Subsystems
+
+### 10.1 Artifact & Output Storage Subsystem
+Every Task collects validated outputs, tool results, and telemetry payloads into an artifact store indexed by task ID, node ID, schema, and timestamp, ensuring every execution is reproducible independent of the DAG logic.
+
+### 10.2 Engine Metadata & Versioning
+Every run generates immutable metadata describing engine version, manifest hashes, schema revisions, and adapter fingerprints. Metadata accompanies task history so downstream tools can verify the exact combination of code and configuration used for any execution.
+
+### 10.3 Evaluation & Regression System
+Projects may declare evaluation rigs that rebuild canonical Task inputs, rerun them through the router, and compare outputs to golden data or assertions. Regression suites run deterministically with the same tool permissions and context profiles, and they record pass/fail status within the artifact store.
+
+### 10.4 Performance Profiling & Metrics Layer
+Profiling instrumentation records durations, resource usage, context sizes, and queue latencies per stage, tool invocation, and Task. Metrics stream through the telemetry bus without affecting routing, providing dashboards and alerts while preserving deterministic semantics.
+
+### 10.5 Security & Policy Layer
+A policy evaluator inspects each stage’s context, tool accesses, and execution scope against declarative policies. It enforces constraints by permitting or denying operations before node execution, logging denials in the structured history without altering DAG routes.
+
+### 10.6 Provider & Adapter Management Layer
+Provider adapters for LLMs, tools, and telemetry sinks register through a central registry that validates configuration, tracks version metadata, and routes requests from manifest-defined nodes to the appropriate backend without embedding provider logic in the DAG.
+
+### 10.7 Debugger / Inspector Mode
+An inspector mode reuses telemetry, history, and artifacts to step through Tasks, pause between nodes, and replay contexts. It observes execution without mutation, leveraging deterministic traces to guarantee reproducibility.
+
+### 10.8 Multi-Task Execution Model
+The engine orchestrates multiple concurrently active Tasks while keeping their histories, memory, telemetry, and artifacts isolated. Multitasking changes scheduling but never introduces cycles, shortcuts, or implicit routing beyond the declared DAG.
+
+### 10.9 CLI Framework
+A shared CLI layer interacts with the engine via `Engine.run()`, managing prompt editing, command registries, profile selection, file attachments, telemetry surfacing, and session state while ensuring every interaction maps back to a canonical Task execution.
+
+### 10.10 Persistent Memory & Artifact Storage
+Persistent memory stores (task/project/global) persist to durable backends (file-backed, SQLite, etc.) and expose declarative configuration via `memory.yaml`. The subsystem guarantees every task’s memory snapshot and each validated output/tool artifact is indexed deterministically for replay or auditing.
+
+### 10.11 Secrets & Provider Credential Management
+Secret loaders expose secure credential material (API keys, secrets, certificates) through provider interfaces. Providers declare credential requirements in configuration, and the runtime binds them via the adapter registry before any tool or agent invocation, logging metadata without altering canonical routing.
+
+### 10.12 Multi-Task Execution Layer
+A cooperative scheduler distributes work across multiple concurrently running Tasks while keeping history, memory, artifacts, and telemetry isolated per Task. Optional queue-based scheduling handles backpressure, but no new routes or implicit synchronization semantics are introduced beyond the DAG.
+
+### 10.13 Packaging & Deployment Templates
+Deployment metadata captures recommended directory layout, manifest/version fingerprints, environment bootstrap steps, and reproducible packaging guidance. Projects may use these templates to standardize deployments without touching the core prediction logic or DAG structure.
+
+---
+
 # END OF SPEC
