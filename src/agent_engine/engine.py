@@ -321,3 +321,30 @@ class Engine:
 
         except ValueError as e:
             raise ValueError(f"Failed to load plugins: {e}")
+
+    def load_evaluations(self) -> List['EvaluationSuite']:
+        """Load evaluation suites from config directory.
+
+        Returns:
+            List of EvaluationSuite objects loaded from evaluations.yaml
+        """
+        from agent_engine.evaluation_loader import load_evaluations_manifest, parse_evaluations
+
+        eval_data = load_evaluations_manifest(self.config_dir)
+        if not eval_data:
+            return []
+
+        return parse_evaluations(eval_data)
+
+    def create_evaluator(self) -> 'Evaluator':
+        """Create an evaluator for running evaluation suites.
+
+        Returns:
+            Evaluator instance configured with this engine
+        """
+        from agent_engine.runtime import Evaluator
+        return Evaluator(
+            engine=self,
+            artifact_store=self.artifact_store,
+            telemetry=self.telemetry
+        )

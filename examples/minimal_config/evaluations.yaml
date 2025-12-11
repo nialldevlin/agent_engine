@@ -1,0 +1,62 @@
+suites:
+  - name: "Basic Regression Tests"
+    description: "Core workflow regression suite"
+    tags: ["regression", "critical"]
+    cases:
+      - id: "linear_success"
+        description: "Simple linear workflow should succeed"
+        input: {"message": "test"}
+        assertions:
+          - type: "status"
+            expected: "success"
+          - type: "equals"
+            field_path: "result"
+            expected: "processed test"
+        tags: ["basic"]
+
+      - id: "decision_routing"
+        description: "Decision node routes correctly"
+        input: {"value": 10}
+        assertions:
+          - type: "status"
+            expected: "success"
+          - type: "contains"
+            field_path: "path_taken"
+            expected: "high_value"
+
+      - id: "error_handling"
+        description: "Error handling works properly"
+        input: {"message": "error_case"}
+        assertions:
+          - type: "status"
+            expected: "failure"
+
+      - id: "output_schema_valid"
+        description: "Output has valid schema"
+        input: {"data": "test"}
+        assertions:
+          - type: "schema_valid"
+
+  - name: "Performance Tests"
+    description: "Performance regression suite"
+    tags: ["performance"]
+    cases:
+      - id: "fast_execution"
+        description: "Should execute quickly"
+        input: {"operation": "fast"}
+        assertions:
+          - type: "status"
+            expected: "success"
+        tags: ["speed"]
+
+  - name: "Disabled Tests"
+    description: "Tests that are temporarily disabled"
+    tags: ["disabled"]
+    cases:
+      - id: "future_feature"
+        description: "Feature under development"
+        input: {}
+        enabled: false
+        assertions:
+          - type: "status"
+            expected: "success"

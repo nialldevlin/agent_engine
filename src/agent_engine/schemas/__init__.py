@@ -45,6 +45,15 @@ from .workflow import Edge, WorkflowGraph
 from .router import MergeInputItem, WorkItem, WorkItemKind, MergeWaitState
 from .artifact import ArtifactType, ArtifactMetadata, ArtifactRecord
 from .metadata import EngineMetadata
+from .evaluation import (
+    Assertion,
+    AssertionType,
+    AssertionResult,
+    EvaluationCase,
+    EvaluationResult,
+    EvaluationStatus,
+    EvaluationSuite,
+)
 
 __all__ = [
     "AgentDefinition",
@@ -113,4 +122,11 @@ __all__ = [
     "ArtifactMetadata",
     "ArtifactRecord",
     "EngineMetadata",
+    "Assertion",
+    "AssertionType",
+    "AssertionResult",
+    "EvaluationCase",
+    "EvaluationResult",
+    "EvaluationStatus",
+    "EvaluationSuite",
 ]

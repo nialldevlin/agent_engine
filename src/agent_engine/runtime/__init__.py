@@ -11,6 +11,7 @@ from agent_engine.runtime.node_executor import NodeExecutor
 from agent_engine.runtime.deterministic_registry import DeterministicRegistry
 from agent_engine.runtime.artifact_store import ArtifactStore
 from agent_engine.runtime.metadata_collector import collect_engine_metadata
+from agent_engine.runtime.evaluator import Evaluator
 
 __all__ = [
     "AgentRuntime",
@@ -27,6 +28,7 @@ __all__ = [
     "DeterministicRegistry",
     "ArtifactStore",
     "collect_engine_metadata",
+    "Evaluator",
 ]
 
 
