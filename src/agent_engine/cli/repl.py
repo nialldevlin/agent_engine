@@ -335,17 +335,29 @@ class REPL:
             print("Output:")
             print("-" * 60)
 
-            # Format output nicely
-            if isinstance(output, (dict, list)):
-                # Try to format as JSON with indentation
+            # Extract and display content from common structures
+            content = None
+            if isinstance(output, dict):
+                # Try common content field names
+                for field in ["content", "text", "message", "result", "data"]:
+                    if field in output:
+                        content = output[field]
+                        break
+
+            # Display extracted content or fall back to original output
+            if content is not None:
+                print(str(content))
+            elif isinstance(output, str):
+                print(output)
+            elif isinstance(output, (dict, list)):
+                # Fall back to JSON if no content field found
                 try:
                     formatted = json.dumps(output, indent=2)
                     print(formatted)
                 except (TypeError, ValueError):
-                    # Fallback if not JSON-serializable
                     print(str(output))
             else:
-                # String or other simple type
+                # Other types
                 print(str(output))
 
             print("-" * 60)
