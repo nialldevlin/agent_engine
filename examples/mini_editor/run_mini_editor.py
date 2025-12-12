@@ -61,7 +61,6 @@ def enable_real_llm_calls(engine: Engine) -> bool:
         llm_client = AnthropicLLMClient(
             api_key=api_key,
             model="claude-3-5-sonnet-20241022",
-            temperature=0.7,
             max_tokens=2000,
         )
 
