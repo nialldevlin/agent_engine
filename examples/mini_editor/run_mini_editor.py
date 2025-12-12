@@ -7,6 +7,11 @@ showing how to build an interactive document editor using:
 - Agent nodes for creative work
 - Memory stores for context
 - CLI profiles for user interaction
+
+Optional: Set ANTHROPIC_API_KEY environment variable to enable real LLM calls
+instead of mock agents:
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    python3 run_mini_editor.py
 """
 
 import sys
@@ -22,6 +27,7 @@ if str(_repo_root) not in sys.path:
 
 from agent_engine import Engine
 from agent_engine.cli import REPL, CliContext, CommandError
+from agent_engine.runtime.llm_client import AnthropicLLMClient
 
 
 def setup_config_dir() -> str:
@@ -37,6 +43,39 @@ def setup_config_dir() -> str:
     return str(config_dir)
 
 
+def enable_real_llm_calls(engine: Engine) -> bool:
+    """Enable real LLM calls if ANTHROPIC_API_KEY is set.
+
+    Args:
+        engine: Engine instance to configure
+
+    Returns:
+        True if real LLM calls were enabled, False if using mock agents
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return False
+
+    try:
+        # Create real Anthropic client
+        llm_client = AnthropicLLMClient(
+            api_key=api_key,
+            model="claude-3-5-sonnet-20241022",
+            temperature=0.7,
+            max_tokens=2000,
+        )
+
+        # Inject into engine's agent runtime
+        engine.agent_runtime.llm_client = llm_client
+
+        print(f"✓ Real LLM calls enabled: {api_key[:20]}...")
+        return True
+    except Exception as e:
+        print(f"✗ Failed to enable real LLM calls: {e}", file=sys.stderr)
+        print("  Falling back to mock agents")
+        return False
+
+
 def initialize_engine(config_dir: str) -> Engine:
     """Initialize the Engine from config directory.
 
@@ -49,6 +88,12 @@ def initialize_engine(config_dir: str) -> Engine:
     try:
         engine = Engine.from_config_dir(config_dir)
         print(f"✓ Engine initialized from {config_dir}")
+
+        # Try to enable real LLM calls
+        llm_enabled = enable_real_llm_calls(engine)
+        if not llm_enabled:
+            print("  Using mock agents (set ANTHROPIC_API_KEY for real LLM calls)")
+
         return engine
     except Exception as e:
         print(f"✗ Failed to initialize engine: {e}", file=sys.stderr)
@@ -86,10 +131,19 @@ def interactive_session(engine: Engine) -> None:
     - Session history
     - Built-in commands
     - Custom commands
+    - Real LLM calls (if ANTHROPIC_API_KEY is set)
     """
     print("\n" + "="*60)
     print("Interactive Mini-Editor Session")
     print("="*60)
+
+    # Check if real LLM calls are enabled
+    has_real_llm = engine.agent_runtime.llm_client is not None
+    if has_real_llm:
+        print("\n✓ REAL LLM CALLS ENABLED (Claude Sonnet 3.5)")
+    else:
+        print("\n⚠ Using mock agents (no ANTHROPIC_API_KEY set)")
+
     print("\nTry these commands:")
     print("  /help                        - Show all commands")
     print("  /create 'Document Title'     - Create a new document")
