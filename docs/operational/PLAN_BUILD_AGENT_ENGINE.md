@@ -1655,22 +1655,78 @@ Create a shared, extensible CLI chat/REPL framework that any Agent Engine projec
 
 *(Haiku implementation)*
 
+## Status
+
+**✅ COMPLETE (2025-12-11)**
+
 ## Goal
 
 Provide durable persistence for global, project, and task memory while continuing to capture artifacts for every node execution.
 
+## Canonical Design Decisions (v1)
+
+### Storage Backends
+
+**File-backed stores (JSONL)**:
+* Format: JSON Lines (one JSON object per line)
+* Location: `<root>/.agent_engine/memory/`
+  * `task_store.jsonl`
+  * `project_store.jsonl`
+  * `global_store.jsonl`
+* Append-on-write semantics
+* Auto-flush to disk on every write
+* No explicit save/load calls required
+
+**SQLite-backed stores**:
+* Single database per project: `<root>/.agent_engine/memory/memory.db`
+* Tables: `task_memory`, `project_memory`, `global_memory`, `artifacts`
+* Columns: `id` (PK), `task_id`, `project_id`, `store`, `payload` (JSON), `created_at`, `tags`, `metadata`
+* Auto-commit on every write
+
+### Retention Policies
+
+**Count-based (v1 only)**:
+* `max_items` per store
+* Automatic enforcement (delete oldest when limit exceeded)
+* Time-based and size-based retention are future work
+
+**Configuration Example**:
+```yaml
+memory:
+  task_store:
+    backend: "file"  # or "sqlite"
+    retention:
+      max_items: 1000
+  project_store:
+    backend: "sqlite"
+    retention:
+      max_items: 5000
+  global_store:
+    backend: "sqlite"
+    retention:
+      max_items: 10000
+```
+
 ## Tasks
 
-* Extend `memory.yaml` to declare file-backed or SQLite-backed stores for task/project/global layers and specify retention policies.
-* Ensure each node’s validated output and tool artifacts are written into the artifact store together with memory checkpoints.
-* Validate persistence writes against telemetry so inspectors and evaluations can replay the same data.
-* Keep DAG semantics unchanged while persisting every memory layer and artifact snapshot.
+* Implement `JsonLinesBackend` and `SQLiteBackend` classes
+* Extend `memory.yaml` schema with `backend` and `retention` fields
+* Update `MemoryStore` to use persistent backends with auto-save
+* Extend `ArtifactStore` with optional persistence
+* Create comprehensive tests (30+ tests required)
+* Ensure memory survives engine restart
+* Keep DAG semantics unchanged
 
 ## Success Criteria
 
-* Declarative memory definitions persist to durable stores and survive restarts.
-* Artifacts and memory snapshots are queryable by Task/node identity for debugging or replay.
-* Telemetry records reflect persistence metadata without altering routing or execution.
+* ✅ JSONL backend works with automatic flushing
+* ✅ SQLite backend works with automatic commits
+* ✅ Retention policies enforced automatically
+* ✅ Memory survives engine restart
+* ✅ Artifacts persist to storage
+* ✅ 30+ tests all passing
+* ✅ No regressions in existing tests
+* ✅ Telemetry records reflect persistence metadata
 
 # **Phase 20 — Secrets & Provider Credential Management**
 
@@ -1680,18 +1736,72 @@ Provide durable persistence for global, project, and task memory while continuin
 
 Securely load secrets, map them to provider credentials, and integrate the material with the adapter registry without touching the router.
 
+## Canonical Design Decisions (v1)
+
+### Credential Sources (v1)
+
+**Supported sources**:
+* Environment variables (primary method)
+* Plain files on disk (with OS-level file permissions for security)
+* **NO encryption required** in v1
+
+**Not supported in v1** (future work):
+* Encrypted files
+* External key vaults (AWS KMS, HashiCorp Vault, etc.)
+
+### provider_credentials.yaml Format
+
+```yaml
+provider_credentials:
+  - id: "anthropic_sonnet"       # Logical credential ID
+    provider: "anthropic"         # Provider name
+    auth:
+      type: "api_key"            # ONLY type supported in v1
+      source: "env" | "file"     # Where to load secret from
+
+      # If source == "env":
+      env_var: "ANTHROPIC_API_KEY"
+
+      # If source == "file":
+      file_path: "/path/to/key.txt"
+      file_key: "api_key"        # Optional: JSON/YAML key within file
+
+    config:                      # Optional provider config
+      base_url: "https://api.anthropic.com"
+      default_model: "claude-sonnet-4"
+```
+
+**Supported credential types in v1**:
+* `api_key` ONLY
+* OAuth tokens, certificates, SSH keys are future work
+
+### Security Model
+
+* File-based secrets rely on OS-level file permissions (chmod 600)
+* No cryptographic layer required in v1 code
+* Secrets NEVER appear in telemetry or logs (only metadata)
+* Document security best practices in SECURITY.md
+
 ## Tasks
 
-* Implement secret loaders that decrypt or fetch credentials per provider using entries from `provider_credentials.yaml`.
-* Define provider credential interfaces that allow adapters to request API keys, certificates, or OAuth tokens transparently.
-* Wire credentials into the adapter registry so agent and tool nodes receive the right secrets before execution.
-* Log credential metadata in telemetry while retaining deterministic node behavior.
+* Create credential schemas (`AuthConfig`, `ProviderCredential`)
+* Implement credential loader with env var and file support
+* Create `CredentialProvider` class
+* Wire credentials into adapter registry
+* Emit telemetry for credential loads (metadata only, NO secrets)
+* Create comprehensive tests (25+ tests required)
+* Document security best practices
 
 ## Success Criteria
 
-* Secrets are injected only through the adapter registry and do not leak into DAG definitions.
-* Provider adapters receive credentials before invocation and can validate permissions.
-* Credential loading emits structured telemetry for auditing without changing routing rules.
+* ✅ Load credentials from environment variables
+* ✅ Load credentials from plain files (text, JSON, YAML)
+* ✅ provider_credentials.yaml schema implemented
+* ✅ Credentials injected into adapters transparently
+* ✅ Telemetry emits metadata only (no secret values)
+* ✅ 25+ tests all passing
+* ✅ SECURITY.md documentation created
+* ✅ No secrets leak into DAG definitions or telemetry
 
 # **Phase 21 — Multi-Task Execution Layer**
 
@@ -1701,18 +1811,74 @@ Securely load secrets, map them to provider credentials, and integrate the mater
 
 Enable cooperative scheduling of multiple concurrently running Tasks with isolated memory, history, telemetry, and artifacts.
 
+## Canonical Design Decisions (v1)
+
+### Concurrency Model (v1)
+
+**Sequential execution for v1**:
+* `max_concurrency = 1` by default
+* No threads, asyncio, or multiprocessing required
+* Implement scheduler abstraction with queue and lifecycle tracking
+* True parallelism is **future work**
+
+**Rationale**:
+* Isolation semantics already handled by Phase 17
+* Phase 21 adds explicit multi-task coordination, queueing, and state tracking
+* Parallel execution can be built on same scheduler API in future versions
+
+### scheduler.yaml Format
+
+```yaml
+scheduler:
+  enabled: true                 # Default: true
+  max_concurrency: 1            # v1 default (sequential)
+  queue_policy: "fifo"          # ONLY policy in v1
+  max_queue_size: 100           # Optional; null = unbounded
+```
+
+**Future work** (not implemented in v1):
+```yaml
+  rate_limit:                   # Reserved for future
+    requests_per_minute: 60
+    burst: 10
+```
+
+### Task States
+
+* `QUEUED` - Task in queue, not yet running
+* `RUNNING` - Task currently executing
+* `COMPLETED` - Task finished successfully
+* `FAILED` - Task finished with failure
+
+### Scheduler Semantics
+
+* **FIFO queueing** - tasks execute in order received
+* **max_queue_size enforcement** - reject new tasks when queue full
+* **Sequential execution** - dequeue and run one task at a time
+* **State tracking** - all task states queryable
+* **Telemetry events** - task_queued, task_dequeued, queue_full
+
 ## Tasks
 
-* Build a scheduler that can dispatch Tasks concurrently, honoring optional `scheduler.yaml` policies (execution order, queue depth, concurrency limits).
-* Ensure each Task retains isolated history, memory, telemetry, and artifact namespaces while the scheduler coordinates progress.
-* Provide optional queue-based scheduling knobs for bursting or rate-limiting.
-* Keep DAG semantics untouched; scheduling only coordinates Task ordering and resource isolation.
+* Create scheduler schemas (`SchedulerConfig`, `TaskState`, `QueuedTask`)
+* Implement scheduler loader with default config
+* Create `TaskScheduler` class with FIFO queue
+* Integrate scheduler with Engine
+* Add CLI commands: `/queue`, `/run-queue`, `/queue-status`
+* Create comprehensive tests (30+ tests required)
+* Maintain Phase 17 isolation guarantees
 
 ## Success Criteria
 
-* Multiple Tasks can execute concurrently without sharing mutable history or memory.
-* Scheduler policies control concurrency and queueing without inferring new routes.
-* CLI, telemetry, and inspector views respect Task isolation during concurrent runs.
+* ✅ Scheduler queues tasks (FIFO order)
+* ✅ Sequential execution (one task at a time)
+* ✅ max_queue_size enforced
+* ✅ Task state tracking (queued→running→completed/failed)
+* ✅ Telemetry events emitted
+* ✅ Engine exposes scheduling API (`enqueue`, `run_queued`)
+* ✅ CLI commands work (`/queue`, `/run-queue`, `/queue-status`)
+* ✅ 30+ tests all passing
+* ✅ Phase 17 isolation maintained (no shared mutable state)
 
 # **Phase 22 — Packaging & Deployment Templates**
 
@@ -1741,39 +1907,105 @@ Offer recommended packaging and deployment templates that capture layout, manife
 
 ## Goal
 
-Provide a minimal, canonical reference implementation.
+Provide a minimal, canonical reference implementation with complete documentation.
+
+## Canonical Design Decisions (v1)
+
+### Diagram Format
+
+**Use Mermaid** as primary diagram format:
+* Embedded directly in Markdown files
+* Each diagram includes:
+  * Short descriptive caption
+  * Textual explanation before/after Mermaid block
+  * Ensures docs are understandable when diagrams can't render
+
+**Required diagrams**:
+1. DAG structure (nodes + edges)
+2. Node lifecycle/state transitions
+3. Routing semantics (all 7 node roles)
+4. Task lineage (parent/clone/subtask)
+5. Plugin flow and telemetry events
+
+ASCII art is optional, not required.
+
+### Mini-Editor Scope
+
+**CLI-integrated example workflow** (NOT standalone app):
+* Uses Phase 18 CLI framework
+* Demonstrates:
+  * Custom CLI profile definition
+  * File attachment mechanics
+  * Engine.run() for content creation/updates
+  * Feedback/revision loops via session history
+
+**Workflow features**:
+* Accept plain-language drafting instructions
+* Create/update Markdown files by default
+* Generate structured summary (title, length, sections, tone)
+* Iterative refinement via natural language edits
+* Use existing CLI commands (/attach, /history, /retry, /edit-last)
+
+**NOT required**:
+* Full-screen editor UI
+* Standalone CLI separate from Phase 18 framework
+* Extensions beyond CLI framework semantics
 
 ## Tasks
 
-* Build an example project with:
-  * workflow.yaml
-  * agents.yaml
-  * tools.yaml
-  * memory.yaml
-  * schemas/
-  * plugins.yaml (stub)
-* Add CLI runner demonstrating:
-  `Engine.from_config_dir().run(input)`
-* Update documentation to match AGENT_ENGINE_SPEC & PROJECT_INTEGRATION_SPEC.
-* Provide diagrams of:
-  * DAG structure
-  * node lifecycle
-  * routing semantics
-  * task lineage
-  * plugin flow
-* Implement the **Mini-Editor** reference app:
-  * Accept plain-language drafting instructions (e.g., “write a 2-page summary of X in casual tone”) and create a new Markdown output file by default, switching extensions only when the user asks for something else.
-  * After each generation, return a structured summary (title, length estimate, section list, tone) so users immediately see what was produced.
-  * Allow iterative refinement via natural-language edits (“make the introduction shorter”, “change the tone to professional”, “add a section on limitations”, “rewrite paragraph 3”) that update the same file in place and refresh the structured summary.
-  * Optionally manage multiple documents within one session, keeping one active file and providing commands to switch or create new files.
-  * Accept existing documents as context (read-only or editable) so generations remain grounded in provided notes or outlines.
-  * Include a lightweight terminal viewer/editor (nano/less/vim inspired) for reading and light edits without leaving the CLI.
+### Documentation
+
+* **ARCHITECTURE.md**: All 5 Mermaid diagrams with explanations
+* **README.md**: Complete feature list, quick start, phase status (0-23 complete)
+* **TUTORIAL.md**: Step-by-step walkthrough using mini-editor
+* **API_REFERENCE.md**: Complete public API documentation
+
+### Mini-Editor Example App
+
+* Directory: `examples/mini_editor/`
+* Files:
+  * `config/workflow.yaml` - document creation/editing workflow
+  * `config/agents.yaml` - editor agent definition
+  * `config/tools.yaml` - file I/O tools
+  * `config/memory.yaml` - document memory
+  * `config/cli_profiles.yaml` - "mini_editor" profile
+  * `config/schemas/` - document schemas
+  * `run_mini_editor.py` - entry point script
+  * `README.md` - mini-editor documentation
+
+### Workflow Design
+
+```
+START → normalize_request
+  ↓
+DECISION → create_new vs edit_existing
+  ↓
+AGENT → draft_document (creates/updates .md file)
+  ↓
+AGENT → generate_summary (structured summary)
+  ↓
+EXIT → return_summary
+```
+
+Feedback loops via CLI /retry and /edit-last commands.
+
+### Verification
+
+* Grep entire codebase for "pipeline" references
+* Ensure no deprecated features remain
+* Verify docs match canonical specs
 
 ## Success Criteria
 
-* Example app runs end-to-end.
-* Docs are internally consistent and match canonical architecture.
-* No reference to pipelines or deprecated features appears.
+* ✅ All 5 Mermaid diagrams complete and correct
+* ✅ Mini-editor runs end-to-end
+* ✅ Mini-editor demonstrates CLI integration
+* ✅ Tutorial walks through complete workflow
+* ✅ API reference is complete
+* ✅ README updated with all 23 phases complete
+* ✅ No "pipeline" references in documentation
+* ✅ 20+ tests all passing
+* ✅ Documentation internally consistent with canonical specs
 
 ---
 

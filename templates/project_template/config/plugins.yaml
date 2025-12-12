@@ -1,0 +1,131 @@
+# Example plugin configuration for Agent Engine
+# Plugins extend core functionality with custom behavior
+
+plugins:
+  # Telemetry plugin
+  - id: "telemetry"
+    type: "telemetry"
+    entrypoint: "agent_engine.plugins.telemetry:TelemetryPlugin"
+    enabled: true
+    description: "Collect execution metrics and telemetry"
+    config:
+      # Telemetry targets
+      targets:
+        - type: "file"
+          path: "logs/telemetry.jsonl"
+          enabled: true
+
+        - type: "stdout"
+          enabled: false
+
+      # What to collect
+      collect:
+        - "execution_time"
+        - "node_transitions"
+        - "agent_calls"
+        - "tool_usage"
+        - "errors"
+
+      # Sampling
+      sample_rate: 1.0
+
+  # Logging plugin
+  - id: "logging"
+    type: "logging"
+    entrypoint: "agent_engine.plugins.logging:LoggingPlugin"
+    enabled: true
+    description: "Structured logging"
+    config:
+      level: "INFO"
+      format: "json"
+      output: "logs/engine.log"
+      max_size: 104857600  # 100MB
+      backup_count: 5
+
+  # Cache plugin
+  - id: "cache"
+    type: "cache"
+    entrypoint: "agent_engine.plugins.cache:CachePlugin"
+    enabled: true
+    description: "Result caching for deterministic operations"
+    config:
+      backend: "inmemory"
+      ttl: 3600
+      max_size: 1000
+
+  # Custom analysis plugin
+  - id: "custom_analyzer"
+    type: "custom"
+    entrypoint: "project.plugins.analyzer:AnalysisPlugin"
+    enabled: false
+    description: "Custom analysis plugin"
+    config:
+      analysis_depth: "full"
+      export_results: true
+
+  # Audit plugin
+  - id: "audit"
+    type: "audit"
+    entrypoint: "agent_engine.plugins.audit:AuditPlugin"
+    enabled: true
+    description: "Audit logging for compliance"
+    config:
+      log_file: "logs/audit.log"
+      events:
+        - "workflow_start"
+        - "workflow_end"
+        - "node_execution"
+        - "tool_calls"
+        - "errors"
+      retention_days: 90
+
+  # Performance monitoring plugin
+  - id: "performance"
+    type: "monitoring"
+    entrypoint: "agent_engine.plugins.performance:PerformancePlugin"
+    enabled: true
+    description: "Performance monitoring and profiling"
+    config:
+      track_memory: true
+      track_cpu: true
+      profile_interval: 60
+      alert_thresholds:
+        memory_mb: 500
+        cpu_percent: 80
+
+  # Alert plugin
+  - id: "alerts"
+    type: "alerting"
+    entrypoint: "agent_engine.plugins.alerts:AlertPlugin"
+    enabled: false
+    description: "Send alerts on critical events"
+    config:
+      channels:
+        - type: "email"
+          enabled: false
+          recipients: ["ops@example.com"]
+
+        - type: "slack"
+          enabled: false
+          webhook_url: "${SLACK_WEBHOOK_URL}"
+
+      alert_on:
+        - "workflow_failure"
+        - "high_error_rate"
+        - "resource_exhaustion"
+
+# Plugin execution order
+execution_order:
+  - "logging"
+  - "audit"
+  - "telemetry"
+  - "cache"
+  - "performance"
+  - "alerts"
+  - "custom_analyzer"
+
+# Plugin defaults
+defaults:
+  timeout: 30
+  retry_on_failure: true
+  continue_on_error: true

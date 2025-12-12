@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+build/
+dist/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.env
+.env.production
+.env.staging
+
+# Runtime
+logs/
+data/
+artifacts/
+
+# Sensitive files
+config/provider_credentials.yaml
+*.secret
+*.pem
+*.key
+
+# Documentation
+docs/
+
+# Test files (if not needed in image)
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Miscellaneous
+README.md
+LICENSE
+Makefile
+CHANGELOG.md

@@ -1,0 +1,129 @@
+# Example tool definitions for Agent Engine
+# Tools are functions that agents can call to interact with external systems
+
+tools:
+  # File system tools
+  - id: "read_file"
+    type: "filesystem"
+    entrypoint: "agent_engine.tools.filesystem:read_file"
+    description: "Read contents of a file"
+    enabled: true
+    timeout: 30
+    permissions:
+      allow_network: false
+      allow_shell: false
+      allow_env_access: false
+      max_file_size: 1000000
+    config:
+      root_path: "."
+      allowed_extensions: [".txt", ".md", ".yaml", ".json"]
+
+  - id: "write_file"
+    type: "filesystem"
+    entrypoint: "agent_engine.tools.filesystem:write_file"
+    description: "Write contents to a file"
+    enabled: true
+    timeout: 30
+    permissions:
+      allow_network: false
+      allow_shell: false
+      allow_env_access: false
+      max_file_size: 1000000
+    config:
+      root_path: "."
+      allow_create: true
+
+  # Custom analysis tools
+  - id: "text_analyzer"
+    type: "custom"
+    entrypoint: "project.tools.analysis:analyze_text"
+    description: "Analyze text content"
+    enabled: true
+    timeout: 60
+    permissions:
+      allow_network: false
+      allow_shell: false
+      allow_env_access: true
+    config:
+      max_length: 10000
+
+  - id: "sentiment_analyzer"
+    type: "custom"
+    entrypoint: "project.tools.analysis:analyze_sentiment"
+    description: "Analyze sentiment of text"
+    enabled: true
+    timeout: 30
+    permissions:
+      allow_network: false
+      allow_shell: false
+
+  - id: "report_generator"
+    type: "custom"
+    entrypoint: "project.tools.reporting:generate_report"
+    description: "Generate analysis report"
+    enabled: true
+    timeout: 120
+    permissions:
+      allow_network: false
+      allow_shell: false
+
+  # API tools
+  - id: "http_get"
+    type: "http"
+    entrypoint: "agent_engine.tools.http:http_get"
+    description: "Make HTTP GET request"
+    enabled: false
+    timeout: 30
+    permissions:
+      allow_network: true
+      allow_shell: false
+      allowed_hosts: ["api.example.com", "data.example.com"]
+
+  # Database tools
+  - id: "query_database"
+    type: "database"
+    entrypoint: "project.tools.database:query"
+    description: "Query database"
+    enabled: false
+    timeout: 60
+    permissions:
+      allow_network: true
+      allow_shell: false
+      max_query_size: 10000
+
+  # Shell/Script tools (disabled by default for security)
+  - id: "shell_execute"
+    type: "shell"
+    entrypoint: "agent_engine.tools.shell:execute"
+    description: "Execute shell command"
+    enabled: false
+    timeout: 30
+    permissions:
+      allow_network: false
+      allow_shell: true
+      allowed_commands: ["/bin/ls", "/bin/cat"]
+      root: false
+
+# Tool defaults
+defaults:
+  timeout: 30
+  retry_on_failure: true
+  max_retries: 1
+  cache_responses: false
+
+# Tool groups for easy reference
+groups:
+  analysis:
+    - text_analyzer
+    - sentiment_analyzer
+
+  reporting:
+    - report_generator
+
+  filesystem:
+    - read_file
+    - write_file
+
+  external:
+    - http_get
+    - query_database

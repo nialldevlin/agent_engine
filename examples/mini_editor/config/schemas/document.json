@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Document Schema",
+  "description": "Schema for document creation and editing",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Document title",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "content": {
+      "type": "string",
+      "description": "Document content in Markdown format",
+      "minLength": 1,
+      "maxLength": 50000
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "plaintext"],
+      "description": "Document format"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Document tags for categorization"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional document metadata",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "required": ["title", "content", "format"]
+}

@@ -1,0 +1,80 @@
+version: "1.0"
+description: "Mini-Editor: Document creation and editing workflow"
+
+nodes:
+  - stage_id: "start"
+    name: "Start"
+    kind: "deterministic"
+    role: "start"
+    default_start: true
+    context: "none"
+    continue_on_failure: false
+
+  - stage_id: "normalize_request"
+    name: "Normalize Request"
+    kind: "deterministic"
+    role: "linear"
+    context: "none"
+    tools: []
+    continue_on_failure: false
+
+  - stage_id: "decide_operation"
+    name: "Decide Operation"
+    kind: "agent"
+    role: "decision"
+    agent_id: "editor_agent"
+    context: "global"
+    tools: []
+    continue_on_failure: false
+
+  - stage_id: "draft_document"
+    name: "Draft Document"
+    kind: "agent"
+    role: "linear"
+    agent_id: "editor_agent"
+    context: "global"
+    tools: ["write_file", "read_file"]
+    continue_on_failure: false
+
+  - stage_id: "edit_document"
+    name: "Edit Document"
+    kind: "agent"
+    role: "linear"
+    agent_id: "editor_agent"
+    context: "global"
+    tools: ["read_file", "write_file"]
+    continue_on_failure: false
+
+  - stage_id: "generate_summary"
+    name: "Generate Summary"
+    kind: "agent"
+    role: "merge"
+    agent_id: "editor_agent"
+    context: "global"
+    tools: ["read_file"]
+    continue_on_failure: false
+
+  - stage_id: "exit"
+    name: "Exit"
+    kind: "deterministic"
+    role: "exit"
+    context: "none"
+    continue_on_failure: false
+
+edges:
+  - from_node_id: "start"
+    to_node_id: "normalize_request"
+  - from_node_id: "normalize_request"
+    to_node_id: "decide_operation"
+  - from_node_id: "decide_operation"
+    to_node_id: "draft_document"
+    label: "create"
+  - from_node_id: "decide_operation"
+    to_node_id: "edit_document"
+    label: "edit"
+  - from_node_id: "draft_document"
+    to_node_id: "generate_summary"
+  - from_node_id: "edit_document"
+    to_node_id: "generate_summary"
+  - from_node_id: "generate_summary"
+    to_node_id: "exit"

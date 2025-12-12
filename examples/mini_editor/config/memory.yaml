@@ -1,0 +1,23 @@
+version: "1.0"
+memory:
+  task_store:
+    type: "in_memory"
+  project_store:
+    type: "in_memory"
+  global_store:
+    type: "in_memory"
+  context_profiles:
+    - id: "default"
+      max_tokens: 4000
+      retrieval_policy: "recency"
+      sources:
+        - store: "task"
+          tags: []
+        - store: "project"
+          tags: []
+    - id: "compact"
+      max_tokens: 2000
+      retrieval_policy: "recency"
+      sources:
+        - store: "task"
+          tags: []

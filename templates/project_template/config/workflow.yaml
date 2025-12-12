@@ -1,0 +1,107 @@
+# Example workflow definition for Agent Engine
+# This is a canonical workflow that demonstrates core features:
+# - Deterministic start/exit nodes
+# - Agent nodes with LLM integration
+# - Tool usage and context management
+# - Parallel execution paths
+
+version: "1.0.0"
+description: "Example Agent Engine workflow - Text analysis and reporting"
+
+nodes:
+  # Start node - entry point for the workflow
+  - stage_id: "start"
+    name: "Start"
+    kind: "deterministic"
+    role: "start"
+    default_start: true
+    context: "none"
+    continue_on_failure: false
+
+  # Data preparation node
+  - stage_id: "prepare_data"
+    name: "Prepare Data"
+    kind: "deterministic"
+    role: "linear"
+    context: "none"
+    continue_on_failure: false
+
+  # Analysis node - uses LLM agent
+  - stage_id: "analyze_text"
+    name: "Analyze Text"
+    kind: "agent"
+    role: "linear"
+    agent_id: "default_agent"
+    context: "global"
+    tools: ["text_analyzer", "sentiment_analyzer"]
+    continue_on_failure: true
+
+  # Generate report node
+  - stage_id: "generate_report"
+    name: "Generate Report"
+    kind: "agent"
+    role: "linear"
+    agent_id: "default_agent"
+    context: "global"
+    tools: ["report_generator"]
+    continue_on_failure: true
+
+  # Exit node - workflow completion
+  - stage_id: "exit"
+    name: "Exit"
+    kind: "deterministic"
+    role: "exit"
+    context: "none"
+    continue_on_failure: false
+
+# Edges define the DAG structure
+edges:
+  - from_node_id: "start"
+    to_node_id: "prepare_data"
+    label: "begin_processing"
+
+  - from_node_id: "prepare_data"
+    to_node_id: "analyze_text"
+    label: "data_prepared"
+
+  - from_node_id: "analyze_text"
+    to_node_id: "generate_report"
+    label: "analysis_complete"
+
+  - from_node_id: "generate_report"
+    to_node_id: "exit"
+    label: "report_generated"
+
+  # Fallback paths
+  - from_node_id: "analyze_text"
+    to_node_id: "exit"
+    label: "analysis_failed"
+
+  - from_node_id: "generate_report"
+    to_node_id: "exit"
+    label: "generation_failed"
+
+# Optional: DAG-wide configuration
+config:
+  # Execution settings
+  execution_mode: "sequential"
+  max_parallel_tasks: 1
+  task_timeout: 300
+
+  # Memory settings
+  memory_backend: "inmemory"
+  memory_size_limit: 100000
+
+  # Context defaults
+  context_isolation: "per_task"
+  context_ttl: 3600
+
+  # Error handling
+  on_node_failure: "continue"
+  on_dag_failure: "stop"
+
+metadata:
+  author: "Agent Engine Team"
+  last_updated: "2025-01-01"
+  environment: "production"
+  tier: "core"

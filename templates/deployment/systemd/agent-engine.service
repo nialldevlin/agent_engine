@@ -1,0 +1,82 @@
+# Systemd service unit for Agent Engine
+# Installation:
+#   sudo cp agent-engine.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable agent-engine
+#   sudo systemctl start agent-engine
+#
+# Usage:
+#   sudo systemctl start agent-engine
+#   sudo systemctl stop agent-engine
+#   sudo systemctl restart agent-engine
+#   sudo systemctl status agent-engine
+#   sudo journalctl -u agent-engine -f
+
+[Unit]
+Description=Agent Engine Multi-Agent Orchestration
+Documentation=https://github.com/example/agent-engine
+After=network.target
+
+# Dependencies
+Wants=agent-engine.timer
+
+[Service]
+# Service type
+Type=simple
+Restart=always
+RestartSec=10
+
+# User and group (create with: sudo useradd -m -s /bin/bash -d /opt/agent-engine agentuser)
+User=agentuser
+Group=agentuser
+
+# Working directory
+WorkingDirectory=/opt/agent-engine
+
+# Environment setup
+EnvironmentFile=/opt/agent-engine/agent-engine.environment
+Environment="PYTHONUNBUFFERED=1"
+Environment="AGENT_ENGINE_CONFIG_DIR=/opt/agent-engine/config"
+Environment="LOG_LEVEL=INFO"
+
+# Main execution
+ExecStartPre=/opt/agent-engine/scripts/bootstrap.sh
+ExecStart=/usr/bin/python3 /opt/agent-engine/scripts/main.py
+ExecStartPost=/opt/agent-engine/scripts/healthcheck.py
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Timeout and signal handling
+TimeoutStartSec=60
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-engine
+
+# Process monitoring
+TasksMax=256
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/agent-engine/data /opt/agent-engine/logs /opt/agent-engine/artifacts
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

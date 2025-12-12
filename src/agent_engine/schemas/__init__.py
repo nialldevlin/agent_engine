@@ -57,6 +57,8 @@ from .evaluation import (
 )
 from .metrics import MetricType, MetricConfig, MetricsProfile, MetricSample
 from .policy import PolicyAction, PolicyTarget, PolicyRule, PolicySet
+from .scheduler import TaskState, QueuePolicy, SchedulerConfig, QueuedTask
+from .credentials import AuthType, CredentialSource, AuthConfig, ProviderCredential, ProviderCredentialsManifest
 
 __all__ = [
     "AgentDefinition",
@@ -142,4 +144,13 @@ __all__ = [
     "PolicyTarget",
     "PolicyRule",
     "PolicySet",
+    "TaskState",
+    "QueuePolicy",
+    "SchedulerConfig",
+    "QueuedTask",
+    "AuthType",
+    "CredentialSource",
+    "AuthConfig",
+    "ProviderCredential",
+    "ProviderCredentialsManifest",
 ]

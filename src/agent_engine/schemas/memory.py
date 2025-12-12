@@ -12,6 +12,9 @@ from .base import SchemaBase
 class MemoryStoreConfig(SchemaBase):
     retention: Optional[str] = Field(default=None)
     max_items: Optional[int] = Field(default=None)
+    backend: Optional[str] = Field(default="in_memory", description="Storage backend: 'in_memory', 'jsonl', or 'sqlite'")
+    file_path: Optional[str] = Field(default=None, description="Path for JSONL backend")
+    db_path: Optional[str] = Field(default=None, description="Path for SQLite backend")
 
 
 class CompressionPolicy(SchemaBase):

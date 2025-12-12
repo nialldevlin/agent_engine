@@ -1,0 +1,145 @@
+# Example scheduler configuration for Agent Engine
+# Configures task scheduling, parallelism, and execution policies
+
+# Global scheduler settings
+scheduler:
+  type: "default"  # Options: default, thread_pool, process_pool, async
+  mode: "sequential"  # Options: sequential, parallel
+
+  # Thread pool configuration (for threading-based execution)
+  thread_pool:
+    enabled: true
+    min_workers: 1
+    max_workers: 4
+    queue_size: 100
+    timeout: 300
+
+  # Process pool configuration (for CPU-intensive tasks)
+  process_pool:
+    enabled: false
+    min_workers: 1
+    max_workers: 2
+    timeout: 600
+
+# Task scheduling policies
+task_scheduling:
+  # Default scheduling strategy
+  strategy: "fifo"  # Options: fifo, priority, round_robin, load_balanced
+
+  # Priority configuration
+  priority:
+    enabled: false
+    levels: 3  # high, normal, low
+
+  # Task ordering
+  task_ordering:
+    respect_dependencies: true
+    deterministic: true
+
+  # Timeouts
+  timeouts:
+    default_timeout: 300
+    max_timeout: 3600
+    cleanup_timeout: 60
+
+# Parallelism configuration
+parallelism:
+  # Maximum concurrent tasks
+  max_concurrent_tasks: 4
+
+  # Node-level parallelism
+  max_parallel_nodes: 2
+
+  # Agent-level parallelism
+  max_parallel_agents: 2
+
+  # Resource-aware scheduling
+  resource_aware: true
+  memory_per_task: 256  # MB
+
+# Execution policies
+execution_policies:
+  # Node failure handling
+  node_failure_policy: "continue"  # Options: continue, stop, skip_branch
+
+  # Task retry policy
+  retry_policy:
+    max_retries: 3
+    retry_delay: 1
+    retry_backoff: "exponential"
+    backoff_factor: 2
+
+  # Circuit breaker (prevent cascading failures)
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    recovery_timeout: 60
+
+# Memory management
+memory_management:
+  # Memory limits per task
+  per_task_limit: 256  # MB
+  total_limit: 1024    # MB
+
+  # Memory monitoring
+  monitor_memory: true
+  memory_alert_threshold: 80  # percent
+
+  # Garbage collection
+  enable_gc: true
+  gc_interval: 300
+
+# Resource allocation
+resource_allocation:
+  # CPU allocation
+  cpu_affinity: false
+  cpu_per_task: 1
+
+  # Memory allocation strategy
+  allocation_strategy: "proportional"  # Options: equal, proportional
+
+  # Network bandwidth
+  network_limit: null  # Mbps
+
+# Load balancing
+load_balancing:
+  enabled: true
+  algorithm: "least_loaded"  # Options: least_loaded, round_robin, random
+
+  # Rebalancing
+  rebalance_interval: 60
+  rebalance_threshold: 20  # percent difference
+
+# Monitoring and observability
+monitoring:
+  enabled: true
+
+  # Metrics
+  track_metrics: true
+  metrics_interval: 10
+
+  # Logging
+  log_level: "INFO"
+  log_scheduling_decisions: false
+
+  # Tracing
+  enable_tracing: true
+
+# Clock and timing
+timing:
+  # Clock source
+  clock_source: "system"  # Options: system, monotonic
+
+  # Synchronization
+  synchronize_clocks: true
+  time_sync_interval: 60
+
+  # Timeout handling
+  timeout_grace_period: 5
+
+# Graceful shutdown
+graceful_shutdown:
+  enabled: true
+  timeout: 30
+  force_kill_timeout: 60
+  drain_queue: true

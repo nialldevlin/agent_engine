@@ -1,0 +1,35 @@
+version: "1.0"
+profiles:
+  - id: "default"
+    label: "Mini-Editor Default"
+    description: "Interactive document creation and editing"
+    default_config_dir: "config"
+    default_workflow_id: null
+    session_policies:
+      persist_history: true
+      history_file: "~/.agent_engine/mini_editor/history.jsonl"
+      max_history_items: 500
+    input_mappings:
+      default:
+        attach_files_as_context: true
+    telemetry_overlays:
+      enabled: true
+      level: "summary"
+      filters:
+        - "task_started"
+        - "task_completed"
+        - "node_completed"
+        - "routing_decision"
+    custom_commands:
+      - name: "create"
+        entrypoint: "examples.mini_editor.cli_commands:create_document"
+        description: "Create a new document"
+        aliases: ["c"]
+      - name: "edit"
+        entrypoint: "examples.mini_editor.cli_commands:edit_document"
+        description: "Edit an existing document"
+        aliases: ["e"]
+      - name: "summary"
+        entrypoint: "examples.mini_editor.cli_commands:show_summary"
+        description: "Show document summary"
+        aliases: ["s"]

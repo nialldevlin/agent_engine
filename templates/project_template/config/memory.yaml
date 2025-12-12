@@ -1,0 +1,130 @@
+# Example memory configuration for Agent Engine
+# Configures how context and state are stored during workflow execution
+
+# Memory backend selection
+backend: "inmemory"  # Options: inmemory, redis, database
+
+# In-memory backend configuration
+inmemory:
+  enabled: true
+  type: "dict"
+  max_size: 100000
+  ttl: 3600
+
+# Redis backend configuration (optional)
+redis:
+  enabled: false
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: null
+  ssl: false
+
+  # Redis-specific settings
+  max_connections: 10
+  socket_timeout: 5
+  socket_connect_timeout: 5
+
+  # Key management
+  key_prefix: "agent_engine:"
+  ttl: 3600
+
+  # Memory management
+  max_memory: 1000000
+  eviction_policy: "allkeys-lru"
+
+# Database backend configuration (optional)
+database:
+  enabled: false
+  type: "postgresql"
+  connection_string: "${DATABASE_URL}"
+
+  # Connection pooling
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+
+  # Table settings
+  table_prefix: "ae_"
+  auto_migrate: true
+
+# Context storage configuration
+context:
+  # Storage strategy for context within tasks
+  storage_type: "inmemory"  # Options: inmemory, redis, database
+
+  # Context isolation levels
+  isolation_level: "per_task"  # Options: global, per_task, per_node
+
+  # TTL and cleanup
+  ttl_seconds: 3600
+  cleanup_interval: 600
+
+  # Size limits
+  max_context_size: 1000000
+  max_tasks: 1000
+
+# Task state storage
+task_state:
+  enabled: true
+  backend: "inmemory"
+  retention_days: 30
+
+  # Automatic state cleanup
+  auto_cleanup: true
+  cleanup_interval: 86400  # 1 day
+
+# Conversation history storage
+conversation_history:
+  enabled: true
+  backend: "inmemory"
+
+  # Message retention
+  max_messages: 1000
+  max_tokens: 100000
+  ttl_seconds: 86400
+
+  # Message deduplication
+  deduplicate: false
+
+# Shared memory (global state accessible across all tasks)
+shared_memory:
+  enabled: true
+  backend: "inmemory"
+
+  # Shared state settings
+  read_only_for_tasks: false
+  require_explicit_access: false
+
+  # Conflict resolution
+  conflict_strategy: "last_write_wins"  # Options: last_write_wins, first_write_wins, merge
+
+# Memory monitoring
+monitoring:
+  enabled: true
+  track_memory_usage: true
+  log_threshold_mb: 500
+
+  # Metrics collection
+  collect_metrics: true
+  metrics_interval: 60
+
+# Memory optimization
+optimization:
+  # Compression for large values
+  compress_values: true
+  compression_threshold: 1000
+
+  # Serialization format
+  serialization: "json"  # Options: json, pickle, msgpack
+
+  # Garbage collection
+  enable_gc: true
+  gc_interval: 300
+
+# Memory persistence (for recovery)
+persistence:
+  enabled: false
+  backup_interval: 3600
+  backup_dir: "./data/memory_backups"
+  restore_on_startup: true

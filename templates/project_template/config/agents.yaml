@@ -1,0 +1,91 @@
+# Example agent definitions for Agent Engine
+# Agents are LLM-backed executors that can use tools and maintain context
+
+agents:
+  # Default agent - Anthropic Claude
+  - id: "default_agent"
+    kind: "agent"
+    llm: "anthropic/claude-3-5-sonnet"
+    description: "Primary LLM agent for workflow tasks"
+    config:
+      # Model parameters
+      temperature: 0.7
+      top_p: 0.9
+      max_tokens: 2048
+      timeout: 60
+
+      # Behavior
+      stream_responses: false
+      retry_on_failure: true
+      max_retries: 3
+
+      # Context
+      system_prompt: |
+        You are an AI assistant helping analyze and process information.
+        Be thorough, accurate, and provide clear explanations.
+        Use provided tools when needed to complete tasks.
+
+      # Tool configuration
+      tool_format: "standard"
+      require_explicit_tool_calls: false
+
+      # Memory
+      maintain_conversation_history: true
+      context_window_size: 1000
+
+  # Alternative agent - OpenAI GPT
+  - id: "gpt_agent"
+    kind: "agent"
+    llm: "openai/gpt-4"
+    description: "Alternative LLM agent using OpenAI GPT-4"
+    config:
+      temperature: 0.7
+      max_tokens: 2048
+      timeout: 60
+
+      system_prompt: |
+        You are a helpful AI assistant.
+        Provide accurate, clear, and concise responses.
+        Use tools to gather information when needed.
+
+  # Lightweight agent - Claude Haiku
+  - id: "fast_agent"
+    kind: "agent"
+    llm: "anthropic/claude-3-haiku"
+    description: "Fast, lightweight agent for simple tasks"
+    config:
+      temperature: 0.5
+      max_tokens: 512
+      timeout: 30
+
+      system_prompt: |
+        You are a fast AI assistant.
+        Provide concise, direct responses.
+
+  # Specialized agent - Analysis
+  - id: "analyst_agent"
+    kind: "agent"
+    llm: "anthropic/claude-3-5-sonnet"
+    description: "Specialized agent for detailed analysis"
+    config:
+      temperature: 0.3
+      max_tokens: 4096
+      timeout: 120
+
+      system_prompt: |
+        You are an expert analyst.
+        Provide detailed, well-researched analysis.
+        Support claims with evidence and reasoning.
+        Use tools to gather comprehensive data.
+
+      maintain_conversation_history: true
+      context_window_size: 2000
+
+# Default agent used when not specified
+default_agent: "default_agent"
+
+# Agent pool configuration
+pool:
+  size: 5
+  strategy: "round_robin"
+  timeout: 300

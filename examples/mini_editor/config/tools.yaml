@@ -1,0 +1,17 @@
+version: "1.0"
+tools:
+  - id: "write_file"
+    type: "filesystem"
+    entrypoint: "agent_engine.tools.filesystem:write_file"
+    permissions:
+      allow_network: false
+      allow_shell: false
+      root: false
+
+  - id: "read_file"
+    type: "filesystem"
+    entrypoint: "agent_engine.tools.filesystem:read_file"
+    permissions:
+      allow_network: false
+      allow_shell: false
+      root: false

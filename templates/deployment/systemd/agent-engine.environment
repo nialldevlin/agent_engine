@@ -1,0 +1,52 @@
+# Environment variables for Agent Engine systemd service
+# Source: /opt/agent-engine/agent-engine.environment
+# Loaded by: systemctl
+
+# Core Configuration
+AGENT_ENGINE_ENV=production
+AGENT_ENGINE_CONFIG_DIR=/opt/agent-engine/config
+LOG_LEVEL=INFO
+
+# Python Configuration
+PYTHONPATH=/opt/agent-engine:/usr/lib/python3/dist-packages
+PYTHONUNBUFFERED=1
+
+# API Keys and Credentials
+# Note: These should be set via systemd user credentials or secrets management
+# ANTHROPIC_API_KEY=your-key-here
+# OPENAI_API_KEY=your-key-here
+
+# Database Connection (optional)
+# DATABASE_URL=postgresql://user:password@localhost/agent_engine
+
+# Telemetry and Monitoring
+TELEMETRY_ENABLED=true
+METRICS_PORT=8000
+METRICS_PATH=/metrics
+
+# Logging Configuration
+LOG_FORMAT=json
+LOG_DIR=/opt/agent-engine/logs
+
+# Runtime Configuration
+MAX_WORKERS=4
+TASK_TIMEOUT=300
+RETRY_ATTEMPTS=3
+
+# Memory Configuration
+MEMORY_BACKEND=inmemory
+# MEMORY_BACKEND=redis
+# REDIS_URL=redis://localhost:6379/0
+
+# Plugin Configuration
+PLUGINS_ENABLED=true
+PLUGINS_DIR=/opt/agent-engine/plugins
+
+# Performance Tuning
+BUFFER_SIZE=1000
+QUEUE_SIZE=100
+CONNECTION_POOL_SIZE=10
+
+# Deployment Metadata
+DEPLOYMENT_ID=systemd-prod-001
+BOOTSTRAP_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)

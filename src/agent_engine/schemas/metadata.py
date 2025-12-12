@@ -15,6 +15,8 @@ class EngineMetadata:
     This schema captures the engine state at initialization time, including
     versions, manifest hashes, and configuration details. Metadata is immutable
     once collected and used for verification and debugging.
+
+    Phase 22: Extended with deployment metadata for packaging & deployment support.
     """
 
     # Engine version from __version__
@@ -40,6 +42,22 @@ class EngineMetadata:
     # Adapter metadata from Phase 15
     adapter_metadata: List = field(default_factory=list)
     # List of AdapterMetadata instances, but using List to avoid circular import
+
+    # Phase 22: Deployment metadata
+    deployment_id: str = ""
+    # Unique identifier for this deployment instance
+    # Examples: "systemd-prod-001", "k8s-pod-abc123", "docker-container-xyz"
+
+    deployment_timestamp: str = ""
+    # When this deployment was bootstrapped (ISO-8601)
+
+    bootstrap_hash: str = ""
+    # SHA256 hash of bootstrap script (if applicable)
+    # Used to verify deployment consistency
+
+    environment: str = ""
+    # Deployment environment: "development", "staging", "production"
+    # From AGENT_ENGINE_ENV or DEPLOYMENT_ENV environment variable
 
     # Additional metadata for extensibility
     additional: Dict[str, str] = field(default_factory=dict)

@@ -14,6 +14,18 @@ from agent_engine.runtime.metadata_collector import collect_engine_metadata
 from agent_engine.runtime.evaluator import Evaluator
 from agent_engine.runtime.metrics_collector import MetricsCollector
 from agent_engine.runtime.policy_evaluator import PolicyEvaluator
+from agent_engine.runtime.credential_provider import (
+    CredentialProvider,
+    CredentialNotFoundError,
+    CredentialLoadError,
+    CredentialMetadata,
+)
+from agent_engine.runtime.persistent_memory import (
+    JsonLinesBackend,
+    SQLiteBackend,
+    PersistentMemoryStore,
+    PersistentBackend,
+)
 
 __all__ = [
     "AgentRuntime",
@@ -33,6 +45,14 @@ __all__ = [
     "Evaluator",
     "MetricsCollector",
     "PolicyEvaluator",
+    "CredentialProvider",
+    "CredentialNotFoundError",
+    "CredentialLoadError",
+    "CredentialMetadata",
+    "JsonLinesBackend",
+    "SQLiteBackend",
+    "PersistentMemoryStore",
+    "PersistentBackend",
 ]
 
 

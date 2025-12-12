@@ -115,6 +115,34 @@ def collect_adapter_metadata(adapter_registry=None) -> list:
         return []
 
 
+def collect_deployment_metadata() -> tuple[str, str, str, str]:
+    """Collect deployment-specific metadata from environment.
+
+    Collects deployment ID, timestamp, bootstrap hash, and environment
+    from environment variables or system state.
+
+    Returns:
+        Tuple of (deployment_id, deployment_timestamp, bootstrap_hash, environment)
+    """
+    deployment_id = os.getenv("DEPLOYMENT_ID", "")
+    environment = os.getenv("AGENT_ENGINE_ENV") or os.getenv("DEPLOYMENT_ENV", "")
+
+    # Deployment timestamp - use env variable or current time
+    deployment_timestamp = os.getenv("DEPLOYMENT_TIMESTAMP", "")
+    if not deployment_timestamp:
+        deployment_timestamp = datetime.now(ZoneInfo("UTC")).isoformat()
+
+    # Bootstrap hash - try to get from environment or bootstrap file
+    bootstrap_hash = os.getenv("BOOTSTRAP_HASH", "")
+    if not bootstrap_hash:
+        # Try to read bootstrap.json if it exists
+        bootstrap_file = os.path.join(os.getcwd(), "data", "bootstrap.json")
+        if os.path.exists(bootstrap_file):
+            bootstrap_hash = compute_file_hash(bootstrap_file)
+
+    return deployment_id, deployment_timestamp, bootstrap_hash, environment
+
+
 def collect_engine_metadata(
     config_dir: str,
     adapter_registry=None
@@ -122,8 +150,8 @@ def collect_engine_metadata(
     """Collect all engine metadata for the current load.
 
     Gathers comprehensive metadata including engine version, manifest hashes,
-    schema version, adapter versions, adapter metadata, and timestamp.
-    Metadata is immutable once collected.
+    schema version, adapter versions, adapter metadata, timestamp, and
+    deployment-specific metadata (Phase 22).
 
     Args:
         config_dir: Path to configuration directory
@@ -142,6 +170,11 @@ def collect_engine_metadata(
     adapter_versions = collect_adapter_versions(adapter_registry) if adapter_registry else {}
     adapter_metadata = collect_adapter_metadata(adapter_registry) if adapter_registry else []
 
+    # Phase 22: Collect deployment metadata
+    deployment_id, deployment_timestamp, bootstrap_hash, environment = (
+        collect_deployment_metadata()
+    )
+
     metadata = EngineMetadata(
         engine_version=__version__,
         manifest_hashes=manifest_hashes,
@@ -149,7 +182,12 @@ def collect_engine_metadata(
         adapter_versions=adapter_versions,
         adapter_metadata=adapter_metadata,
         load_timestamp=datetime.now(ZoneInfo("UTC")).isoformat(),
-        config_dir=config_dir
+        config_dir=config_dir,
+        # Phase 22: Deployment metadata
+        deployment_id=deployment_id,
+        deployment_timestamp=deployment_timestamp,
+        bootstrap_hash=bootstrap_hash,
+        environment=environment,
     )
 
     return metadata

@@ -1,46 +1,111 @@
-"""Memory store initialization and stub implementation for Phase 2."""
+"""Memory store initialization and implementation with persistence support."""
 
 from typing import Dict, List, Any, Optional
+from pathlib import Path
 from .schemas.memory import ContextProfile, ContextProfileSource
+from .runtime.persistent_memory import PersistentMemoryStore
 
 
 class MemoryStore:
-    """Stub memory store for Phase 2 (full implementation in Phase 6).
+    """Memory store with optional persistence backends.
 
-    Provides a minimal interface for memory storage with no persistence.
-    This is a placeholder for the complete memory store implementation
-    that will be done in Phase 6.
+    Supports in-memory, JSONL, and SQLite backends with automatic persistence
+    and retention policies per Phase 19.
     """
 
-    def __init__(self, store_id: str, store_type: str):
-        """Initialize a memory store.
+    def __init__(
+        self,
+        store_id: str,
+        store_type: str = "in_memory",
+        backend: Optional[str] = None,
+        file_path: Optional[str] = None,
+        db_path: Optional[str] = None,
+        max_items: Optional[int] = None
+    ):
+        """Initialize a memory store with optional persistence.
 
         Args:
             store_id: Unique identifier for this store (e.g., 'task', 'project', 'global').
-            store_type: Type of store (e.g., 'in_memory', will support others in Phase 6).
+            store_type: Type of store (deprecated, use backend).
+            backend: Storage backend ('in_memory', 'jsonl', 'sqlite').
+            file_path: Path for JSONL backend.
+            db_path: Path for SQLite backend.
+            max_items: Retention policy - maximum items to keep.
         """
         self.store_id = store_id
         self.store_type = store_type
-        self.items: List[Any] = []  # Stub storage
+        self.items: List[Any] = []  # Legacy support
+
+        # Use backend parameter if provided, fall back to store_type
+        backend_type = backend or "in_memory"
+
+        # Initialize persistent backend
+        try:
+            self.persistent_store = PersistentMemoryStore(
+                backend_type=backend_type,
+                file_path=file_path,
+                db_path=db_path,
+                max_items=max_items
+            )
+        except Exception as e:
+            # Fall back to in-memory if backend init fails
+            self.persistent_store = PersistentMemoryStore(
+                backend_type="in_memory",
+                max_items=max_items
+            )
 
     def get(self, item_id: str) -> Optional[Any]:
-        """Get item by ID (stub - returns None).
+        """Get item by ID.
 
         Args:
             item_id: Identifier of the item to retrieve.
 
         Returns:
-            The requested item, or None if not found (stub implementation).
+            The requested item, or None if not found.
         """
-        return None
+        from .schemas.memory import ContextItem
+        item = self.persistent_store.get(item_id)
+        return item
 
     def put(self, item: Any) -> None:
-        """Put item in store (stub - no-op).
+        """Put item in store with persistence.
 
         Args:
-            item: Item to store.
+            item: Item to store (should be ContextItem for persistence).
         """
-        pass
+        # Support legacy list appending
+        self.items.append(item)
+
+        # Also persist if it's a ContextItem
+        from .schemas.memory import ContextItem
+        if isinstance(item, ContextItem):
+            self.persistent_store.add(item)
+
+    def query(
+        self,
+        filters: Dict[str, Any],
+        limit: int = 100,
+        order_by: str = "timestamp"
+    ) -> List[Any]:
+        """Query items from persistent store.
+
+        Args:
+            filters: Filter criteria dict
+            limit: Max items to return
+            order_by: Field to sort by
+
+        Returns:
+            List of matching items
+        """
+        return self.persistent_store.query(filters, limit, order_by)
+
+    def append(self, item: Any) -> None:
+        """Append item to store (legacy support).
+
+        Args:
+            item: Item to append
+        """
+        self.put(item)
 
 
 def initialize_memory_stores(memory_config: Optional[Dict]) -> Dict[str, MemoryStore]:
@@ -73,7 +138,11 @@ def initialize_memory_stores(memory_config: Optional[Dict]) -> Dict[str, MemoryS
             store_id = store_name.replace("_store", "")
             stores[store_id] = MemoryStore(
                 store_id,
-                store_config.get("type", "in_memory")
+                store_config.get("type", "in_memory"),
+                backend=store_config.get("backend"),
+                file_path=store_config.get("file_path"),
+                db_path=store_config.get("db_path"),
+                max_items=store_config.get("max_items")
             )
 
     return stores

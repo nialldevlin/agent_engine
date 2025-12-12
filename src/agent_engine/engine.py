@@ -9,9 +9,11 @@ from .manifest_loader import (
     load_plugins_manifest,
     load_schemas
 )
+from .credential_loader import load_credentials_manifest, parse_credentials
 from .metrics_loader import load_metrics_manifest, parse_metrics
 from .policy_loader import load_policy_manifest, parse_policies
-from .runtime import MetricsCollector
+from .scheduler_loader import load_scheduler_manifest, parse_scheduler, get_default_config as get_default_scheduler_config
+from .runtime import MetricsCollector, CredentialProvider
 from .runtime.policy_evaluator import PolicyEvaluator
 from .schema_validator import (
     validate_nodes,
@@ -28,6 +30,7 @@ from .schemas import Event, EventType, EngineMetadata, MetricSample
 from .runtime.task_manager import TaskManager
 from .runtime.node_executor import NodeExecutor
 from .runtime.router import Router
+from .runtime.scheduler import TaskScheduler
 from .runtime.agent_runtime import AgentRuntime
 from .runtime.tool_runtime import ToolRuntime
 from .runtime.context import ContextAssembler
@@ -60,6 +63,7 @@ class Engine:
         metadata: Optional[EngineMetadata] = None,
         metrics_collector: Optional[MetricsCollector] = None,
         policy_evaluator: Optional[PolicyEvaluator] = None,
+        credential_provider: Optional[CredentialProvider] = None,
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
@@ -74,9 +78,14 @@ class Engine:
         self.metadata = metadata
         self.metrics_collector = metrics_collector
         self.policy_evaluator = policy_evaluator
+        self.credential_provider = credential_provider
 
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager()
+
+        # Initialize scheduler (Phase 21) - uses default config for now
+        # Scheduler config can be passed via __init__ parameter in future
+        self.scheduler = None  # Will be set in from_config_dir
 
         # Initialize artifact store (Phase 10)
         self.artifact_store = ArtifactStore()
@@ -193,8 +202,13 @@ class Engine:
         memory_stores = initialize_memory_stores(memory_config)
         context_profiles = initialize_context_profiles(memory_config)
 
-        # Step 6: Register tools and adapters
-        adapters = initialize_adapters(agents, tools)
+        # Phase 20: Load credentials (optional)
+        credentials_data = load_credentials_manifest(path)
+        credentials_manifest = parse_credentials(credentials_data)
+        credential_provider = CredentialProvider(credentials_manifest)
+
+        # Step 6: Register tools and adapters (with credential support)
+        adapters = initialize_adapters(agents, tools, credential_provider)
 
         # Step 7: Load plugins
         plugins = plugins_data.get('plugins', []) if plugins_data else []
@@ -212,6 +226,10 @@ class Engine:
         policy_data = load_policy_manifest(path)
         policy_sets = parse_policies(policy_data)
 
+        # Phase 21: Load scheduler configuration
+        scheduler_data = load_scheduler_manifest(path)
+        scheduler_config = parse_scheduler(scheduler_data)
+
         # Step 8: Return engine
         engine = cls(
             config_dir=path,
@@ -226,12 +244,16 @@ class Engine:
             metadata=metadata,
             metrics_collector=metrics_collector,
             policy_evaluator=None,  # Initialized below
+            credential_provider=credential_provider,
         )
 
         # Initialize policy evaluator with telemetry after engine creation
         engine.policy_evaluator = PolicyEvaluator(policy_sets, engine.telemetry)
         # Update tool runtime with policy evaluator
         engine.tool_runtime.policy_evaluator = engine.policy_evaluator
+
+        # Initialize scheduler with telemetry (Phase 21)
+        engine.scheduler = TaskScheduler(config=scheduler_config, telemetry=engine.telemetry)
 
         return engine
 
@@ -344,6 +366,17 @@ class Engine:
             MetricsCollector instance or None if not available
         """
         return self.metrics_collector
+
+    def get_credential_provider(self) -> Optional[CredentialProvider]:
+        """Get the credential provider for accessing loaded credentials.
+
+        Phase 20: Returns the credential provider with loaded provider credentials.
+        Safe to emit metadata (no secret values) in telemetry.
+
+        Returns:
+            CredentialProvider instance or None if not available
+        """
+        return self.credential_provider
 
     def _load_plugins(self, config_dir: str) -> None:
         """Load plugins from config directory.
@@ -472,6 +505,143 @@ class Engine:
         """
         inspector = self.create_inspector()
         return inspector.get_task_summary(task_id)
+
+    def enqueue(self, input: Any, start_node_id: Optional[str] = None) -> str:
+        """Queue a task for later execution (Phase 21).
+
+        Per scheduler design, enqueues task for FIFO execution.
+        Use run_queued() to execute queued tasks.
+
+        Args:
+            input: JSON-serializable input data
+            start_node_id: Optional explicit start node ID
+
+        Returns:
+            Task ID for tracking
+
+        Raises:
+            RuntimeError: If queue is full
+            ValueError: If input is not JSON-serializable
+        """
+        import json
+
+        # Validate input is JSON-serializable
+        try:
+            json.dumps(input)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Input must be JSON-serializable: {e}")
+
+        if not self.scheduler:
+            raise RuntimeError("Scheduler not initialized")
+
+        return self.scheduler.enqueue_task(input, start_node_id)
+
+    def run_queued(self) -> List[Dict[str, Any]]:
+        """Execute all queued tasks sequentially (Phase 21).
+
+        Dequeues and runs tasks one at a time (max_concurrency=1 in v1).
+
+        Returns:
+            List of result dicts, one per executed task:
+            [
+                {"task_id": str, "status": str, "output": Any, "history": List},
+                ...
+            ]
+
+        Raises:
+            Exception: If any task execution fails
+        """
+        if not self.scheduler:
+            raise RuntimeError("Scheduler not initialized")
+
+        results = []
+
+        # Execute all queued tasks
+        while self.scheduler.get_queue_size() > 0:
+            # Dequeue next task
+            task_id = self.scheduler.run_next()
+            if not task_id:
+                break
+
+            # Get queued task info
+            queued_task = None
+            for task in self.scheduler.running.values():
+                if task.task_id == task_id:
+                    queued_task = task
+                    break
+
+            if not queued_task:
+                continue
+
+            try:
+                # Execute the task using router
+                completed_task = self.router.execute_task(
+                    queued_task.input,
+                    queued_task.start_node_id
+                )
+
+                # Mark as completed
+                self.scheduler.mark_task_completed(
+                    task_id,
+                    completed_task.current_output if hasattr(completed_task, 'current_output') else None
+                )
+
+                # Format result
+                results.append({
+                    "task_id": task_id,
+                    "status": "completed",
+                    "output": completed_task.current_output if hasattr(completed_task, 'current_output') else None,
+                    "history": [record.dict() if hasattr(record, 'dict') else record for record in (completed_task.history if hasattr(completed_task, 'history') else [])]
+                })
+
+            except Exception as e:
+                # Mark as failed
+                self.scheduler.mark_task_failed(task_id, str(e))
+
+                # Format error result
+                results.append({
+                    "task_id": task_id,
+                    "status": "failed",
+                    "output": None,
+                    "error": str(e),
+                    "history": []
+                })
+
+        return results
+
+    def get_scheduler(self) -> Optional[TaskScheduler]:
+        """Get the task scheduler (Phase 21).
+
+        Returns:
+            TaskScheduler instance, or None if not initialized
+        """
+        return self.scheduler
+
+    def get_queue_status(self) -> Dict[str, Any]:
+        """Get current queue status (Phase 21).
+
+        Returns:
+            Dict with queue stats and task states
+        """
+        if not self.scheduler:
+            return {
+                "scheduler_enabled": False,
+                "queue_size": 0,
+                "running_count": 0,
+                "completed_count": 0,
+                "tasks": {}
+            }
+
+        return {
+            "scheduler_enabled": self.scheduler.config.enabled,
+            "max_concurrency": self.scheduler.config.max_concurrency,
+            "queue_policy": self.scheduler.config.queue_policy.value,
+            "max_queue_size": self.scheduler.config.max_queue_size,
+            "queue_size": self.scheduler.get_queue_size(),
+            "running_count": self.scheduler.get_running_count(),
+            "completed_count": self.scheduler.get_completed_count(),
+            "tasks": self.scheduler.get_all_states()
+        }
 
     def create_repl(self, config_dir: Optional[str] = None, profile_id: Optional[str] = None) -> 'REPL':
         """Create a REPL for interactive workflow execution.

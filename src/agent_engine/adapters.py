@@ -1,13 +1,20 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 from agent_engine.schemas import AdapterMetadata, AdapterType
+
+if TYPE_CHECKING:
+    from agent_engine.runtime.credential_provider import CredentialProvider
 
 
 class AdapterRegistry:
-    """Registry for tools and LLM providers (stub for Phase 2)."""
+    """Registry for tools and LLM providers (stub for Phase 2).
 
-    def __init__(self):
+    Phase 20 addition: Supports credential injection for providers.
+    """
+
+    def __init__(self, credential_provider: Optional['CredentialProvider'] = None):
         self.tools: Dict[str, Dict] = {}
         self.llm_providers: Dict[str, Dict] = {}
+        self.credential_provider = credential_provider
 
     def register_tool(self, tool_config: Dict) -> None:
         """Register a tool by its ID."""
@@ -64,9 +71,20 @@ class AdapterRegistry:
         return metadata_list
 
 
-def initialize_adapters(agents: List[Dict], tools: List[Dict]) -> AdapterRegistry:
-    """Initialize adapter registry from agents and tools manifests."""
-    registry = AdapterRegistry()
+def initialize_adapters(agents: List[Dict], tools: List[Dict], credential_provider: Optional['CredentialProvider'] = None) -> AdapterRegistry:
+    """Initialize adapter registry from agents and tools manifests.
+
+    Phase 20 addition: Accepts credential provider for credential injection.
+
+    Args:
+        agents: List of agent definitions
+        tools: List of tool definitions
+        credential_provider: Optional credential provider for credential injection
+
+    Returns:
+        Initialized AdapterRegistry
+    """
+    registry = AdapterRegistry(credential_provider=credential_provider)
 
     # Register LLM providers from agents
     for agent in agents:

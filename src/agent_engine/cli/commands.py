@@ -228,6 +228,131 @@ def apply_patch_command(ctx: CliContext, args: str) -> None:
 
 
 @register_command(
+    "queue",
+    help_text="Queue a task for later execution",
+)
+def queue_command(ctx: CliContext, args: str) -> None:
+    """Queue a task for execution (Phase 21).
+
+    Usage: /queue <input_expression> [start_node]
+
+    Examples:
+        /queue {"text": "hello"}
+        /queue {"text": "hello"} custom_start_node
+    """
+    if not args or not args.strip():
+        raise CommandError(
+            message="Input expression required. Format: /queue <input> [start_node]",
+            command_name="queue",
+        )
+
+    parts = args.strip().split(maxsplit=1)
+    input_expr = parts[0]
+    start_node = parts[1] if len(parts) > 1 else None
+
+    try:
+        # Parse input as JSON
+        import json
+        input_data = json.loads(input_expr)
+    except json.JSONDecodeError as e:
+        raise CommandError(
+            message=f"Invalid JSON input: {e}",
+            command_name="queue",
+            args=args,
+        )
+
+    try:
+        task_id = ctx.engine.enqueue(input_data, start_node)
+        print(f"Task queued: {task_id}")
+        print(f"Queue size: {ctx.engine.get_queue_status()['queue_size']}")
+    except Exception as e:
+        raise CommandError(
+            message=f"Failed to queue task: {e}",
+            command_name="queue",
+            args=args,
+        )
+
+
+@register_command(
+    "run-queue",
+    help_text="Execute all queued tasks sequentially",
+)
+def run_queue_command(ctx: CliContext, args: str) -> None:
+    """Execute all queued tasks (Phase 21)."""
+    try:
+        print("Executing queued tasks...")
+        results = ctx.engine.run_queued()
+
+        print(f"\nCompleted {len(results)} task(s):")
+        for result in results:
+            status = result.get("status", "unknown")
+            task_id = result.get("task_id", "unknown")
+            symbol = "✓" if status == "completed" else "✗"
+            print(f"  {symbol} {task_id}: {status}")
+            if result.get("error"):
+                print(f"      Error: {result['error']}")
+
+        # Show final queue status
+        status = ctx.engine.get_queue_status()
+        print(f"\nQueue status:")
+        print(f"  Remaining: {status['queue_size']}")
+        print(f"  Running: {status['running_count']}")
+        print(f"  Completed: {status['completed_count']}")
+
+    except Exception as e:
+        raise CommandError(
+            message=f"Failed to run queued tasks: {e}",
+            command_name="run-queue",
+        )
+
+
+@register_command(
+    "queue-status",
+    help_text="Show queue status and task states",
+)
+def queue_status_command(ctx: CliContext, args: str) -> None:
+    """Show scheduler and queue status (Phase 21)."""
+    try:
+        status = ctx.engine.get_queue_status()
+
+        print("Scheduler Status:")
+        print(f"  Enabled: {status.get('scheduler_enabled', False)}")
+        print(f"  Max Concurrency: {status.get('max_concurrency', 'N/A')}")
+        print(f"  Queue Policy: {status.get('queue_policy', 'N/A')}")
+        print(f"  Max Queue Size: {status.get('max_queue_size', 'Unlimited')}")
+
+        print("\nQueue Statistics:")
+        print(f"  Queued: {status.get('queue_size', 0)}")
+        print(f"  Running: {status.get('running_count', 0)}")
+        print(f"  Completed: {status.get('completed_count', 0)}")
+
+        # Show task details if requested
+        if args and args.strip() == "-v":
+            tasks = status.get('tasks', {})
+            if tasks:
+                print("\nTask Details:")
+                for task_id, task_info in tasks.items():
+                    state = task_info.get('state', 'unknown')
+                    print(f"  [{state}] {task_id}")
+                    if 'enqueued_at' in task_info:
+                        print(f"      Enqueued: {task_info['enqueued_at']}")
+                    if 'started_at' in task_info:
+                        print(f"      Started: {task_info['started_at']}")
+                    if 'completed_at' in task_info:
+                        print(f"      Completed: {task_info['completed_at']}")
+                    if 'error' in task_info and task_info['error']:
+                        print(f"      Error: {task_info['error']}")
+            else:
+                print("\nNo tasks in scheduler")
+
+    except Exception as e:
+        raise CommandError(
+            message=f"Failed to get queue status: {e}",
+            command_name="queue-status",
+        )
+
+
+@register_command(
     "quit",
     aliases=["exit"],
     help_text="Exit REPL",
