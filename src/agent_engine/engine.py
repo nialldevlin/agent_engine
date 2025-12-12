@@ -1,3 +1,5 @@
+import os
+import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .dag import DAG
@@ -42,6 +44,7 @@ from .telemetry import TelemetryBus
 from .plugin_registry import PluginRegistry
 from .plugin_loader import PluginLoader
 from .paths import resolve_state_root, ensure_directory
+from urllib import request as urlrequest
 
 
 class Engine:
@@ -66,6 +69,7 @@ class Engine:
         policy_evaluator: Optional[PolicyEvaluator] = None,
         credential_provider: Optional[CredentialProvider] = None,
         state_root: Optional[Path] = None,
+        llm_client: Optional[Any] = None,
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
@@ -107,7 +111,7 @@ class Engine:
         self._load_plugins(config_dir)
 
         # AgentRuntime expects llm_client and template_version
-        self.agent_runtime = AgentRuntime(llm_client=None, template_version="v1")
+        self.agent_runtime = AgentRuntime(llm_client=llm_client, template_version="v1")
 
         # ToolRuntime expects tools dict and tool_handlers
         tools_dict = {t['id']: t for t in tools} if tools else {}
@@ -260,6 +264,47 @@ class Engine:
         # Step 8: Return engine
         state_root = ensure_directory(resolve_state_root(path))
 
+        # Optional: lightweight Anthropics HTTP client if explicitly enabled
+        llm_client = None
+        if os.getenv("AGENT_ENGINE_USE_ANTHROPIC") and os.getenv("ANTHROPIC_API_KEY"):
+            default_model = None
+            try:
+                default_model = (agents_data.get("agents") or [{}])[0].get("llm")
+            except Exception:
+                default_model = None
+
+            class _AnthropicHTTPClient:
+                def __init__(self, api_key: str, model: Optional[str]):
+                    self.api_key = api_key
+                    self.model = model or "claude-3-5-sonnet-20240620"
+
+                def generate(self, prompt_payload: Any) -> Any:
+                    prompt_text = json.dumps(prompt_payload) if isinstance(prompt_payload, (dict, list)) else str(prompt_payload)
+                    body = json.dumps({
+                        "model": self.model,
+                        "max_tokens": 2000,
+                        "messages": [{"role": "user", "content": prompt_text}],
+                    }).encode("utf-8")
+                    req = urlrequest.Request(
+                        "https://api.anthropic.com/v1/messages",
+                        data=body,
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-api-key": os.getenv("ANTHROPIC_API_KEY"),
+                            "anthropic-version": "2023-06-01",
+                        },
+                        method="POST",
+                    )
+                    with urlrequest.urlopen(req, timeout=30) as resp:  # nosec B310 - intentional HTTPS call when enabled
+                        data = json.loads(resp.read().decode("utf-8"))
+                        # Return the text content if present; otherwise return raw response
+                        try:
+                            return data["content"][0].get("text") or data["content"]
+                        except Exception:
+                            return data
+
+            llm_client = _AnthropicHTTPClient(os.getenv("ANTHROPIC_API_KEY"), default_model)
+
         engine = cls(
             config_dir=path,
             workflow=dag,
@@ -275,6 +320,7 @@ class Engine:
             policy_evaluator=None,  # Initialized below
             credential_provider=credential_provider,
             state_root=state_root,
+            llm_client=llm_client,
         )
 
         # Initialize policy evaluator with telemetry after engine creation
