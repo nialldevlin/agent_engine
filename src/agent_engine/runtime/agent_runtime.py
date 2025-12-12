@@ -40,8 +40,19 @@ class AgentRuntime:
         else:
             prompt = self._build_prompt(task, node, context_package)
 
-        # Call LLM
-        llm_output = self.llm_client.generate(prompt) if self.llm_client else prompt
+        # Call LLM (adapt prompt to generic payload)
+        if self.llm_client:
+            if isinstance(prompt, dict):
+                content = json.dumps(prompt)
+            else:
+                content = str(prompt)
+            request_payload = {
+                "messages": [{"role": "user", "content": content}],
+                "prompt": content,
+            }
+            llm_output = self.llm_client.generate(request_payload)
+        else:
+            llm_output = prompt
 
         # Parse JSON if output is a string (LLM text response)
         if isinstance(llm_output, str):

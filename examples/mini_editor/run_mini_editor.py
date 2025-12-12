@@ -67,7 +67,7 @@ def enable_real_llm_calls(engine: Engine) -> bool:
         # Inject into engine's agent runtime
         engine.agent_runtime.llm_client = llm_client
 
-        print(f"✓ Real LLM calls enabled: {api_key[:20]}...")
+        print("✓ Real LLM calls enabled (Anthropic)")
         return True
     except Exception as e:
         print(f"✗ Failed to enable real LLM calls: {e}", file=sys.stderr)
