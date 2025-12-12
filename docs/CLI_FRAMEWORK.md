@@ -354,7 +354,7 @@ profiles:
   - id: default
     session_policies:
       persist_history: true
-      history_file: ~/.agent_engine/sessions/history.jsonl
+      history_file: ./.agent_engine/sessions/history.jsonl
       max_history_items: 1000
 ```
 
@@ -362,7 +362,7 @@ profiles:
 
 If `history_file` is not specified:
 ```
-~/.agent_engine/sessions/history.jsonl
+./.agent_engine/sessions/history.jsonl  (under the active config directory)
 ```
 
 ---

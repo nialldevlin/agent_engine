@@ -30,7 +30,7 @@ profiles:
       # Persist file attachments? (default: true)
       persist_attachments: true
       # Where to save history (JSONL format)
-      # If not set, defaults to ~/.agent_engine/sessions/history.jsonl
+      # If not set, defaults to ./.agent_engine/sessions/history.jsonl under the config_dir
       history_file: ./.agent_engine/sessions/dev_history.jsonl
       # Maximum history items to keep (default: 1000)
       max_history_items: 5000

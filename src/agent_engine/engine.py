@@ -41,6 +41,7 @@ from .runtime.inspector import Inspector
 from .telemetry import TelemetryBus
 from .plugin_registry import PluginRegistry
 from .plugin_loader import PluginLoader
+from .paths import resolve_state_root, ensure_directory
 
 
 class Engine:
@@ -64,6 +65,7 @@ class Engine:
         metrics_collector: Optional[MetricsCollector] = None,
         policy_evaluator: Optional[PolicyEvaluator] = None,
         credential_provider: Optional[CredentialProvider] = None,
+        state_root: Optional[Path] = None,
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
@@ -79,9 +81,10 @@ class Engine:
         self.metrics_collector = metrics_collector
         self.policy_evaluator = policy_evaluator
         self.credential_provider = credential_provider
+        self.state_root = ensure_directory(state_root or resolve_state_root(config_dir))
 
         # Initialize runtime components (Phase 4-5)
-        self.task_manager = TaskManager(telemetry=None)  # telemetry attached after TelemetryBus init
+        self.task_manager = TaskManager(telemetry=None, state_root=self.state_root)
         # Expose DAG under canonical attribute for tests/apps
         self.dag = self.workflow
 
@@ -254,6 +257,8 @@ class Engine:
         scheduler_config = parse_scheduler(scheduler_data)
 
         # Step 8: Return engine
+        state_root = ensure_directory(resolve_state_root(path))
+
         engine = cls(
             config_dir=path,
             workflow=dag,
@@ -268,6 +273,7 @@ class Engine:
             metrics_collector=metrics_collector,
             policy_evaluator=None,  # Initialized below
             credential_provider=credential_provider,
+            state_root=state_root,
         )
 
         # Initialize policy evaluator with telemetry after engine creation

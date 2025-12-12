@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .profile import Profile
 from .exceptions import CliError
+from agent_engine.paths import resolve_state_root, ensure_directory
 
 
 @dataclass
@@ -52,7 +53,7 @@ class Session:
     Tracks history, attached files, and optional disk persistence.
     """
 
-    def __init__(self, session_id: str, profile: Profile):
+    def __init__(self, session_id: str, profile: Profile, state_root: Optional[Path] = None):
         """
         Initialize a session.
 
@@ -65,6 +66,8 @@ class Session:
         self._history: List[SessionEntry] = []
         self._attached_files: Set[str] = set()
         self._last_user_input: Optional[str] = None
+        root = Path(state_root).resolve() if state_root else resolve_state_root(profile.default_config_dir)
+        self._state_root = ensure_directory(root)
 
     def add_entry(self, entry: SessionEntry) -> None:
         """
@@ -134,8 +137,7 @@ class Session:
 
         history_file = self.profile.session_policies.history_file
         if not history_file:
-            # Use default location
-            history_file = os.path.expanduser("~/.agent_engine/sessions/history.jsonl")
+            history_file = str(self._state_root / "sessions" / "history.jsonl")
 
         try:
             # Create parent directories
@@ -162,7 +164,7 @@ class Session:
 
         history_file = self.profile.session_policies.history_file
         if not history_file:
-            history_file = os.path.expanduser("~/.agent_engine/sessions/history.jsonl")
+            history_file = str(self._state_root / "sessions" / "history.jsonl")
 
         if not os.path.exists(history_file):
             return

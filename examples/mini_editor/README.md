@@ -152,7 +152,7 @@ When a user runs `/create "Title"`:
 
 Session history persists to:
 ```
-~/.agent_engine/mini_editor/history.jsonl
+./.agent_engine/mini_editor/history.jsonl
 ```
 
 Each entry includes:

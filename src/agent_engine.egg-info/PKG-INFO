@@ -806,7 +806,7 @@ Sessions automatically persist to JSONL format:
 ```yaml
 session_policies:
   persist_history: true
-  history_file: ~/.agent_engine/sessions/history.jsonl
+  history_file: ./.agent_engine/sessions/history.jsonl
   max_history_items: 1000
 ```
 

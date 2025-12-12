@@ -15,6 +15,7 @@ from .context import CliContext
 from .registry import get_global_registry
 from .exceptions import CliError, CommandError
 from . import commands  # Import to register built-in commands
+from agent_engine.paths import resolve_state_root, ensure_directory
 
 
 class REPL:
@@ -51,7 +52,8 @@ class REPL:
         self.active_profile = self._get_profile(profile_id)
 
         # Initialize session
-        self.session = Session(str(uuid.uuid4()), self.active_profile)
+        session_root = ensure_directory(resolve_state_root(self.active_profile.default_config_dir or config_dir))
+        self.session = Session(str(uuid.uuid4()), self.active_profile, state_root=session_root)
         try:
             self.session.load()
         except CliError as e:

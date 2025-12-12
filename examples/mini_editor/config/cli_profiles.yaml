@@ -7,7 +7,7 @@ profiles:
     default_workflow_id: null
     session_policies:
       persist_history: true
-      history_file: "~/.agent_engine/mini_editor/history.jsonl"
+      history_file: "./.agent_engine/mini_editor/history.jsonl"
       max_history_items: 500
     input_mappings:
       default:

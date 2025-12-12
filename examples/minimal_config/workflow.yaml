@@ -8,6 +8,7 @@ nodes:
   - id: "main"
     kind: "agent"
     role: "linear"
+    agent_id: "default_agent"
     context: "global"
     tools: ["read_file"]
     continue_on_failure: false

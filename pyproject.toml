@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69.0", "wheel"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -51,4 +51,3 @@ check_untyped_defs = true
 disallow_untyped_defs = false
 warn_unused_ignores = true
 mypy_path = "src"
-

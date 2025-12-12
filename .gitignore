@@ -18,3 +18,4 @@ htmlcov/
 .vscode/
 
 .agent_engine/
+**/.agent_engine/

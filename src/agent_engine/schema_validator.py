@@ -66,6 +66,10 @@ def validate_edges(edges_data: List[Dict], file_name: str = "workflow.yaml") -> 
         # Compatibility: allow "label" as alias for condition
         if "condition" not in edge_dict and "label" in edge_dict:
             edge_dict = {**edge_dict, "condition": edge_dict.get("label")}
+        if "from_node_id" not in edge_dict and "from" in edge_dict:
+            edge_dict = {**edge_dict, "from_node_id": edge_dict.get("from")}
+        if "to_node_id" not in edge_dict and "to" in edge_dict:
+            edge_dict = {**edge_dict, "to_node_id": edge_dict.get("to")}
         try:
             edge = Edge(**edge_dict)
             edges.append(edge)

@@ -21,6 +21,7 @@ from agent_engine.schemas import (
     TaskSpec,
     UniversalStatus,
 )
+from agent_engine.paths import ensure_directory, resolve_state_root
 
 def _generate_task_id(spec: TaskSpec) -> str:
     from uuid import uuid4
@@ -61,6 +62,16 @@ def _extract_project_id(task_id: str) -> str:
 @dataclass
 class TaskManager:
     tasks: Dict[str, Task] = field(default_factory=dict)
+    telemetry: Optional[Any] = None
+    state_root: Optional[Path] = None
+
+    def __post_init__(self):
+        if self.state_root is None:
+            self.state_root = resolve_state_root()
+        ensure_directory(self.state_root)
+
+    def _task_storage_root(self) -> Path:
+        return ensure_directory(self.state_root / "tasks")
     telemetry: Optional[Any] = None
 
     def create_task(self, spec: TaskSpec, task_id: str | None = None) -> Task:
@@ -370,7 +381,7 @@ class TaskManager:
     def save_checkpoint(
         self,
         task_id: str,
-        storage_root: Path = Path(".agent_engine/tasks")
+        storage_root: Optional[Path] = None
     ) -> Optional[EngineError]:
         """Save task to disk as JSON checkpoint.
         
@@ -400,8 +411,9 @@ class TaskManager:
             )
         
         # 2. Extract project ID and build path
+        root = storage_root or self._task_storage_root()
         project_id = _extract_project_id(task_id)
-        task_file = storage_root / project_id / f"{task_id}.json"
+        task_file = root / project_id / f"{task_id}.json"
         
         # 3. Serialize task
         try:
@@ -439,7 +451,7 @@ class TaskManager:
     def load_checkpoint(
         self,
         task_id: str,
-        storage_root: Path = Path(".agent_engine/tasks")
+        storage_root: Optional[Path] = None
     ) -> Tuple[Optional[Task], Optional[EngineError]]:
         """Load task from disk checkpoint.
         
@@ -460,8 +472,9 @@ class TaskManager:
             - Schema violation: code=VALIDATION
         """
         # 1. Build path
+        root = storage_root or self._task_storage_root()
         project_id = _extract_project_id(task_id)
-        task_file = storage_root / project_id / f"{task_id}.json"
+        task_file = root / project_id / f"{task_id}.json"
         
         # 2. Check file exists
         if not task_file.exists():
@@ -512,7 +525,7 @@ class TaskManager:
     def list_tasks(
         self,
         project_id: str,
-        storage_root: Path = Path(".agent_engine/tasks")
+        storage_root: Optional[Path] = None
     ) -> Tuple[List[str], Optional[EngineError]]:
         """List all task IDs for a project.
         
@@ -530,7 +543,8 @@ class TaskManager:
         Note:
             Missing directory returns ([], None) - NOT an error.
         """
-        project_dir = storage_root / project_id
+        root = storage_root or self._task_storage_root()
+        project_dir = root / project_id
         
         # Directory doesn't exist = no tasks (not an error)
         if not project_dir.exists():
@@ -553,7 +567,7 @@ class TaskManager:
     def get_task_metadata(
         self,
         task_id: str,
-        storage_root: Path = Path(".agent_engine/tasks")
+        storage_root: Optional[Path] = None
     ) -> Tuple[Optional[Dict[str, Any]], Optional[EngineError]]:
         """Get task metadata without loading full task into memory.
 
@@ -577,8 +591,9 @@ class TaskManager:
             }
         """
         # 1. Build path
+        root = storage_root or self._task_storage_root()
         project_id = _extract_project_id(task_id)
-        task_file = storage_root / project_id / f"{task_id}.json"
+        task_file = root / project_id / f"{task_id}.json"
 
         # 2. Check file exists
         if not task_file.exists():

@@ -388,6 +388,16 @@ It exits with:
 - `2` – degraded (e.g., missing writable directories)
 - `1` – unhealthy (manifest or DAG errors)
 
+### Runtime State Location
+
+Agent Engine writes runtime files (session history, checkpoints, task dumps) under a single state directory:
+
+- By default this is `<config_dir>/.agent_engine`.
+- Override by setting `AGENT_ENGINE_STATE_DIR=/absolute/path`.
+- Temporary files are organized into subdirectories such as `tasks/` and `sessions/`.
+
+The repository `.gitignore` already excludes any `.agent_engine` directories.
+
 ## Telemetry & Event Bus (Phase 8)
 
 The engine provides comprehensive event emission for all major operations, enabling introspection, debugging, and plugin integration.
@@ -851,7 +861,7 @@ Sessions automatically persist to JSONL format:
 ```yaml
 session_policies:
   persist_history: true
-  history_file: ~/.agent_engine/sessions/history.jsonl
+  history_file: ./.agent_engine/sessions/history.jsonl  # defaults under config_dir
   max_history_items: 1000
 ```
 
