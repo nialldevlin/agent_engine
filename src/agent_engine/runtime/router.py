@@ -575,9 +575,10 @@ class Router:
             # else: all successful → keep status as is
 
         # Create merge payload
-        merge_payload = {"merge_inputs": [item.dict() for item in merge_inputs]}
+        merge_payload = {"merge_inputs": [item.model_dump(mode="json") for item in merge_inputs]}
 
-        # Execute merge node with assembled input
+        # Provide merge payload as current input to merge node
+        parent_task.current_output = merge_payload
         merge_record, merge_output = self.node_executor.execute_node(parent_task, node)
         # TODO: Pass merge_payload to node executor properly
 

@@ -120,13 +120,14 @@ class Engine:
             policy_evaluator=self.policy_evaluator,
         )
 
-        # ContextAssembler - use a stub for now
-        self.context_assembler = None  # TODO: Initialize proper ContextAssembler
+        # ContextAssembler uses configured memory stores and context profiles
+        self.context_assembler = ContextAssembler(context_profiles=context_profiles)
 
         self.deterministic_registry = DeterministicRegistry()
 
-        # JSON engine stub (for schema validation)
-        self.json_engine = None  # TODO: Initialize proper JSON validator
+        # JSON engine for schema validation
+        from agent_engine import json_engine
+        self.json_engine = json_engine
 
         self.node_executor = NodeExecutor(
             agent_runtime=self.agent_runtime,
@@ -356,7 +357,7 @@ class Engine:
             "task_id": getattr(completed_task, "task_id", None),
             "status": normalized_status,
             "output": completed_task.current_output if completed_task else None,
-            "history": [record.dict() for record in getattr(completed_task, "history", [])],
+            "history": [record.model_dump(mode="json") for record in getattr(completed_task, "history", [])],
             "node_sequence": node_sequence,
             "execution_time_ms": elapsed_ms,
         }
@@ -555,7 +556,7 @@ class Engine:
                 "task_id": completed_task.task_id if hasattr(completed_task, 'task_id') else str(completed_task.id),
                 "status": completed_task.status.value if hasattr(completed_task.status, 'value') else str(completed_task.status),
                 "output": completed_task.current_output if hasattr(completed_task, 'current_output') else None,
-                "history": [record.dict() if hasattr(record, 'dict') else record for record in (completed_task.history if hasattr(completed_task, 'history') else [])]
+                "history": [record.model_dump(mode="json") if hasattr(record, 'model_dump') else record for record in (completed_task.history if hasattr(completed_task, 'history') else [])]
             })
 
         return results
