@@ -472,3 +472,33 @@ class Engine:
         """
         inspector = self.create_inspector()
         return inspector.get_task_summary(task_id)
+
+    def create_repl(self, config_dir: Optional[str] = None, profile_id: Optional[str] = None) -> 'REPL':
+        """Create a REPL for interactive workflow execution.
+
+        Phase 18: Provides a reusable, extensible REPL framework with:
+        - Profile-based configuration
+        - Session history management
+        - Built-in command set
+        - Extensible command registry
+        - File operations with workspace safety
+        - Telemetry integration
+
+        Args:
+            config_dir: Directory containing cli_profiles.yaml (defaults to engine's config_dir)
+            profile_id: Optional profile ID to activate (defaults to first profile)
+
+        Returns:
+            REPL instance ready to run
+
+        Example:
+            engine = Engine.from_config_dir("./config")
+            repl = engine.create_repl()
+            repl.run()
+        """
+        from .cli import REPL
+
+        if config_dir is None:
+            config_dir = self.config_dir
+
+        return REPL(self, config_dir, profile_id)

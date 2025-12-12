@@ -609,6 +609,124 @@ make lint
 make format
 ```
 
+## CLI Framework v1 (Phase 18)
+
+The Agent Engine includes an interactive REPL (Read-Eval-Print Loop) for multi-turn conversational sessions with workflows.
+
+### Quick Start with REPL
+
+```python
+from agent_engine import Engine
+
+# Load engine from config
+engine = Engine.from_config_dir("my_project")
+
+# Create and run REPL
+repl = engine.create_repl()
+repl.run()
+```
+
+### Interactive Usage
+
+```
+[default]> /help                    # List available commands
+[default]> /attach myfile.txt       # Attach file to session
+[default]> hello, analyze this      # Send input to engine
+[default]> /history                 # View session history
+[default]> /mode production         # Switch profiles
+[default]> /quit                    # Exit REPL
+```
+
+### Profile-Based Configuration
+
+Configure CLI behavior via `cli_profiles.yaml`:
+
+```yaml
+profiles:
+  - id: default
+    session_policies:
+      persist_history: true
+    input_mappings:
+      default:
+        attach_files_as_context: true
+    telemetry_overlays:
+      level: summary
+```
+
+### Built-in Commands
+
+The CLI provides 10 built-in commands:
+
+- `/help` - Show command list or help for a command
+- `/mode` - Show/switch profiles
+- `/attach` - Attach files to session
+- `/history` - View session history
+- `/retry` - Re-run last input
+- `/edit-last` - Edit and re-run last prompt
+- `/open` - View file contents
+- `/diff` - Compare file with artifact
+- `/apply_patch` - Apply patch to file
+- `/quit` or `/exit` - Exit REPL
+
+### Custom Commands
+
+Extend the REPL with custom commands:
+
+```python
+# my_app/commands.py
+from agent_engine.cli import CliContext, CommandError
+
+def my_command(ctx: CliContext, args: str) -> None:
+    """Custom command implementation."""
+    result = ctx.run_engine(f"process: {args}")
+    print(f"Done: {result}")
+```
+
+Configure in `cli_profiles.yaml`:
+
+```yaml
+profiles:
+  - id: default
+    custom_commands:
+      - name: mycommand
+        entrypoint: my_app.commands:my_command
+        description: My custom command
+        aliases: [mc]
+```
+
+### Session Persistence
+
+Sessions automatically persist to JSONL format:
+
+```yaml
+session_policies:
+  persist_history: true
+  history_file: ~/.agent_engine/sessions/history.jsonl
+  max_history_items: 1000
+```
+
+### Telemetry Integration
+
+The REPL displays telemetry events from workflow execution:
+
+```yaml
+telemetry_overlays:
+  enabled: true
+  level: summary      # "summary" or "verbose"
+```
+
+### Learn More
+
+See [docs/CLI_FRAMEWORK.md](docs/CLI_FRAMEWORK.md) for:
+- Complete API reference
+- Profile configuration guide
+- Custom command examples
+- Advanced usage patterns
+- Session management
+- File operations and safety
+
+See [examples/minimal_config/cli_profiles.yaml](examples/minimal_config/cli_profiles.yaml) for configuration examples.
+
 ## License
 
 MIT

@@ -1,0 +1,186 @@
+# Phase 18: CLI Framework Profile Configuration Example
+#
+# This file demonstrates the complete cli_profiles.yaml schema.
+# See docs/CLI_FRAMEWORK.md for detailed documentation.
+
+profiles:
+
+  # Minimal profile with required fields only
+  - id: default
+    # Optional: Human-friendly label
+    label: Default Profile
+    # Optional: Profile description
+    description: Basic profile for interactive CLI
+
+  # Development profile with telemetry
+  - id: development
+    label: Development Profile
+    description: For development and debugging
+
+    # Optional: Set workspace root for this profile
+    default_config_dir: ./config
+
+    # Optional: Default workflow to target
+    default_workflow_id: main_workflow
+
+    # Session persistence configuration
+    session_policies:
+      # Persist history to disk? (default: true)
+      persist_history: true
+      # Persist file attachments? (default: true)
+      persist_attachments: true
+      # Where to save history (JSONL format)
+      # If not set, defaults to ~/.agent_engine/sessions/history.jsonl
+      history_file: ./.agent_engine/sessions/dev_history.jsonl
+      # Maximum history items to keep (default: 1000)
+      max_history_items: 5000
+
+    # Input payload configuration
+    input_mappings:
+      default:
+        # Input mode: "chat" or "raw" (default: "chat")
+        mode: chat
+        # Include attached files in Engine.run() payload? (default: false)
+        attach_files_as_context: true
+        # Include profile ID in payload? (default: false)
+        include_profile_id: true
+        # Include session ID in payload? (default: false)
+        include_session_id: true
+
+    # Custom commands for this profile
+    custom_commands:
+      # Example custom command
+      - name: analyze
+        # Python import path to function: "module.path:function_name"
+        entrypoint: my_app.cli_commands:analyze_command
+        # Description shown in /help
+        description: Analyze data through custom workflow
+        # Aliases for command
+        aliases:
+          - az
+          - analyze_data
+        # Detailed help text
+        help: |
+          Usage: /analyze [options]
+
+          Analyzes input data through a custom workflow.
+          Outputs are saved to output/ directory.
+
+    # Output formatting rules
+    presentation_rules:
+      # Show system messages in output? (default: false)
+      show_system_messages: false
+      # Show telemetry events inline? (default: true)
+      show_telemetry_inline: true
+      # Truncate output to N lines (default: none)
+      truncate_output_lines: 100
+
+    # Telemetry event display configuration
+    telemetry_overlays:
+      # Enable telemetry display? (default: true)
+      enabled: true
+      # Display level: "summary" or "verbose" (default: "summary")
+      # - summary: Show only task start/end and errors
+      # - verbose: Show all events with full details
+      level: verbose
+
+  # Production profile with minimal telemetry
+  - id: production
+    label: Production Profile
+    description: For production workflow execution
+
+    default_config_dir: /var/agent_engine
+    default_workflow_id: production_workflow
+
+    session_policies:
+      persist_history: true
+      history_file: /var/log/agent_engine/history.jsonl
+      max_history_items: 10000
+
+    input_mappings:
+      default:
+        mode: chat
+        attach_files_as_context: false
+        include_profile_id: false
+        include_session_id: false
+
+    presentation_rules:
+      show_system_messages: false
+      show_telemetry_inline: true
+      # Limit output for production
+      truncate_output_lines: 50
+
+    telemetry_overlays:
+      enabled: true
+      # Summary mode: only high-level events
+      level: summary
+
+  # Advanced profile with custom commands and full configuration
+  - id: advanced
+    label: Advanced Profile
+    description: For power users with custom extensions
+
+    default_config_dir: ./config
+    default_workflow_id: advanced_workflow
+
+    session_policies:
+      persist_history: true
+      persist_attachments: true
+      history_file: ./.agent_engine/sessions/advanced_history.jsonl
+      max_history_items: 20000
+
+    input_mappings:
+      default:
+        mode: chat
+        attach_files_as_context: true
+        include_profile_id: true
+        include_session_id: true
+
+    # Multiple custom commands
+    custom_commands:
+      - name: process
+        entrypoint: my_app.commands:process_command
+        description: Process files through pipeline
+        aliases: [proc, p]
+        help: Process input files through configured pipeline
+
+      - name: validate
+        entrypoint: my_app.commands:validate_command
+        description: Validate configuration
+        aliases: [val]
+        help: Validate workflow configuration and schemas
+
+      - name: export
+        entrypoint: my_app.commands:export_command
+        description: Export results to various formats
+        aliases: [exp, save]
+        help: Export session results to JSON, CSV, or other formats
+
+    presentation_rules:
+      show_system_messages: true
+      show_telemetry_inline: true
+      truncate_output_lines: null  # No truncation for advanced users
+
+    telemetry_overlays:
+      enabled: true
+      level: verbose  # Full telemetry for debugging
+
+  # Minimal profile with no persistence
+  - id: stateless
+    label: Stateless Profile
+    description: No history or session persistence
+
+    session_policies:
+      persist_history: false
+      persist_attachments: false
+      max_history_items: 100
+
+    input_mappings:
+      default:
+        mode: chat
+        attach_files_as_context: false
+        include_profile_id: false
+        include_session_id: false
+
+    telemetry_overlays:
+      enabled: false  # Telemetry disabled
