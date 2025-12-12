@@ -317,9 +317,12 @@ class REPL:
         if level == "summary":
             # Show only task/error events
             for event in events:
-                event_type = getattr(event, "event_type", None) or event.get(
-                    "event_type", "unknown"
-                )
+                # Handle both Event objects and dictionaries
+                if isinstance(event, dict):
+                    event_type = event.get("event_type", "unknown")
+                else:
+                    event_type = getattr(event, "event_type", "unknown")
+
                 if event_type in ["task_start", "task_end", "error"]:
                     print(f"[{event_type}] {event}")
         else:
