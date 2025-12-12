@@ -200,6 +200,8 @@ class Task(SchemaBase):
     current_stage_id: Optional[str] = Field(default=None)
     current_output: Optional[Any] = Field(default=None, description="Latest output from current or last stage")
     stage_results: Dict[str, StageExecutionRecord] = Field(default_factory=dict)
+    # Legacy history list for compatibility with earlier runtimes/tests; mirrors execution order
+    history: List[StageExecutionRecord] = Field(default_factory=list, description="Legacy ordered execution history")
     routing_trace: List[RoutingDecision] = Field(default_factory=list)
     failure_signatures: List[FailureSignature] = Field(default_factory=list)
     context_fingerprint: Optional[ContextFingerprint] = Field(default=None)

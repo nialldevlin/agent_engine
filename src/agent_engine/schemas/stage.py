@@ -176,3 +176,8 @@ class Node(SchemaBase):
         default_factory=dict,
         description="Additional node-specific data"
     )
+
+    @property
+    def id(self) -> str:
+        """Alias for stage_id to support configs/tests that reference 'id'."""
+        return self.stage_id

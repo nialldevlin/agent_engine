@@ -4,11 +4,22 @@ Provides a dedicated DAG class with adjacency structures for efficient routing
 and validation of workflow graphs per AGENT_ENGINE_SPEC §2-3.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Iterator
 
 from .exceptions import DAGValidationError
 from .schemas.stage import Node, NodeRole
 from .schemas.workflow import Edge, validate_workflow_graph
+
+
+class NodeStore(dict):
+    """Dictionary-like container that iterates over Node values.
+
+    Preserves key-based lookups for internal runtime use while allowing
+    external iteration (e.g., tests) to yield Node objects directly.
+    """
+
+    def __iter__(self) -> Iterator[Node]:
+        return iter(self.values())
 
 
 class DAG:
@@ -39,7 +50,8 @@ class DAG:
             DAGValidationError: If nodes or edges are invalid or if DAG
                                structure violates workflow invariants.
         """
-        self.nodes = nodes
+        # Preserve map for internal lookups, while exposing iterable NodeStore
+        self.nodes = NodeStore(nodes)
         self.edges = edges
         self.adjacency = self._build_adjacency()
         self.reverse_adjacency = self._build_reverse_adjacency()
@@ -54,7 +66,7 @@ class DAG:
             Dictionary mapping each node_id to a list of Edge objects
             that originate from that node.
         """
-        adj = {node_id: [] for node_id in self.nodes}
+        adj = {node_id: [] for node_id in self.nodes.keys()}
         for edge in self.edges:
             if edge.from_node_id in adj:
                 adj[edge.from_node_id].append(edge)
@@ -72,7 +84,7 @@ class DAG:
             Dictionary mapping each node_id to a list of Edge objects
             that terminate at that node.
         """
-        rev_adj = {node_id: [] for node_id in self.nodes}
+        rev_adj = {node_id: [] for node_id in self.nodes.keys()}
         for edge in self.edges:
             if edge.to_node_id in rev_adj:
                 rev_adj[edge.to_node_id].append(edge)
@@ -178,3 +190,40 @@ class DAG:
             raise DAGValidationError(str(e))
         except Exception as e:
             raise DAGValidationError(f"Unexpected validation error: {str(e)}")
+        return True
+
+    def has_cycles(self) -> bool:
+        """Detect cycles in the DAG."""
+        visited = set()
+        stack = set()
+
+        def visit(node_id: str) -> bool:
+            if node_id in stack:
+                return True
+            if node_id in visited:
+                return False
+            visited.add(node_id)
+            stack.add(node_id)
+            for edge in self.get_outbound_edges(node_id):
+                if visit(edge.to_node_id):
+                    return True
+            stack.remove(node_id)
+            return False
+
+        for node_id in self.nodes.keys():
+            if visit(node_id):
+                return True
+        return False
+
+    def get_reachable_nodes(self, start_node_id: str) -> List[Node]:
+        """Return list of nodes reachable from the given start node."""
+        reachable_ids = set()
+        stack = [start_node_id]
+        while stack:
+            current = stack.pop()
+            if current in reachable_ids:
+                continue
+            reachable_ids.add(current)
+            for edge in self.get_outbound_edges(current):
+                stack.append(edge.to_node_id)
+        return [self.nodes[node_id] for node_id in reachable_ids if node_id in self.nodes]

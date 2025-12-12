@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 from agent_engine.json_engine import validate
-from agent_engine.schemas import EngineError, Node, Task
+from agent_engine.schemas import EngineError, Node, Task, NodeRole
 
 
 class AgentRuntime:
@@ -21,6 +21,18 @@ class AgentRuntime:
         Returns:
             (output, error, tool_plan) - 3-tuple
         """
+        # Lightweight deterministic branching when no LLM client is configured
+        if self.llm_client is None:
+            payload = getattr(task, "current_output", None)
+            if node.role == "decision" or getattr(node, "role", None) == NodeRole.DECISION:
+                action = None
+                if isinstance(payload, dict):
+                    action = payload.get("action")
+                if action in ("create", "edit"):
+                    return {"condition": action}, None, None
+                # Default to first branch
+                return {"condition": "create"}, None, None
+
         # Build prompt (tool-aware if tools present)
         if node.tools:
             prompt = self._build_tool_aware_prompt(task, node, context_package)

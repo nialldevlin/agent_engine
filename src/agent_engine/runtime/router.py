@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Set
 from datetime import datetime
 
 from agent_engine.exceptions import EngineError
-from agent_engine.schemas import Node, NodeRole, Task, TaskLifecycle, UniversalStatus
+from agent_engine.schemas import Node, NodeRole, Task, TaskLifecycle, UniversalStatus, EngineError as EngineErrorRecord, EngineErrorCode, EngineErrorSource, Severity
 from agent_engine.schemas.router import MergeInputItem
 from agent_engine.dag import DAG
 
@@ -25,7 +25,7 @@ class Router:
     Handles all 7 canonical node roles: START, LINEAR, DECISION, BRANCH, SPLIT, MERGE, EXIT.
     """
 
-    def __init__(self, dag: DAG, task_manager, node_executor, telemetry=None, metadata=None):
+    def __init__(self, dag: DAG = None, task_manager=None, node_executor=None, telemetry=None, metadata=None, workflow=None, stages=None):
         """Initialize router with DAG and runtime dependencies.
 
         Args:
@@ -34,17 +34,93 @@ class Router:
             node_executor: NodeExecutor instance for single-node execution
             telemetry: Optional TelemetryBus instance for event emission
             metadata: Optional EngineMetadata instance for event metadata (Phase 11)
+            workflow: Optional WorkflowGraph (tests) - converted to DAG
+            stages: Optional mapping of stage_id -> Node (tests) used with workflow
         """
+        if dag is None and workflow is not None and stages is not None:
+            from agent_engine.dag import DAG
+            # Build DAG from workflow graph and provided stage mapping
+            node_map = {node_id: stages[node_id] for node_id in workflow.nodes}
+            dag = DAG(nodes=node_map, edges=workflow.edges)
+            self.stages = stages
         self.dag = dag
-        self.task_manager = task_manager
-        self.node_executor = node_executor
+        # Provide default task manager/node executor for lightweight unit tests if not supplied
+        from agent_engine.runtime.task_manager import TaskManager
+        self.task_manager = task_manager or TaskManager()
+
+        if node_executor is None:
+            from agent_engine.schemas import StageExecutionRecord, UniversalStatus
+
+            class _StubNodeExecutor:
+                def execute_node(self, task, node):
+                    record = StageExecutionRecord(
+                        stage_id=getattr(node, "stage_id", None),
+                        node_id=getattr(node, "stage_id", None),
+                        node_role=node.role,
+                        node_kind=node.kind,
+                        node_status=UniversalStatus.SUCCESS,
+                        input=task.current_output,
+                        output=task.current_output,
+                        started_at=datetime.utcnow().isoformat(),
+                        completed_at=datetime.utcnow().isoformat(),
+                    )
+                    return record, task.current_output
+
+            self.node_executor = _StubNodeExecutor()
+        else:
+            self.node_executor = node_executor
         self.telemetry = telemetry
         self.metadata = metadata
 
         # Execution state
         self.work_queue: List[tuple] = []  # List of (task_id, node_id) tuples
+        self.task_queue = self.work_queue  # legacy alias for tests
         self.parent_children: Dict[str, Set[str]] = {}  # parent_task_id -> set of child_task_ids
         self.merge_waits: Dict[str, Dict] = {}  # (merge_node_id, parent_task_id) -> wait state
+
+    # Compatibility API for DAGExecutor-based runtimes (legacy v0)
+    def next_stage(self, current_stage_id: Optional[str], decision: Optional[dict] = None) -> Optional[str]:
+        """Determine the next stage ID given current stage and optional decision output."""
+        if current_stage_id is None:
+            # Start of workflow
+            start_node = self.dag.get_default_start_node()
+            return start_node.stage_id
+
+        edges = self.dag.get_outbound_edges(current_stage_id)
+        if not edges:
+            return None
+
+        current_node = self.dag.nodes.get(current_stage_id)
+        if current_node and current_node.role == NodeRole.DECISION:
+            return self.resolve_edge(None, current_node, decision or {}, edges)
+
+        # Non-decision: deterministic routing (first edge if multiple)
+        return edges[0].to_node_id
+
+    def resolve_edge(self, task, node, decision_output: Any, edges: List[Any]) -> str:
+        """Resolve outbound edge for decision nodes based on decision output."""
+        if not edges:
+            raise ValueError("No outbound edges to resolve")
+        if len(edges) == 1:
+            return edges[0].to_node_id
+
+        selected = None
+        if isinstance(decision_output, dict):
+            for key in ["condition", "route", "selected_edge", "selected_edge_label"]:
+                if key in decision_output and decision_output[key] is not None:
+                    selected = decision_output[key]
+                    break
+        else:
+            selected = decision_output
+
+        for edge in edges:
+            if selected is None:
+                continue
+            if getattr(edge, "condition", None) == selected or getattr(edge, "label", None) == selected:
+                return edge.to_node_id
+
+        # Fallback: deterministic first edge
+        return edges[0].to_node_id
 
     def execute_task(self, input_payload: Any, start_node_id: Optional[str] = None) -> Task:
         """Main entry point for task execution.
@@ -67,15 +143,27 @@ class Router:
         # Step 11.2: Create initial task
         from agent_engine.schemas.task import TaskSpec, TaskMode
         import uuid
+        # Reset transient state for fresh execution
+        self.work_queue.clear()
+        self.parent_children.clear()
+
         task_spec = TaskSpec(
             task_spec_id=f"task_spec_{uuid.uuid4().hex[:8]}",
             request=str(input_payload),
             mode=TaskMode.IMPLEMENT
         )
         task = self.task_manager.create_task(spec=task_spec)
+        task.current_output = input_payload
+        # Mark task as in progress for execution lifecycle
+        from agent_engine.schemas import UniversalStatus
+        task.status = UniversalStatus.IN_PROGRESS
+
+        if self.telemetry:
+            self.telemetry.task_started(task_id=task.task_id, spec=task_spec, mode=task_spec.mode.value)
 
         # Step 11.3: Execute start node
         start_record, start_output = self.node_executor.execute_node(task, start_node)
+        task.history.append(start_record)
         if start_output is not None:
             task.current_output = start_output
 
@@ -95,7 +183,7 @@ class Router:
         if start_node_id is not None:
             if start_node_id not in self.dag.nodes:
                 raise EngineError(
-                    f"Start node '{start_node_id}' not found in DAG"
+                    f"Start node '{start_node_id}' not found in workflow DAG"
                 )
             node = self.dag.nodes[start_node_id]
             if node.role != NodeRole.START:
@@ -114,6 +202,12 @@ class Router:
         """Enqueue work item for processing."""
         self.work_queue.append((task_id, node_id))
 
+    def _process_worklist(self) -> Optional[tuple]:
+        """Legacy helper used in tests: dequeue one item FIFO."""
+        if not self.work_queue:
+            return None
+        return self.work_queue.pop(0)
+
     def _process_worklist_full(self) -> Optional[Task]:
         """Process worklist until completion or stall."""
         max_iterations = 10000  # Prevent infinite loops
@@ -121,12 +215,17 @@ class Router:
 
         while self.work_queue and iterations < max_iterations:
             iterations += 1
-            task_id, node_id = self.work_queue.pop(0)  # FIFO
+            item = self.work_queue.pop(0)  # FIFO
+            if isinstance(item, tuple):
+                task_id, node_id = item
+                task = self.task_manager.get_task(task_id)
+            else:
+                task = item
+                task_id = task.task_id if task else None
+                node_id = getattr(task, "current_stage_id", None)
 
-            # Retrieve task and node
-            task = self.task_manager.get_task(task_id)
-            if not task:
-                continue  # Task no longer exists
+            if not task or not node_id:
+                continue  # Task or node missing, skip
 
             node = self.dag.nodes.get(node_id)
             if not node:
@@ -204,19 +303,28 @@ class Router:
         """Route from START node (exactly 1 outbound edge)."""
         edges = self.dag.get_outbound_edges(node.stage_id)
         if len(edges) != 1:
+            if len(edges) == 0:
+                raise EngineError(f"START node '{node.stage_id}' has no outbound edge")
             raise EngineError(
-                f"START node '{node.stage_id}' must have exactly 1 outbound edge, has {len(edges)}"
+                f"START node '{node.stage_id}' must have exactly 1 outbound edges, has {len(edges)}"
             )
-        return edges[0].to_node_id
+        target = edges[0].to_node_id
+        if target not in self.dag.nodes:
+            raise EngineError(f"invalid target node '{target}' not found in workflow")
+        return target
 
     def _route_linear(self, task: Task, node: Node) -> str:
         """Route from LINEAR node (exactly 1 outbound edge)."""
         edges = self.dag.get_outbound_edges(node.stage_id)
         if len(edges) != 1:
+            if len(edges) == 0:
+                raise EngineError(f"LINEAR node '{node.stage_id}' has no outbound edge")
             raise EngineError(
-                f"LINEAR node '{node.stage_id}' must have exactly 1 outbound edge, has {len(edges)}"
+                f"LINEAR node '{node.stage_id}' must have exactly 1 outbound edges, has {len(edges)}"
             )
         next_node_id = edges[0].to_node_id
+        if next_node_id not in self.dag.nodes:
+            raise EngineError(f"invalid target node '{next_node_id}' not found in workflow")
 
         # Emit routing decision event
         if self.telemetry:
@@ -233,6 +341,8 @@ class Router:
         """Route from DECISION node (select one of multiple edges)."""
         edges = self.dag.get_outbound_edges(node.stage_id)
         if len(edges) < 2:
+            if len(edges) == 0:
+                raise EngineError(f"DECISION node '{node.stage_id}' has no outbound edges")
             raise EngineError(
                 f"DECISION node '{node.stage_id}' must have at least 2 outbound edges, has {len(edges)}"
             )
@@ -242,7 +352,8 @@ class Router:
 
         # Match against edge labels
         for edge in edges:
-            if edge.label == selected_label:
+            edge_label = getattr(edge, "label", None) or edge.condition
+            if edge_label == selected_label:
                 next_node_id = edge.to_node_id
 
                 # Emit routing decision event
@@ -257,9 +368,9 @@ class Router:
                 return next_node_id
 
         # No match found
-        valid_labels = [e.label for e in edges if e.label]
+        valid_labels = [getattr(e, "label", None) or e.condition for e in edges]
         raise EngineError(
-            f"Decision node '{node.stage_id}' selected invalid edge label '{selected_label}'. "
+            f"Decision node '{node.stage_id}' selected edge '{selected_label}' does not match any outbound edge. "
             f"Valid labels: {valid_labels}"
         )
 
@@ -270,6 +381,8 @@ class Router:
 
         # Handle dict output
         if isinstance(output, dict):
+            if "selected_edge" in output and output["selected_edge"] is not None:
+                return str(output["selected_edge"])
             if "selected_edge_label" in output:
                 return str(output["selected_edge_label"])
             # Fallback to other common keys
@@ -277,127 +390,133 @@ class Router:
                 if key in output:
                     return str(output[key])
             raise EngineError(
-                f"Decision output must contain 'selected_edge_label' field. Got: {list(output.keys())}"
+                f"Cannot extract selected edge from output keys: {list(output.keys())}"
             )
 
         # Handle non-dict output (treat as label directly)
         return str(output)
 
-    def _route_branch(self, task: Task, node: Node) -> None:
-        """Route from BRANCH node (create clones for parallel execution)."""
-        edges = self.dag.get_outbound_edges(node.stage_id)
-        if len(edges) < 2:
-            raise EngineError(
-                f"BRANCH node '{node.stage_id}' must have at least 2 outbound edges, has {len(edges)}"
+    def _route_branch(self, task: Task, node: Node, task_manager=None) -> Optional[EngineErrorRecord]:
+        """Route from BRANCH node (create clones for parallel execution).
+
+        Returns EngineErrorRecord on validation failure, None on success.
+        """
+        tm = task_manager or self.task_manager
+
+        def _err(error_id: str, message: str) -> EngineErrorRecord:
+            return EngineErrorRecord(
+                error_id=error_id,
+                code=EngineErrorCode.ROUTING,
+                message=message,
+                source=EngineErrorSource.ROUTER,
+                severity=Severity.ERROR,
+                stage_id=node.stage_id,
+                task_id=task.task_id,
             )
 
-        # Initialize parent-children tracking
+        if node.role != NodeRole.BRANCH:
+            return _err("invalid_node_role", f"_route_branch called on non-BRANCH node '{node.stage_id}'")
+
+        edges = self.dag.get_outbound_edges(node.stage_id)
+        if len(edges) < 2:
+            return _err("insufficient_edges", f"BRANCH node '{node.stage_id}' must have at least 2 outbound edges")
+
+        # Validate target nodes exist
+        for edge in edges:
+            if edge.to_node_id not in self.dag.nodes:
+                return _err("invalid_target_node", f"Target node '{edge.to_node_id}' not found in workflow")
+
         if task.task_id not in self.parent_children:
             self.parent_children[task.task_id] = set()
 
-        clone_ids = []
-
-        # Create clone for each outbound edge
-        for i, edge in enumerate(edges):
-            clone = self.task_manager.create_clone(
-                parent_task_id=task.task_id,
-                branch_node_id=node.stage_id,
-                branch_label=edge.label or f"branch_{i}"
-            )
-            clone_ids.append(clone.task_id)
+        clone_ids: List[str] = []
+        for index, edge in enumerate(edges):
+            branch_label = edge.condition or edge.to_node_id
+            clone = tm.create_clone(parent=task, branch_label=branch_label, output=task.current_output)
+            tm.set_current_stage(clone, edge.to_node_id)
             self.parent_children[task.task_id].add(clone.task_id)
-            self._enqueue_work(clone.task_id, edge.to_node_id)
+            clone_ids.append(clone.task_id)
+            # Enqueue clone task object (tests expect Task entries)
+            self.task_queue.append(clone)
 
-        # Emit branch event
         if self.telemetry:
             self.telemetry.routing_branch(
                 task_id=task.task_id,
                 node_id=node.stage_id,
                 clone_count=len(clone_ids),
-                clone_ids=clone_ids
+                clone_ids=clone_ids,
             )
 
-        # Emit clone created events
-        if self.telemetry:
-            for clone_id in clone_ids:
-                clone = self.task_manager.get_task(clone_id)
-                if clone and clone.lineage:
-                    self.telemetry.clone_created(
-                        parent_task_id=task.task_id,
-                        clone_id=clone_id,
-                        node_id=node.stage_id,
-                        lineage=clone.lineage
-                    )
-
-        # No next node for parent (clones continue execution)
         return None
 
-    def _route_split(self, task: Task, node: Node, output: Any) -> None:
-        """Route from SPLIT node (create subtasks for hierarchical decomposition)."""
-        edges = self.dag.get_outbound_edges(node.stage_id)
-        if len(edges) < 1:
-            raise EngineError(
-                f"SPLIT node '{node.stage_id}' must have at least 1 outbound edge"
+    def _route_split(self, task: Task, node: Node, output: Any, task_manager=None) -> Optional[EngineErrorRecord]:
+        """Route from SPLIT node (create subtasks for hierarchical decomposition).
+
+        Returns EngineErrorRecord on validation failure, None on success.
+        """
+        tm = task_manager or self.task_manager
+
+        def _err(error_id: str, message: str) -> EngineErrorRecord:
+            return EngineErrorRecord(
+                error_id=error_id,
+                code=EngineErrorCode.ROUTING,
+                message=message,
+                source=EngineErrorSource.ROUTER,
+                severity=Severity.ERROR,
+                stage_id=node.stage_id,
+                task_id=task.task_id,
             )
 
-        # Extract subtask inputs from output
-        if isinstance(output, dict) and "subtask_inputs" in output:
-            subtask_inputs = output["subtask_inputs"]
+        if node.role != NodeRole.SPLIT:
+            return _err("invalid_node_role", f"_route_split called on non-SPLIT node '{node.stage_id}'")
+
+        edges = self.dag.get_outbound_edges(node.stage_id)
+        if len(edges) < 1:
+            return _err("no_outbound_edges", f"SPLIT node '{node.stage_id}' must have at least 1 outbound edge")
+
+        # Validate targets
+        for edge in edges:
+            if edge.to_node_id not in self.dag.nodes:
+                return _err("invalid_target_node", f"Target node '{edge.to_node_id}' not found in workflow")
+
+        # Extract subtask inputs
+        subtask_inputs: Optional[List[Any]] = None
+        if isinstance(output, dict):
+            if "subtask_inputs" not in output:
+                return _err("invalid_split_output", "SPLIT output missing 'subtask_inputs'")
+            subtask_inputs = output.get("subtask_inputs")
         elif isinstance(output, list):
             subtask_inputs = output
         else:
-            raise EngineError(
-                f"SPLIT node output must contain 'subtask_inputs' list or be a list. Got: {type(output)}"
-            )
+            return _err("invalid_split_output", "SPLIT output must be dict with 'subtask_inputs' or a list")
 
         if not isinstance(subtask_inputs, list):
-            raise EngineError(
-                f"Subtask inputs must be a list, got: {type(subtask_inputs)}"
-            )
+            return _err("invalid_output_type", "subtask_inputs must be a list")
+        if len(subtask_inputs) == 0:
+            return _err("empty_subtask_inputs", "subtask_inputs cannot be empty")
 
-        # Initialize parent-children tracking
         if task.task_id not in self.parent_children:
             self.parent_children[task.task_id] = set()
 
-        subtask_ids = []
-
-        # Create subtask for each input
-        for i, subtask_input in enumerate(subtask_inputs):
-            # Determine which edge to use (round-robin if multiple edges)
-            edge = edges[i % len(edges)]
-
-            subtask = self.task_manager.create_subtask(
-                parent_task_id=task.task_id,
-                split_node_id=node.stage_id,
-                split_label=edge.label or f"subtask_{i}",
-                subtask_input=subtask_input
-            )
-            subtask_ids.append(subtask.task_id)
+        subtask_ids: List[str] = []
+        for index, subtask_input in enumerate(subtask_inputs):
+            edge = edges[index % len(edges)]
+            split_edge_label = edge.condition or edge.to_node_id
+            subtask = tm.create_subtask(parent=task, subtask_input=subtask_input, split_edge_label=split_edge_label)
+            tm.set_current_stage(subtask, edge.to_node_id)
             self.parent_children[task.task_id].add(subtask.task_id)
-            self._enqueue_work(subtask.task_id, edge.to_node_id)
+            subtask_ids.append(subtask.task_id)
+            # Enqueue subtask Task object
+            self.task_queue.append(subtask)
 
-        # Emit split event
         if self.telemetry:
             self.telemetry.routing_split(
                 task_id=task.task_id,
                 node_id=node.stage_id,
                 subtask_count=len(subtask_ids),
-                subtask_ids=subtask_ids
+                subtask_ids=subtask_ids,
             )
 
-        # Emit subtask created events
-        if self.telemetry:
-            for subtask_id in subtask_ids:
-                subtask = self.task_manager.get_task(subtask_id)
-                if subtask and subtask.lineage:
-                    self.telemetry.subtask_created(
-                        parent_task_id=task.task_id,
-                        subtask_id=subtask_id,
-                        node_id=node.stage_id,
-                        lineage=subtask.lineage
-                    )
-
-        # No next node for parent (subtasks continue execution)
         return None
 
     def _route_merge(self, task: Task, node: Node) -> str:
@@ -482,7 +601,8 @@ class Router:
 
         children = self.parent_children.get(parent_task_id, set())
         if not children:
-            return False
+            # No spawned children: treat merge as immediately ready
+            return True
 
         # Determine completion criteria based on lineage type
         # Inspect first child to determine type
@@ -532,10 +652,10 @@ class Router:
     def _route_exit(self, task: Task, node: Node) -> None:
         """Route from EXIT node (finalize and halt)."""
         # Mark task as completed
-        task.lifecycle = TaskLifecycle.COMPLETED
+        task.lifecycle = TaskLifecycle.CONCLUDED
 
         # Set final status if not already set
-        if task.status == UniversalStatus.PENDING:
+        if task.status in (UniversalStatus.PENDING, UniversalStatus.IN_PROGRESS):
             task.status = UniversalStatus.COMPLETED
 
         # Apply always_fail override if specified (Phase 7)

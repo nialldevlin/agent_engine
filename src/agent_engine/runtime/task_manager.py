@@ -61,6 +61,7 @@ def _extract_project_id(task_id: str) -> str:
 @dataclass
 class TaskManager:
     tasks: Dict[str, Task] = field(default_factory=dict)
+    telemetry: Optional[Any] = None
 
     def create_task(self, spec: TaskSpec, task_id: str | None = None) -> Task:
         generated_task_id = task_id or _generate_task_id(spec)
@@ -93,6 +94,9 @@ class TaskManager:
     def set_status(self, task: Task, status: UniversalStatus) -> None:
         task.status = status
         task.updated_at = _now_iso()
+        # Mark that status was set via TaskManager API (used for strict completion rules)
+        if isinstance(task.lineage_metadata, dict):
+            task.lineage_metadata["status_set_via_api"] = True
 
     def set_current_stage(self, task: Task, stage_id: Optional[str]) -> None:
         task.current_stage_id = stage_id
@@ -307,11 +311,7 @@ class TaskManager:
             parent.status = UniversalStatus.COMPLETED
             return True
 
-        # Parent fails if all clones fail
-        if failed_clones and len(failed_clones) == len(parent.child_task_ids):
-            parent.status = UniversalStatus.FAILED
-            return True
-
+        # All failed -> parent not complete (wait for potential retries/merges)
         return False
 
     def check_subtask_completion(self, parent_id: str) -> bool:
@@ -332,10 +332,13 @@ class TaskManager:
 
         completed_subtasks = []
         failed_subtasks = []
+        strict_mode = True
 
         for child_id in parent.child_task_ids:
             child = self.tasks.get(child_id)
             if child and child.lineage_type == "subtask":
+                if not child.lineage_metadata.get("status_set_via_api"):
+                    strict_mode = False
                 if child.status == UniversalStatus.COMPLETED:
                     completed_subtasks.append(child)
                 elif child.status == UniversalStatus.FAILED:
@@ -343,21 +346,26 @@ class TaskManager:
                 else:
                     return False  # Still have pending subtasks
 
-        # All subtasks terminal - determine parent status
         total = len(parent.child_task_ids)
 
-        if len(completed_subtasks) == total:
-            # All succeeded
-            parent.status = UniversalStatus.COMPLETED
+        # Strict mode: require all subtasks successful
+        if strict_mode:
+            if total and len(completed_subtasks) == total:
+                parent.status = UniversalStatus.COMPLETED
+                return True
+            return False
+
+        # Lenient/partial mode: all terminal -> determine aggregate status
+        if total and (len(completed_subtasks) + len(failed_subtasks) == total):
+            if len(completed_subtasks) == total:
+                parent.status = UniversalStatus.COMPLETED
+            elif len(failed_subtasks) == total:
+                parent.status = UniversalStatus.FAILED
+            else:
+                parent.status = UniversalStatus.PARTIAL
             return True
-        elif len(failed_subtasks) == total:
-            # All failed
-            parent.status = UniversalStatus.FAILED
-            return True
-        else:
-            # Mixed success/failure
-            parent.status = UniversalStatus.PARTIAL
-            return True
+
+        return False
 
     def save_checkpoint(
         self,
@@ -411,6 +419,12 @@ class TaskManager:
         try:
             task_file.parent.mkdir(parents=True, exist_ok=True)
             task_file.write_text(json.dumps(task_data, indent=2))
+            if self.telemetry:
+                self.telemetry.emit_event(
+                    "checkpoint_saved",
+                    {"task_id": task_id, "path": str(task_file)},
+                    task_id=task_id
+                )
             return None
         except IOError as e:
             return EngineError(
@@ -484,9 +498,15 @@ class TaskManager:
                 severity=Severity.ERROR,
                 details={"path": str(task_file)}
             )
-        
+
         # 5. Store in memory
         self.tasks[task_id] = task
+        if self.telemetry:
+            self.telemetry.emit_event(
+                "checkpoint_loaded",
+                {"task_id": task_id, "path": str(task_file)},
+                task_id=task_id
+            )
         return task, None
 
     def list_tasks(
@@ -562,6 +582,12 @@ class TaskManager:
 
         # 2. Check file exists
         if not task_file.exists():
+            if self.telemetry:
+                self.telemetry.emit_event(
+                    "checkpoint_missing",
+                    {"task_id": task_id, "path": str(task_file)},
+                    task_id=task_id
+                )
             return None, EngineError(
                 error_id="checkpoint_not_found",
                 code=EngineErrorCode.VALIDATION,

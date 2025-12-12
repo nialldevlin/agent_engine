@@ -11,8 +11,8 @@ from .base import SchemaBase
 
 
 class EventType(str, Enum):
-    TASK = "task"
-    STAGE = "stage"
+    TASK = "task_started"
+    STAGE = "stage_completed"
     AGENT = "agent"
     TOOL = "tool"
     ROUTING = "routing"

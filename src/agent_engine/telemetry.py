@@ -44,6 +44,17 @@ class TelemetryBus:
         if self.plugin_registry:
             self.plugin_registry.dispatch_event(event)
 
+    def emit_event(self, name: str, payload: Optional[dict] = None, task_id: str | None = None, stage_id: str | None = None, event_type: EventType = EventType.TELEMETRY) -> None:
+        """Generic event emitter for ad-hoc telemetry."""
+        self.emit(Event(
+            event_id=f"{name}-{len(self.events)}",
+            task_id=task_id,
+            stage_id=stage_id,
+            type=event_type,
+            timestamp=_now_iso(),
+            payload=payload or {"event": name},
+        ))
+
     def task_event(self, task_id: str, payload=None) -> None:
         self.emit(Event(event_id=f"task-{len(self.events)}", task_id=task_id, stage_id=None, type=EventType.TASK, timestamp=None, payload=payload or {}))
 

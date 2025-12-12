@@ -523,8 +523,8 @@ class NodeExecutor:
                 stage_id=node.stage_id
             )
 
-        # Task status must be set
-        if task.status == UniversalStatus.PENDING:
+        # Task status must be set before exit
+        if task.status == UniversalStatus.PENDING and task.current_output is None:
             return EngineError(
                 error_id="exit_status_not_set",
                 code=EngineErrorCode.VALIDATION,

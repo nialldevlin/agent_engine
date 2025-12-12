@@ -31,6 +31,11 @@ def validate_nodes(nodes_data: List[Dict], file_name: str = "workflow.yaml") -> 
     """
     nodes = {}
     for i, node_dict in enumerate(nodes_data):
+        # Compatibility: allow "id" as alias for stage_id and default name to stage_id
+        if "stage_id" not in node_dict and "id" in node_dict:
+            node_dict = {**node_dict, "stage_id": node_dict.get("id")}
+        if "name" not in node_dict and ("stage_id" in node_dict or "id" in node_dict):
+            node_dict = {**node_dict, "name": node_dict.get("stage_id") or node_dict.get("id")}
         try:
             node = Node(**node_dict)
             nodes[node.stage_id] = node
@@ -58,6 +63,9 @@ def validate_edges(edges_data: List[Dict], file_name: str = "workflow.yaml") -> 
     """
     edges = []
     for i, edge_dict in enumerate(edges_data):
+        # Compatibility: allow "label" as alias for condition
+        if "condition" not in edge_dict and "label" in edge_dict:
+            edge_dict = {**edge_dict, "condition": edge_dict.get("label")}
         try:
             edge = Edge(**edge_dict)
             edges.append(edge)

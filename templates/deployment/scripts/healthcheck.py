@@ -18,6 +18,15 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
+import sys
+
+# Ensure repository root is on sys.path for direct execution
+ROOT_DIR = Path(__file__).resolve().parents[3]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 
 def get_config_dir() -> str:

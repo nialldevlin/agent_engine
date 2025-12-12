@@ -8,8 +8,19 @@ Agent Engine executes workflows as directed acyclic graphs (DAGs) specified thro
 
 ## Installation
 
+The recommended setup uses the provided Makefile. From the repository root:
+
 ```bash
-pip install -e .
+make install        # creates .venv and installs agent_engine[dev]
+source .venv/bin/activate
+```
+
+If you prefer to manage the virtual environment yourself, the equivalent manual command is `pip install -e .[dev]`.
+
+Run the full test suite at any time with:
+
+```bash
+make test
 ```
 
 ## Quick Start
@@ -313,19 +324,69 @@ Attributes:
 - `message` - Error description
 - `node_id` - Node where the error occurred (if applicable)
 
-## Examples
+## Examples & Usage
 
-See `examples/minimal_config/` for a complete minimal configuration with all required manifests.
+### Minimal Config (stub mode)
 
-To run the minimal example:
+The `examples/minimal_config/` directory contains the smallest valid manifest set. Because it omits CLI profiles, `engine.run()` returns the initialization stub rather than executing the DAG.
 
 ```python
 from agent_engine import Engine
 
 engine = Engine.from_config_dir("examples/minimal_config")
-result = engine.run({"request": "test"})
-print(result)
+print(engine.run({"request": "smoke test"}))
+# {'status': 'initialized', 'dag_valid': True, 'start_node': 'start', ...}
 ```
+
+Use this to verify manifest loading and DAG validation.
+
+### Mini-Editor Example (full execution + CLI)
+
+`examples/mini_editor/` exercises the full workflow, telemetry, memory stores, and CLI profiles.
+
+1. **Set the config directory environment variable** (used by healthcheck/tests and optional CLI scripts):
+
+   ```bash
+   export AGENT_ENGINE_CONFIG_DIR=examples/mini_editor/config
+   ```
+
+2. **Run the engine programmatically**:
+
+   ```python
+   from agent_engine import Engine
+   engine = Engine.from_config_dir(AGENT_ENGINE_CONFIG_DIR)
+   result = engine.run({"action": "create", "title": "Test Document"})
+   print(result["status"], result["node_sequence"])
+   ```
+
+   The result dictionary includes `task_id`, normalized `status` (`success`, `failure`, `partial`), `node_sequence`, `execution_time_ms`, and `history`.
+
+3. **Use the reusable CLI REPL (Phase 18)**:
+
+   ```bash
+   python -m agent_engine.cli
+   ```
+
+   The CLI reads `cli_profiles.yaml` in the config dir. Common commands:
+
+   - `/mode default` – activate the default profile
+   - `create a 2-paragraph summary about Agent Engine` – send input to `Engine.run()`
+   - `/history`, `/edit`, `/open` – use built-in REPL commands (see `docs/CLI_FRAMEWORK.md`)
+
+### Deployment Healthcheck
+
+The template healthcheck script ensures manifests load and the DAG validates:
+
+```bash
+export AGENT_ENGINE_CONFIG_DIR=examples/mini_editor/config
+python templates/deployment/scripts/healthcheck.py
+```
+
+It exits with:
+
+- `0` – healthy
+- `2` – degraded (e.g., missing writable directories)
+- `1` – unhealthy (manifest or DAG errors)
 
 ## Telemetry & Event Bus (Phase 8)
 
