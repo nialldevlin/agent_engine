@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional, Tuple
 
 from agent_engine.json_engine import validate
@@ -41,6 +42,14 @@ class AgentRuntime:
 
         # Call LLM
         llm_output = self.llm_client.generate(prompt) if self.llm_client else prompt
+
+        # Parse JSON if output is a string (LLM text response)
+        if isinstance(llm_output, str):
+            try:
+                llm_output = json.loads(llm_output)
+            except (json.JSONDecodeError, ValueError):
+                # Not valid JSON, treat as literal string output
+                pass
 
         # Parse output to extract tool_plan if present
         tool_plan = None
