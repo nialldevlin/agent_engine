@@ -78,8 +78,9 @@ def show_summary(ctx: CliContext, args: str) -> None:
 
     # Run engine to generate summary
     result = ctx.run_engine({
-        "action": "summarize",
+        "action": "edit",  # reuse edit branch to reach summary node
         "path": path,
+        "summary_only": True,
         "user_input": "Generate a concise summary of the document"
     })
 

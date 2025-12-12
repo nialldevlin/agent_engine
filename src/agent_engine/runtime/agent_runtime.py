@@ -22,16 +22,16 @@ class AgentRuntime:
         Returns:
             (output, error, tool_plan) - 3-tuple
         """
-        # Lightweight deterministic branching when no LLM client is configured
-        if self.llm_client is None:
+        # Lightweight deterministic branching for decision nodes
+        if node.role == NodeRole.DECISION:
             payload = getattr(task, "current_output", None)
-            if node.role == "decision" or getattr(node, "role", None) == NodeRole.DECISION:
-                action = None
-                if isinstance(payload, dict):
-                    action = payload.get("action")
-                if action in ("create", "edit"):
-                    return {"condition": action}, None, None
-                # Default to first branch
+            action = None
+            if isinstance(payload, dict):
+                action = payload.get("action")
+            if action in ("create", "edit"):
+                return {"condition": action}, None, None
+            # If no action and no LLM client, default to create
+            if self.llm_client is None:
                 return {"condition": "create"}, None, None
 
         # Build prompt (tool-aware if tools present)
