@@ -14,6 +14,12 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 
+# Ensure the repo root and examples are in sys.path for custom command loading
+_script_dir = Path(__file__).parent
+_repo_root = _script_dir.parent.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 from agent_engine import Engine
 from agent_engine.cli import REPL, CliContext, CommandError
 

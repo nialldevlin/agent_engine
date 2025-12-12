@@ -2,7 +2,7 @@ version: "1.0"
 description: "Mini-Editor: Document creation and editing workflow"
 
 nodes:
-  - stage_id: "start"
+  - id: "start"
     name: "Start"
     kind: "deterministic"
     role: "start"
@@ -10,7 +10,7 @@ nodes:
     context: "none"
     continue_on_failure: false
 
-  - stage_id: "normalize_request"
+  - id: "normalize_request"
     name: "Normalize Request"
     kind: "deterministic"
     role: "linear"
@@ -18,7 +18,7 @@ nodes:
     tools: []
     continue_on_failure: false
 
-  - stage_id: "decide_operation"
+  - id: "decide_operation"
     name: "Decide Operation"
     kind: "agent"
     role: "decision"
@@ -27,7 +27,7 @@ nodes:
     tools: []
     continue_on_failure: false
 
-  - stage_id: "draft_document"
+  - id: "draft_document"
     name: "Draft Document"
     kind: "agent"
     role: "linear"
@@ -36,7 +36,7 @@ nodes:
     tools: ["write_file", "read_file"]
     continue_on_failure: false
 
-  - stage_id: "edit_document"
+  - id: "edit_document"
     name: "Edit Document"
     kind: "agent"
     role: "linear"
@@ -45,7 +45,7 @@ nodes:
     tools: ["read_file", "write_file"]
     continue_on_failure: false
 
-  - stage_id: "generate_summary"
+  - id: "generate_summary"
     name: "Generate Summary"
     kind: "agent"
     role: "merge"
@@ -54,7 +54,7 @@ nodes:
     tools: ["read_file"]
     continue_on_failure: false
 
-  - stage_id: "exit"
+  - id: "exit"
     name: "Exit"
     kind: "deterministic"
     role: "exit"
@@ -62,19 +62,19 @@ nodes:
     continue_on_failure: false
 
 edges:
-  - from_node_id: "start"
-    to_node_id: "normalize_request"
-  - from_node_id: "normalize_request"
-    to_node_id: "decide_operation"
-  - from_node_id: "decide_operation"
-    to_node_id: "draft_document"
+  - from: "start"
+    to: "normalize_request"
+  - from: "normalize_request"
+    to: "decide_operation"
+  - from: "decide_operation"
+    to: "draft_document"
     label: "create"
-  - from_node_id: "decide_operation"
-    to_node_id: "edit_document"
+  - from: "decide_operation"
+    to: "edit_document"
     label: "edit"
-  - from_node_id: "draft_document"
-    to_node_id: "generate_summary"
-  - from_node_id: "edit_document"
-    to_node_id: "generate_summary"
-  - from_node_id: "generate_summary"
-    to_node_id: "exit"
+  - from: "draft_document"
+    to: "generate_summary"
+  - from: "edit_document"
+    to: "generate_summary"
+  - from: "generate_summary"
+    to: "exit"

@@ -13,6 +13,7 @@ src/agent_engine/json_engine.py
 src/agent_engine/manifest_loader.py
 src/agent_engine/memory_stores.py
 src/agent_engine/metrics_loader.py
+src/agent_engine/paths.py
 src/agent_engine/plugin_loader.py
 src/agent_engine/plugin_registry.py
 src/agent_engine/policy_loader.py
