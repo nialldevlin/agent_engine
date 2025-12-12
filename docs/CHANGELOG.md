@@ -2,6 +2,16 @@
 
 # Changelog
 
+## 2025-12-11
+- **Phases 19-23 Complete**: Final implementation phases for Agent Engine v1
+  - Phase 19: Persistent Memory (40 tests) - Memory store persistence and recovery
+  - Phase 20: Credentials & Secrets (43 tests) - Secure credential management
+  - Phase 21: Scheduler (41 tests) - Task scheduling and delayed execution
+  - Phase 22: Deployment Utilities (17 tests) - Production deployment helpers
+  - Phase 23: Documentation & Examples (15 tests) - Example applications and usage guides
+- **v1 Completion**: Agent Engine v1 fully implemented with 1,127 passing tests across all 24 phases
+- **Documentation Cleanup**: Archived 8 completed phase implementation plans; reduced docs/ from 552 KB to ~310 KB
+
 ## 2025-12-05
 - **Phase 3 Complete:** Implemented DAG-based workflow engine with full specification.
   - Phase 3.1: Added `StageRole` enum and `role` field to `Stage`; enhanced `Edge` and `WorkflowGraph` schemas with optional fields.

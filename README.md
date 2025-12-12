@@ -620,19 +620,33 @@ All 23 phases complete with comprehensive documentation, example apps, and test 
 
 ## Documentation
 
-### Getting Started
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete system architecture with diagrams
-- **[TUTORIAL.md](docs/TUTORIAL.md)** - Step-by-step walkthrough with mini-editor example
-- **[Quick Start](#quick-start)** - 5-minute introduction above
+### For Users & Developers
 
-### Reference
+**Getting Started:**
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete system architecture with Mermaid diagrams
+- **[TUTORIAL.md](docs/TUTORIAL.md)** - Step-by-step walkthrough with mini-editor example
+- **[Quick Start](#quick-start)** - 5-minute introduction (above)
+
+**Reference:**
 - **[API_REFERENCE.md](docs/API_REFERENCE.md)** - Complete public API documentation
 - **[CLI_FRAMEWORK.md](docs/CLI_FRAMEWORK.md)** - Interactive REPL usage guide
-- **[AGENT_ENGINE_SPEC.md](docs/canonical/AGENT_ENGINE_SPEC.md)** - Authoritative technical specification
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[SECURITY.md](docs/SECURITY.md)** - Security best practices
+- **[PACKAGING.md](docs/PACKAGING.md)** - PyPI packaging guide
 
-### Examples
+**Examples:**
 - **[examples/minimal_config/](examples/minimal_config/)** - Minimal working example
 - **[examples/mini_editor/](examples/mini_editor/)** - Mini-editor document creation app
+
+**Canonical Specifications:**
+- **[AGENT_ENGINE_SPEC.md](docs/canonical/AGENT_ENGINE_SPEC.md)** - Authoritative technical specification (frozen)
+- **[AGENT_ENGINE_OVERVIEW.md](docs/canonical/AGENT_ENGINE_OVERVIEW.md)** - Architectural overview (frozen)
+- **[PROJECT_INTEGRATION_SPEC.md](docs/canonical/PROJECT_INTEGRATION_SPEC.md)** - Integration specification (frozen)
+
+**Operational & Development:**
+- **[CHANGELOG.md](docs/CHANGELOG.md)** - Release notes and phase completion summaries
+- **[PLAN_BUILD_AGENT_ENGINE.md](docs/operational/PLAN_BUILD_AGENT_ENGINE.md)** - v1 roadmap and implementation status
+- **[MULTI_TASK_ISOLATION.md](docs/MULTI_TASK_ISOLATION.md)** - Phase 17 multi-task isolation guarantees
 
 ## Development
 

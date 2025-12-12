@@ -52,15 +52,15 @@ For EACH PHASE, include:
 
 ### Phase N — <short name>
 1. **Goal:** One sentence.
-2. **Files to modify or create**  
+2. **Files to modify or create**
    Use full @-paths (e.g., `@/src/module/file.py`).
-3. **Functions/classes to add/modify/remove**  
+3. **Functions/classes to add/modify/remove**
    Give explicit signatures when relevant.
-4. **Invariants and constraints**  
-   Examples:  
-   - “Do not modify any other files.”  
-   - “Preserve existing behavior of X.”  
-   - “Follow naming conventions as shown in <file>.”
+4. **Invariants and constraints**
+   Examples:
+   - "Do not modify any other files."
+   - "Preserve existing behavior of X."
+   - "Follow naming conventions as shown in <file>."
 5. **Edge cases & error modes to consider.**
 6. **Out-of-scope items** to prevent drift.
 
@@ -71,7 +71,7 @@ Then list the exact **Steps** needed to complete the phase.
 ### **Steps Format**
 Each step must specify whether it is:
 
-- `[QWEN]` → executed by a local 7B model, must be extremely explicit  
+- `[QWEN]` → executed by a local 7B model, must be extremely explicit
 - `[HUMAN]` → executed manually (tests, review, commands, approvals)
 
 For example:
@@ -80,13 +80,13 @@ For example:
 - Exact file(s) to modify using @-paths.
 - The precise change required (definitions, defaults, enum members, structural edits).
 - Constraints: what must NOT change.
-- Expected output: *“Return a unified diff for modified files only.”*
+- Expected output: *"Return a unified diff for modified files only."*
 - No design inference allowed. All required details must be specified.
 
 **Step K — [HUMAN] <short description>**
 - Exact commands to run (e.g., `pytest tests/test_x.py`).
 - What the human should verify in output, logs, diffs, or behavior.
-- Branching logic if checks fail (e.g., “Return to Phase 1 Step 2 if X fails”).
+- Branching logic if checks fail (e.g., "Return to Phase 1 Step 2 if X fails").
 
 Ensure:
 - Steps are atomic (1 editing action per QWEN step).
@@ -102,19 +102,19 @@ Produce a numbered list of prompts ready to paste directly into Cline Act Mode.
 **Requirements:**
 
 - One Qwen prompt per `[QWEN]` step in Section 2.
-- Use the format:  
+- Use the format:
   **Qwen Prompt N (Phase X, Step Y — <short description>)**
 - Preserve all numbering to maintain mapping integrity.
 - Each prompt must contain:
   - Restatement of the Step goal.
   - Exact @-paths to target files.
   - Exact required edits (explicit text/fields/enums/behaviors).
-  - Constraints:  
-    - “Do not modify any other files or lines.”  
-    - “Do not introduce new patterns or restructure logic.”  
-    - “No inference — apply only what is explicitly stated.”
-  - Required output format:  
-    - “Return a unified diff for modified files only.”
+  - Constraints:
+    - "Do not modify any other files or lines."
+    - "Do not introduce new patterns or restructure logic."
+    - "No inference — apply only what is explicitly stated."
+  - Required output format:
+    - "Return a unified diff for modified files only."
 
 ### Example QWEN prompt structure
 ```text
@@ -140,3 +140,4 @@ Unified diff only.
 ```
 
 The final output of Section 3 must include **no code**, only prompts.
+
