@@ -285,8 +285,8 @@ class REPL:
         try:
             result = self.context.run_engine(payload)
 
-            # Display result
-            print(f"Result: {result}")
+            # Display result in human-friendly format
+            self._display_result(result)
 
             # Display telemetry if enabled
             if self.active_profile.telemetry_overlays.enabled:
@@ -299,6 +299,76 @@ class REPL:
             raise
         except Exception as e:
             raise CliError(f"Engine execution failed: {str(e)}")
+
+    def _display_result(self, result: Dict[str, Any]) -> None:
+        """
+        Display engine result in human-friendly format.
+
+        Args:
+            result: Result dict from engine.run()
+        """
+        import json
+
+        # Extract key fields
+        task_id = result.get("task_id", "unknown")
+        status = result.get("status", "unknown")
+        execution_time_ms = result.get("execution_time_ms", 0)
+        output = result.get("output")
+        node_sequence = result.get("node_sequence", [])
+        history = result.get("history", [])
+
+        # Status indicator
+        status_icon = "✓" if status == "success" else "⚠" if status == "partial" else "✗"
+
+        print()
+        print(f"{status_icon} Status: {status.upper()}")
+        print(f"  Task ID: {task_id}")
+        print(f"  Time: {execution_time_ms}ms")
+
+        # Show node sequence
+        if node_sequence:
+            print(f"  Nodes: {' → '.join(node_sequence)}")
+
+        # Display output
+        if output is not None:
+            print()
+            print("Output:")
+            print("-" * 60)
+
+            # Format output nicely
+            if isinstance(output, (dict, list)):
+                # Try to format as JSON with indentation
+                try:
+                    formatted = json.dumps(output, indent=2)
+                    print(formatted)
+                except (TypeError, ValueError):
+                    # Fallback if not JSON-serializable
+                    print(str(output))
+            else:
+                # String or other simple type
+                print(str(output))
+
+            print("-" * 60)
+
+        # Show brief execution history
+        if history:
+            print()
+            print("Execution History:")
+            for i, record in enumerate(history, 1):
+                node_id = record.get("node_id", "unknown")
+                node_status = record.get("node_status", "unknown")
+                node_role = record.get("node_role", "")
+
+                # Format node status with icon
+                if node_status == "completed":
+                    node_icon = "✓"
+                elif node_status == "failed":
+                    node_icon = "✗"
+                else:
+                    node_icon = "•"
+
+                role_label = f" ({node_role})" if node_role else ""
+                print(f"  {i}. {node_icon} {node_id}{role_label}")
 
     def _display_telemetry(self, events: List[Any], level: str) -> None:
         """
