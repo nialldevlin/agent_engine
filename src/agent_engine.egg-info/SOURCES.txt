@@ -91,6 +91,7 @@ src/agent_engine/schemas/tool_io.py
 src/agent_engine/schemas/workflow.py
 src/agent_engine/tools/__init__.py
 src/agent_engine/tools/builtin.py
+src/agent_engine/tools/filesystem.py
 src/agent_engine/utils/__init__.py
 src/agent_engine/utils/file_context.py
 src/agent_engine/utils/filesystem_safety.py

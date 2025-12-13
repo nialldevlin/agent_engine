@@ -27,7 +27,6 @@ if str(_repo_root) not in sys.path:
 
 from agent_engine import Engine
 from agent_engine.cli import REPL, CliContext, CommandError
-from agent_engine.runtime.llm_client import AnthropicLLMClient
 
 
 def setup_config_dir() -> str:
@@ -43,38 +42,6 @@ def setup_config_dir() -> str:
     return str(config_dir)
 
 
-def enable_real_llm_calls(engine: Engine) -> bool:
-    """Enable real LLM calls if ANTHROPIC_API_KEY is set.
-
-    Args:
-        engine: Engine instance to configure
-
-    Returns:
-        True if real LLM calls were enabled, False if using mock agents
-    """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        return False
-
-    try:
-        # Create real Anthropic client
-        llm_client = AnthropicLLMClient(
-            api_key=api_key,
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=2000,
-        )
-
-        # Inject into engine's agent runtime
-        engine.agent_runtime.llm_client = llm_client
-
-        print("✓ Real LLM calls enabled (Anthropic)")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to enable real LLM calls: {e}", file=sys.stderr)
-        print("  Falling back to mock agents")
-        return False
-
-
 def initialize_engine(config_dir: str) -> Engine:
     """Initialize the Engine from config directory.
 
@@ -88,15 +55,68 @@ def initialize_engine(config_dir: str) -> Engine:
         engine = Engine.from_config_dir(config_dir)
         print(f"✓ Engine initialized from {config_dir}")
 
-        # Try to enable real LLM calls
-        llm_enabled = enable_real_llm_calls(engine)
-        if not llm_enabled:
-            print("  Using mock agents (set ANTHROPIC_API_KEY for real LLM calls)")
+        if engine.agent_runtime.llm_client is None:
+            print("  Using mock agents (set ANTHROPIC_API_KEY or AGENT_ENGINE_USE_ANTHROPIC=1 for real LLM calls)")
+
+        # Register custom normalize_request handler
+        engine.deterministic_registry.register("normalize_request", normalize_request_handler)
 
         return engine
     except Exception as e:
         print(f"✗ Failed to initialize engine: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def normalize_request_handler(task, node, context_package):
+    """Parse free-form user input into structured request.
+
+    Extracts action and filename from natural language requests like:
+    - "Create a file test.md with instructions"
+    - "Edit document.md"
+    """
+    import re
+    from agent_engine.schemas import EngineError
+
+    payload = task.current_output
+
+    # If already structured, pass through
+    if isinstance(payload, dict) and "action" in payload:
+        return payload, None
+
+    # Extract text from REPL-wrapped input
+    input_text = ""
+    if isinstance(payload, dict) and "input" in payload:
+        input_text = payload.get("input", "")
+        attached_files = payload.get("attached_files", [])
+    elif isinstance(payload, str):
+        input_text = payload
+        attached_files = []
+    else:
+        input_text = str(payload)
+        attached_files = []
+
+    # Parse action and filename from text
+    action = "create"  # default
+    title = None
+
+    # Look for action keywords
+    lower_text = input_text.lower()
+    if "edit" in lower_text or "update" in lower_text or "modify" in lower_text:
+        action = "edit"
+
+    # Extract filename (anything ending in .md, .txt, .py, etc.)
+    filename_match = re.search(r'(\S+\.\w+)', input_text)
+    if filename_match:
+        title = filename_match.group(1)
+
+    # Build structured output
+    result = {
+        "action": action,
+        "title": title,
+        "user_input": input_text,
+        "attached_files": attached_files
+    }
+    return result, None
 
 
 def create_document_example(engine: Engine) -> None:
@@ -139,7 +159,11 @@ def interactive_session(engine: Engine) -> None:
     # Check if real LLM calls are enabled
     has_real_llm = engine.agent_runtime.llm_client is not None
     if has_real_llm:
-        print("\n✓ REAL LLM CALLS ENABLED (Claude Sonnet 3.5)")
+        model_name = "Unknown"
+        if hasattr(engine.agent_runtime, 'llm_client') and engine.agent_runtime.llm_client:
+            if hasattr(engine.agent_runtime.llm_client, 'model'):
+                model_name = engine.agent_runtime.llm_client.model
+        print(f"\n✓ REAL LLM CALLS ENABLED ({model_name})")
     else:
         print("\n⚠ Using mock agents (no ANTHROPIC_API_KEY set)")
 

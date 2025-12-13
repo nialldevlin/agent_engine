@@ -8,6 +8,7 @@ import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import importlib
+from pathlib import Path
 
 from .profile import Profile, load_profiles, get_default_profile
 from .session import Session, SessionEntry
@@ -60,11 +61,18 @@ class REPL:
             print(f"Warning: Could not load session history: {e}")
 
         # Initialize context
+        workspace_candidate = getattr(engine, "workspace_root", None)
+        if isinstance(workspace_candidate, (str, Path)):
+            workspace_root = workspace_candidate
+        else:
+            workspace_root = self.active_profile.default_config_dir or config_dir
+        workspace_root = str(Path(workspace_root).resolve())
+
         self.context = CliContext(
             session=self.session,
             engine=engine,
             profile=self.active_profile,
-            workspace_root=self.active_profile.default_config_dir or config_dir,
+            workspace_root=workspace_root,
         )
 
         # Load custom commands

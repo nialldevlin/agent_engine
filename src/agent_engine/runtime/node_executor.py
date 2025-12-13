@@ -196,8 +196,9 @@ class NodeExecutor:
             context_package = None
 
         # Step 3: Execute node (agent or deterministic)
+        tool_calls = []
         if node.kind == NodeKind.AGENT:
-            output, error, tool_plan = self._execute_agent_node(task, node, context_package)
+            output, error, tool_plan, tool_calls = self._execute_agent_node(task, node, context_package)
         else:  # DETERMINISTIC
             output, error = self._execute_deterministic_node(task, node, context_package)
             tool_plan = None
@@ -258,7 +259,7 @@ class NodeExecutor:
             error=None,
             node_status=UniversalStatus.COMPLETED,
             tool_plan=tool_plan,
-            tool_calls=[],  # Tool calls will be added by tool runtime
+            tool_calls=tool_calls or [],  # Tool calls will be added by tool runtime
             context_profile_id=context_profile_id,
             context_metadata=context_metadata,
             started_at=started_at,
@@ -348,12 +349,13 @@ class NodeExecutor:
         task: Task,
         node: Node,
         context_package
-    ) -> Tuple[Any, Optional[EngineError], Optional[Dict]]:
+    ) -> Tuple[Any, Optional[EngineError], Optional[Dict], list]:
         """Execute agent node with potential ToolPlan emission.
 
         Returns:
-            (output, error, tool_plan)
+            (output, error, tool_plan, tool_calls)
         """
+        tool_calls = []
         try:
             # Call agent runtime
             result = self.agent_runtime.run_agent_stage(task, node, context_package)
@@ -361,12 +363,14 @@ class NodeExecutor:
             # Handle different return formats (2-tuple or 3-tuple)
             if isinstance(result, tuple) and len(result) == 3:
                 output, error, tool_plan = result
+            elif isinstance(result, tuple) and len(result) == 4:
+                output, error, tool_plan, tool_calls = result
             else:
                 output, error = result
                 tool_plan = None
 
             if error:
-                return None, error, None
+                return None, error, None, tool_calls
 
             # If agent returned both main_result and tool_plan, extract them
             if isinstance(output, dict):
@@ -380,9 +384,31 @@ class NodeExecutor:
                             tool_plan, task, node, context_package
                         )
                         if tool_error:
-                            return None, tool_error, tool_plan
+                            return None, tool_error, tool_plan, tool_calls
 
-            return output, None, tool_plan
+            # Execute fallback tool plan if provided separately
+            if tool_plan and not tool_calls and node.tools:
+                tool_calls, tool_error = self.tool_runtime.execute_tool_plan(
+                    tool_plan, task, node, context_package
+                )
+                if tool_error:
+                    return None, tool_error, tool_plan, tool_calls
+
+            # Attach tool call info to output for downstream consumers
+            if tool_calls:
+                rendered_calls = [call.model_dump(mode="json") if hasattr(call, "model_dump") else call for call in tool_calls]
+                if isinstance(output, dict):
+                    output.setdefault("tool_calls", rendered_calls)
+                else:
+                    output = {"result": output, "tool_calls": rendered_calls}
+
+                summary_text = self._derive_summary_from_tools(node, tool_calls)
+                if summary_text:
+                    if not isinstance(output, dict):
+                        output = {"result": output}
+                    output.setdefault("summary", summary_text)
+
+            return output, None, tool_plan, tool_calls
 
         except Exception as e:
             error = EngineError(
@@ -393,7 +419,7 @@ class NodeExecutor:
                 severity=Severity.ERROR,
                 stage_id=node.stage_id
             )
-            return None, error, None
+            return None, error, None, tool_calls
 
     def _execute_deterministic_node(
         self,
@@ -534,4 +560,20 @@ class NodeExecutor:
                 stage_id=node.stage_id
             )
 
+        return None
+
+    def _derive_summary_from_tools(self, node: Node, tool_calls: list) -> Optional[str]:
+        """Build a lightweight summary from read_file outputs when available."""
+        if not tool_calls:
+            return None
+        # Use most recent tool output that contains content
+        for call in reversed(tool_calls):
+            output = getattr(call, "output", None) or {}
+            if isinstance(output, dict) and output.get("content"):
+                content = output["content"]
+                lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
+                if not lines:
+                    return None
+                preview = lines[:5]
+                return "\n".join(preview)
         return None

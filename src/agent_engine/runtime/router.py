@@ -149,7 +149,7 @@ class Router:
 
         task_spec = TaskSpec(
             task_spec_id=f"task_spec_{uuid.uuid4().hex[:8]}",
-            request=str(input_payload),
+            request=input_payload,
             mode=TaskMode.IMPLEMENT
         )
         task = self.task_manager.create_task(spec=task_spec)

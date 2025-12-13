@@ -42,7 +42,7 @@ class TaskPriority(str, Enum):
 
 class TaskSpec(SchemaBase):
     task_spec_id: str = Field(..., description="Stable ID for this task spec")
-    request: str = Field(..., description="Raw or normalized user ask")
+    request: Any = Field(..., description="Raw or normalized user ask (string or dict)")
     mode: TaskMode = Field(default=TaskMode.ANALYSIS_ONLY)
     priority: TaskPriority = Field(default=TaskPriority.NORMAL)
     hints: List[str] = Field(default_factory=list)

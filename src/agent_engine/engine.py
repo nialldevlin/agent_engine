@@ -1,7 +1,8 @@
 import os
 import json
+import importlib
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple, Callable
 from .dag import DAG
 from .manifest_loader import (
     load_workflow_manifest,
@@ -28,7 +29,16 @@ from .schema_validator import (
 from .memory_stores import MemoryStore, initialize_memory_stores, initialize_context_profiles
 from .adapters import AdapterRegistry, initialize_adapters
 from .schemas.memory import ContextProfile
-from .schemas import Event, EventType, EngineMetadata, MetricSample
+from .schemas import (
+    Event,
+    EventType,
+    EngineMetadata,
+    MetricSample,
+    ToolDefinition,
+    ToolKind,
+    ToolCapability,
+    ToolRiskLevel,
+)
 from .runtime.task_manager import TaskManager
 from .runtime.node_executor import NodeExecutor
 from .runtime.router import Router
@@ -47,6 +57,87 @@ from .paths import resolve_state_root, ensure_directory
 from urllib import request as urlrequest
 
 
+def _resolve_workspace_root(config_dir: str) -> Path:
+    """Determine workspace root for filesystem operations."""
+    env_root = os.getenv("AGENT_ENGINE_WORKSPACE_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path(config_dir).resolve().parent
+
+
+def _load_tool_handler(entrypoint: str, workspace_root: Path) -> Optional[Callable]:
+    """Load a tool handler callable from an entrypoint string."""
+    if not entrypoint:
+        return None
+    try:
+        module_name, func_name = entrypoint.split(":")
+    except ValueError:
+        return None
+    module = importlib.import_module(module_name)
+    handler = getattr(module, func_name, None)
+    if handler is None:
+        return None
+    try:
+        from functools import partial
+
+        return partial(handler, workspace_root=workspace_root)
+    except Exception:
+        # If handler signature does not accept workspace_root, return raw callable
+        return handler
+
+
+def _convert_tools(tools_data: List[Dict], workspace_root: Path) -> Tuple[List[ToolDefinition], Dict[str, Callable]]:
+    """Convert manifest tools to ToolDefinition objects and handlers."""
+    tool_defs: List[ToolDefinition] = []
+    handlers: Dict[str, Callable] = {}
+
+    for tool in tools_data or []:
+        tool_id = tool.get("id")
+        if not tool_id:
+            continue
+        permissions = tool.get("permissions", {}) or {}
+        allow_network = bool(permissions.get("allow_network"))
+        allow_shell = bool(permissions.get("allow_shell"))
+        fs_root = permissions.get("root")
+        filesystem_root = (
+            None if fs_root in (None, False, "") else str(Path(fs_root).expanduser().resolve())
+        )
+
+        # Map type -> ToolKind (default deterministic for v1 filesystem tools)
+        kind = ToolKind.DETERMINISTIC
+        if str(tool.get("type")).lower() == "llm_tool":
+            kind = ToolKind.LLM_TOOL
+
+        # Capabilities/risk defaults
+        capabilities = [ToolCapability.DETERMINISTIC_SAFE]
+        if "write" in tool_id or "write" in str(tool.get("name", "")).lower():
+            capabilities = [ToolCapability.WORKSPACE_MUTATION]
+        risk_level = ToolRiskLevel.MEDIUM if ToolCapability.WORKSPACE_MUTATION in capabilities else ToolRiskLevel.LOW
+
+        tool_def = ToolDefinition(
+            tool_id=tool_id,
+            kind=kind,
+            name=tool.get("name", tool_id),
+            description=tool.get("description", tool_id),
+            inputs_schema_id=tool.get("inputs_schema_id", "") or "",
+            outputs_schema_id=tool.get("outputs_schema_id", "") or "",
+            capabilities=capabilities,
+            risk_level=risk_level,
+            version=str(tool.get("version", "1.0.0")),
+            metadata={"entrypoint": tool.get("entrypoint")},
+            allow_network=allow_network,
+            allow_shell=allow_shell,
+            filesystem_root=filesystem_root or str(workspace_root),
+        )
+        tool_defs.append(tool_def)
+
+        handler = _load_tool_handler(tool.get("entrypoint"), workspace_root)
+        if handler:
+            handlers[tool_id] = handler
+
+    return tool_defs, handlers
+
+
 class Engine:
     """Agent Engine - orchestrates workflow execution.
 
@@ -58,7 +149,7 @@ class Engine:
         config_dir: str,
         workflow: DAG,
         agents: List[Dict],
-        tools: List[Dict],
+        tools: List[Any],
         schemas: Dict[str, Dict],
         memory_stores: Dict[str, MemoryStore],
         context_profiles: Dict[str, ContextProfile],
@@ -70,12 +161,16 @@ class Engine:
         credential_provider: Optional[CredentialProvider] = None,
         state_root: Optional[Path] = None,
         llm_client: Optional[Any] = None,
+        workspace_root: Optional[Path] = None,
+        tool_handlers: Optional[Dict[str, Callable]] = None,
+        tools_manifest: Optional[List[Dict]] = None,
     ):
         """Initialize Engine with all components."""
         self.config_dir = config_dir
         self.workflow = workflow
         self.agents = agents
-        self.tools = tools
+        self.tool_definitions = tools
+        self.tools = tools_manifest or tools
         self.schemas = schemas
         self.memory_stores = memory_stores
         self.context_profiles = context_profiles
@@ -86,6 +181,7 @@ class Engine:
         self.policy_evaluator = policy_evaluator
         self.credential_provider = credential_provider
         self.state_root = ensure_directory(state_root or resolve_state_root(config_dir))
+        self.workspace_root = Path(workspace_root or _resolve_workspace_root(config_dir)).resolve()
 
         # Initialize runtime components (Phase 4-5)
         self.task_manager = TaskManager(telemetry=None, state_root=self.state_root)
@@ -111,17 +207,22 @@ class Engine:
         self._load_plugins(config_dir)
 
         # AgentRuntime expects llm_client and template_version
-        self.agent_runtime = AgentRuntime(llm_client=llm_client, template_version="v1")
+        self.agent_runtime = AgentRuntime(llm_client=llm_client, template_version="v1", workspace_root=self.workspace_root)
 
         # ToolRuntime expects tools dict and tool_handlers
-        tools_dict = {t['id']: t for t in tools} if tools else {}
+        tools_dict = {}
+        for t in tools or []:
+            tool_id = getattr(t, "tool_id", None) or t.get("id")
+            if tool_id:
+                tools_dict[tool_id] = t
         self.tool_runtime = ToolRuntime(
             tools=tools_dict,
-            tool_handlers=None,
+            tool_handlers=tool_handlers,
             llm_client=None,
             telemetry=self.telemetry,
             artifact_store=self.artifact_store,
             policy_evaluator=self.policy_evaluator,
+            workspace_root=self.workspace_root,
         )
 
         # ContextAssembler uses configured memory stores and context profiles
@@ -239,7 +340,9 @@ class Engine:
         credential_provider = CredentialProvider(credentials_manifest)
 
         # Step 6: Register tools and adapters (with credential support)
-        adapters = initialize_adapters(agents, tools, credential_provider)
+        workspace_root = _resolve_workspace_root(path)
+        tool_definitions, tool_handlers = _convert_tools(tools, workspace_root)
+        adapters = initialize_adapters(agents, tool_definitions, credential_provider)
 
         # Step 7: Load plugins
         plugins = plugins_data.get('plugins', []) if plugins_data else []
@@ -269,14 +372,25 @@ class Engine:
         if os.getenv("AGENT_ENGINE_USE_ANTHROPIC") and os.getenv("ANTHROPIC_API_KEY"):
             default_model = None
             try:
-                default_model = (agents_data.get("agents") or [{}])[0].get("llm")
+                config_model = (agents_data.get("agents") or [{}])[0].get("llm")
+                # Parse model ID: convert "anthropic/claude-3-5-haiku" to "claude-3-5-haiku-20241022"
+                if config_model:
+                    if "/" in config_model:
+                        config_model = config_model.split("/", 1)[1]
+                    # Add date suffix if not present
+                    if "-202" not in config_model:
+                        if "haiku" in config_model:
+                            config_model = f"{config_model}-20241022"
+                        else:
+                            config_model = f"{config_model}-20241022"
+                default_model = config_model
             except Exception:
                 default_model = None
 
             class _AnthropicHTTPClient:
                 def __init__(self, api_key: str, model: Optional[str]):
                     self.api_key = api_key
-                    self.model = model or "claude-3-5-sonnet-20240620"
+                    self.model = model or "claude-3-5-haiku-20241022"
 
                 def generate(self, prompt_payload: Any) -> Any:
                     prompt_text = json.dumps(prompt_payload) if isinstance(prompt_payload, (dict, list)) else str(prompt_payload)
@@ -309,7 +423,7 @@ class Engine:
             config_dir=path,
             workflow=dag,
             agents=agents,
-            tools=tools,
+            tools=tool_definitions,
             schemas=schemas,
             memory_stores=memory_stores,
             context_profiles=context_profiles,
@@ -321,6 +435,9 @@ class Engine:
             credential_provider=credential_provider,
             state_root=state_root,
             llm_client=llm_client,
+            workspace_root=workspace_root,
+            tool_handlers=tool_handlers,
+            tools_manifest=tools,
         )
 
         # Initialize policy evaluator with telemetry after engine creation

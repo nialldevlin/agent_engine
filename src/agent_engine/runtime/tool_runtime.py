@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from agent_engine.json_engine import validate
-from agent_engine.schemas import EngineError, EngineErrorCode, EngineErrorSource, Node, Severity, Task, ToolCallRecord, ToolDefinition, ToolKind, ArtifactType
+from agent_engine.schemas import EngineError, EngineErrorCode, EngineErrorSource, Node, Severity, Task, ToolCallRecord, ToolDefinition, ToolKind, ArtifactType, ToolCapability
 from agent_engine.security import check_tool_call
 
 
@@ -20,6 +20,9 @@ class ToolRuntime:
         telemetry=None,
         artifact_store=None,
         policy_evaluator=None,
+        workspace_root=None,
+        allow_network: bool = False,
+        allow_workspace_mutation: bool = True,
     ) -> None:
         self.tools = tools
         self.tool_handlers = tool_handlers or {}
@@ -27,6 +30,10 @@ class ToolRuntime:
         self.telemetry = telemetry
         self.artifact_store = artifact_store
         self.policy_evaluator = policy_evaluator
+        self.workspace_root = workspace_root
+        # Security gates can be overridden at runtime; defaults allow workspace mutation for app tools
+        self.allow_network = allow_network
+        self.allow_workspace_mutation = allow_workspace_mutation
 
     def run_tool_stage(self, task: Task, node: Node, context_package) -> Tuple[Any | None, EngineError | None]:
         if not node.tools:
@@ -39,7 +46,12 @@ class ToolRuntime:
         if tool_def is None:
             return None, None
 
-        decision = check_tool_call(tool_def)
+        decision = check_tool_call(
+            tool_def,
+            allow_network=self.allow_network or getattr(tool_def, "allow_network", False),
+            allow_workspace_mutation=self.allow_workspace_mutation
+            or (hasattr(tool_def, "capabilities") and ToolCapability.WORKSPACE_MUTATION in tool_def.capabilities),
+        )
         if not decision.allowed:
             from agent_engine.schemas import EngineErrorCode, EngineErrorSource, Severity
 
@@ -61,14 +73,15 @@ class ToolRuntime:
             "request": getattr(spec_obj, "request", None),
             "mode": mode.value if mode else None,
             "context_items": [item.payload for item in context_package.items],
+            "workspace_root": str(self.workspace_root) if self.workspace_root else None,
         }
-        handler = self.tool_handlers.get(stage.tool_id)
+        handler = self.tool_handlers.get(tool_id)
         if tool_def.kind == ToolKind.DETERMINISTIC and handler:
             output = handler(call_input)
         elif tool_def.kind == ToolKind.LLM_TOOL and self.llm_client:
             output = self.llm_client.generate(call_input)
         else:
-            output = {"tool": stage.tool_id, "echo": call_input}
+            output = {"tool": tool_id, "echo": call_input}
 
         if tool_def.outputs_schema_id:
             validated, err = validate(tool_def.outputs_schema_id, output)
@@ -130,7 +143,12 @@ class ToolRuntime:
                 return tool_calls, error
 
             # Check permissions
-            decision = check_tool_call(tool_def)
+            decision = check_tool_call(
+                tool_def,
+                allow_network=self.allow_network or getattr(tool_def, "allow_network", False),
+                allow_workspace_mutation=self.allow_workspace_mutation
+                or (hasattr(tool_def, "capabilities") and ToolCapability.WORKSPACE_MUTATION in tool_def.capabilities),
+            )
             if not decision.allowed:
                 error = EngineError(
                     error_id="tool_permission_denied",

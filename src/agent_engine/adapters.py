@@ -94,6 +94,14 @@ def initialize_adapters(agents: List[Dict], tools: List[Dict], credential_provid
 
     # Register tools
     for tool in tools:
-        registry.register_tool(tool)
+        if hasattr(tool, "tool_id"):
+            config = {}
+            if hasattr(tool, "model_dump"):
+                config = tool.model_dump()
+            elif hasattr(tool, "dict"):
+                config = tool.dict()
+            registry.register_tool({"id": tool.tool_id, "config": config})
+        else:
+            registry.register_tool(tool)
 
     return registry
