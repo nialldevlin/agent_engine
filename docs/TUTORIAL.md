@@ -150,6 +150,14 @@ agents:
       max_tokens: 1000
 ```
 
+**How agents work:**
+- Each agent has an `id` (e.g., "main_agent")
+- Reference this id in `workflow.yaml` using `agent_id: "main_agent"`
+- The `llm` field uses format `provider/model-name`
+- The `config` section sets options like temperature and max_tokens
+
+You can define multiple agents with different models and configurations, then use whichever you need in your workflow.
+
 ### Step 4: Configure Tools (tools.yaml)
 
 Create `tools.yaml`:
@@ -193,6 +201,48 @@ Run it:
 ```bash
 python test_workflow.py
 ```
+
+### Step 6: Configure Credentials (provider_credentials.yaml)
+
+Before running the engine, you need to configure how the engine loads API keys.
+
+Create `provider_credentials.yaml`:
+
+```yaml
+version: "1.0"
+provider_credentials:
+  - id: "anthropic"
+    provider: "anthropic"
+    auth:
+      type: "api_key"
+      source: "env"
+      env_var: "ANTHROPIC_API_KEY"
+```
+
+**Set your API key:**
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+**Verify it's set:**
+
+```bash
+echo $ANTHROPIC_API_KEY  # Should print your key
+```
+
+Your config directory should now look like:
+
+```
+my_workflow/
+├── workflow.yaml
+├── agents.yaml
+├── tools.yaml
+├── provider_credentials.yaml
+└── test_workflow.py
+```
+
+Now when you run `python test_workflow.py`, the engine will load your API key and make LLM calls.
 
 ---
 
