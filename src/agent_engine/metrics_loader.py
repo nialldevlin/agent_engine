@@ -1,7 +1,7 @@
 """Metrics loader and configuration."""
 
-import os
 import yaml
+from pathlib import Path
 from typing import Dict, List, Optional
 from agent_engine.schemas import MetricsProfile, MetricConfig, MetricType
 from agent_engine.exceptions import ManifestLoadError
@@ -13,8 +13,8 @@ def load_metrics_manifest(config_dir: str) -> Optional[Dict]:
     Returns:
         Dict with loaded metrics configuration, or None if file doesn't exist
     """
-    path = os.path.join(config_dir, "metrics.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "metrics.yaml"
+    if not path.exists():
         return None
 
     try:

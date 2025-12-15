@@ -6,8 +6,9 @@ Loads and manages provider credentials from environment variables and files.
 Never logs or emits actual secret values in telemetry.
 """
 
-import os
 import json
+import os
+from pathlib import Path
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 
@@ -161,10 +162,11 @@ class CredentialProvider:
         if not file_path:
             raise CredentialLoadError("file_path not provided")
 
-        if not os.path.exists(file_path):
+        path_obj = Path(file_path)
+        if not path_obj.exists():
             raise CredentialLoadError(f"File not found: {file_path}")
 
-        if not os.path.isfile(file_path):
+        if not path_obj.is_file():
             raise CredentialLoadError(f"Not a file: {file_path}")
 
         try:

@@ -4,7 +4,6 @@ File operations for Phase 18 CLI Framework.
 Handles file viewing, editing, diffing, and patching with workspace safety.
 """
 
-import os
 from pathlib import Path
 from typing import Optional
 import difflib
@@ -29,8 +28,9 @@ def validate_path(path: str, workspace_root: str) -> str:
         CliError: If path is outside workspace or contains traversal
     """
     # Resolve path
-    if os.path.isabs(path):
-        resolved = Path(path).resolve()
+    path_obj = Path(path)
+    if path_obj.is_absolute():
+        resolved = path_obj.resolve()
     else:
         resolved = (Path(workspace_root) / path).resolve()
 
@@ -182,7 +182,7 @@ def apply_patch_safe(file_path: str, patch_content: str, workspace_root: str) ->
     # Create backup
     backup_path = validated_path + ".backup"
     try:
-        if os.path.exists(validated_path):
+        if Path(validated_path).exists():
             shutil.copy2(validated_path, backup_path)
 
         # Simple patch parsing (basic unified diff)
@@ -199,15 +199,17 @@ def apply_patch_safe(file_path: str, patch_content: str, workspace_root: str) ->
             f.write(new_content)
 
         # Clean up backup on success
-        if os.path.exists(backup_path):
-            os.remove(backup_path)
+        backup_path_obj = Path(backup_path)
+        if backup_path_obj.exists():
+            backup_path_obj.unlink()
 
     except Exception as e:
         # Rollback on error
-        if os.path.exists(backup_path):
+        backup_path_obj = Path(backup_path)
+        if backup_path_obj.exists():
             try:
                 shutil.copy2(backup_path, validated_path)
-                os.remove(backup_path)
+                backup_path_obj.unlink()
             except:
                 pass
         raise CliError(f"Failed to apply patch: {str(e)}")

@@ -6,7 +6,6 @@ Handles loading and management of CLI profiles from cli_profiles.yaml.
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
-import os
 import yaml
 from pathlib import Path
 
@@ -186,9 +185,9 @@ def load_profiles(config_dir: str) -> List[Profile]:
     Raises:
         CliError: If YAML is malformed or profiles are invalid
     """
-    config_path = os.path.join(config_dir, "cli_profiles.yaml")
+    config_path = Path(config_dir) / "cli_profiles.yaml"
 
-    if not os.path.exists(config_path):
+    if not config_path.exists():
         return [get_default_profile()]
 
     try:

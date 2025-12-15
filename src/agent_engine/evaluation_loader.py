@@ -1,7 +1,7 @@
 """Evaluation loader for Phase 12 evaluation framework."""
 
-import os
 import yaml
+from pathlib import Path
 from typing import Dict, List
 from agent_engine.schemas import EvaluationSuite, EvaluationCase, Assertion, AssertionType
 from agent_engine.exceptions import ManifestLoadError
@@ -13,8 +13,8 @@ def load_evaluations_manifest(config_dir: str) -> Dict:
     Returns:
         Dict with loaded evaluations, or None if file doesn't exist
     """
-    path = os.path.join(config_dir, "evaluations.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "evaluations.yaml"
+    if not path.exists():
         return None
 
     try:

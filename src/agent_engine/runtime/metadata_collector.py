@@ -4,10 +4,11 @@ Collects and records immutable metadata for every engine load and execution,
 including engine version, manifest hashes, schema versions, and adapter versions.
 """
 
-import os
 import hashlib
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from pathlib import Path
 from typing import Dict, Optional
 
 from agent_engine import __version__
@@ -23,7 +24,7 @@ def compute_file_hash(file_path: str) -> str:
     Returns:
         Hex string of SHA256 hash, or empty string if file doesn't exist
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         return ""
 
     sha256 = hashlib.sha256()
@@ -60,9 +61,9 @@ def collect_manifest_hashes(config_dir: str) -> Dict[str, str]:
 
     hashes = {}
     for filename in manifest_files:
-        file_path = os.path.join(config_dir, filename)
-        if os.path.exists(file_path):
-            hash_value = compute_file_hash(file_path)
+        file_path = Path(config_dir) / filename
+        if file_path.exists():
+            hash_value = compute_file_hash(str(file_path))
             if hash_value:
                 hashes[filename] = hash_value
 
@@ -136,9 +137,9 @@ def collect_deployment_metadata() -> tuple[str, str, str, str]:
     bootstrap_hash = os.getenv("BOOTSTRAP_HASH", "")
     if not bootstrap_hash:
         # Try to read bootstrap.json if it exists
-        bootstrap_file = os.path.join(os.getcwd(), "data", "bootstrap.json")
-        if os.path.exists(bootstrap_file):
-            bootstrap_hash = compute_file_hash(bootstrap_file)
+        bootstrap_file = Path.cwd() / "data" / "bootstrap.json"
+        if bootstrap_file.exists():
+            bootstrap_hash = compute_file_hash(str(bootstrap_file))
 
     return deployment_id, deployment_timestamp, bootstrap_hash, environment
 
@@ -163,7 +164,7 @@ def collect_engine_metadata(
     Raises:
         ValueError: If config_dir doesn't exist or isn't readable
     """
-    if not os.path.isdir(config_dir):
+    if not Path(config_dir).is_dir():
         raise ValueError(f"Config directory does not exist: {config_dir}")
 
     manifest_hashes = collect_manifest_hashes(config_dir)

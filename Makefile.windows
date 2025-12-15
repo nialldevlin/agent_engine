@@ -1,0 +1,46 @@
+# Windows Makefile for Agent Engine
+# Usage: make -f Makefile.windows install
+
+PYTHON = python
+VENV = .venv
+ACTIVATE = $(VENV)\Scripts\activate.bat
+
+.PHONY: install format lint typecheck test coverage clean help
+
+help:
+	@echo Available targets:
+	@echo   install    - Create venv and install agent-engine with dev dependencies
+	@echo   format     - Format code with ruff
+	@echo   lint       - Lint code with ruff
+	@echo   typecheck  - Type check with mypy
+	@echo   test       - Run pytest
+	@echo   coverage   - Run pytest with coverage
+	@echo   clean      - Remove venv and cache directories
+
+install:
+	$(PYTHON) -m venv $(VENV)
+	$(VENV)\Scripts\python.exe -m pip install --upgrade pip
+	$(VENV)\Scripts\python.exe -m pip install -e .[dev]
+
+format:
+	$(VENV)\Scripts\ruff.exe format src tests
+
+lint:
+	$(VENV)\Scripts\ruff.exe check src tests
+
+typecheck:
+	$(VENV)\Scripts\mypy.exe src
+
+test:
+	set PYTHONPATH=src && $(VENV)\Scripts\pytest.exe
+
+coverage:
+	set PYTHONPATH=src && $(VENV)\Scripts\pytest.exe --cov=agent_engine --cov-report=term-missing
+
+clean:
+	if exist $(VENV) rmdir /s /q $(VENV)
+	if exist .pytest_cache rmdir /s /q .pytest_cache
+	if exist .mypy_cache rmdir /s /q .mypy_cache
+	if exist .ruff_cache rmdir /s /q .ruff_cache
+	if exist .coverage del /q .coverage
+	if exist htmlcov rmdir /s /q htmlcov

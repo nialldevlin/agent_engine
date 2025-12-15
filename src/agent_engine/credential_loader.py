@@ -5,9 +5,9 @@ Phase 20: Secrets & Provider Credential Management
 Loads provider_credentials.yaml manifest and parses credential definitions.
 """
 
-import os
 import json
 import yaml
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from .exceptions import ManifestLoadError
@@ -28,8 +28,8 @@ def load_credentials_manifest(config_dir: str) -> Optional[Dict]:
     Raises:
         ManifestLoadError: If file exists but is invalid YAML
     """
-    path = os.path.join(config_dir, "provider_credentials.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "provider_credentials.yaml"
+    if not path.exists():
         return None
 
     try:

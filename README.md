@@ -23,6 +23,45 @@ Run the full test suite at any time with:
 make test
 ```
 
+### Windows Installation
+
+For Windows users, use the provided batch script or Windows Makefile:
+
+**Option 1: Using build.bat (Recommended for Windows)**
+
+```cmd
+build.bat install
+.venv\Scripts\activate
+```
+
+**Option 2: Using Makefile.windows (requires Make for Windows)**
+
+```cmd
+make -f Makefile.windows install
+.venv\Scripts\activate
+```
+
+**Option 3: Manual installation**
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -e .[dev]
+```
+
+Run tests on Windows:
+
+```cmd
+build.bat test
+```
+
+Or with Makefile:
+
+```cmd
+make -f Makefile.windows test
+```
+
 ## Quick Start
 
 ### 1. Create a Config Directory

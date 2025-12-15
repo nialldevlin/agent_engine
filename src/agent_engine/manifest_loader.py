@@ -1,13 +1,13 @@
-import os
 import yaml
+from pathlib import Path
 from typing import Dict, List, Optional
 from .exceptions import ManifestLoadError
 
 
 def load_workflow_manifest(config_dir: str) -> Dict:
     """Load workflow.yaml (required)."""
-    path = os.path.join(config_dir, "workflow.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "workflow.yaml"
+    if not path.exists():
         raise ManifestLoadError("workflow.yaml", "File not found")
     try:
         with open(path, 'r') as f:
@@ -23,8 +23,8 @@ def load_workflow_manifest(config_dir: str) -> Dict:
 
 def load_agents_manifest(config_dir: str) -> Dict:
     """Load agents.yaml (required)."""
-    path = os.path.join(config_dir, "agents.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "agents.yaml"
+    if not path.exists():
         raise ManifestLoadError("agents.yaml", "File not found")
     try:
         with open(path, 'r') as f:
@@ -40,8 +40,8 @@ def load_agents_manifest(config_dir: str) -> Dict:
 
 def load_tools_manifest(config_dir: str) -> Dict:
     """Load tools.yaml (required)."""
-    path = os.path.join(config_dir, "tools.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "tools.yaml"
+    if not path.exists():
         raise ManifestLoadError("tools.yaml", "File not found")
     try:
         with open(path, 'r') as f:
@@ -57,8 +57,8 @@ def load_tools_manifest(config_dir: str) -> Dict:
 
 def load_memory_manifest(config_dir: str) -> Optional[Dict]:
     """Load memory.yaml (optional)."""
-    path = os.path.join(config_dir, "memory.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "memory.yaml"
+    if not path.exists():
         return None
     try:
         with open(path, 'r') as f:
@@ -72,8 +72,8 @@ def load_memory_manifest(config_dir: str) -> Optional[Dict]:
 
 def load_plugins_manifest(config_dir: str) -> Optional[Dict]:
     """Load plugins.yaml (optional)."""
-    path = os.path.join(config_dir, "plugins.yaml")
-    if not os.path.exists(path):
+    path = Path(config_dir) / "plugins.yaml"
+    if not path.exists():
         return None
     try:
         with open(path, 'r') as f:
@@ -88,19 +88,19 @@ def load_plugins_manifest(config_dir: str) -> Optional[Dict]:
 def load_schemas(config_dir: str) -> Dict[str, Dict]:
     """Load all JSON schemas from schemas/ directory."""
     import json
-    schemas_dir = os.path.join(config_dir, "schemas")
+    schemas_dir = Path(config_dir) / "schemas"
     schemas = {}
 
-    if not os.path.exists(schemas_dir):
+    if not schemas_dir.exists():
         return schemas
 
-    if not os.path.isdir(schemas_dir):
+    if not schemas_dir.is_dir():
         return schemas
 
-    for filename in os.listdir(schemas_dir):
-        if filename.endswith('.json'):
-            schema_id = filename[:-5]  # Remove .json extension
-            path = os.path.join(schemas_dir, filename)
+    for filename in schemas_dir.iterdir():
+        if filename.suffix == '.json':
+            schema_id = filename.stem  # Get filename without extension
+            path = filename
             try:
                 with open(path, 'r') as f:
                     schemas[schema_id] = json.load(f)

@@ -8,7 +8,6 @@ from dataclasses import dataclass, asdict, field
 from typing import Dict, List, Optional, Any, Set
 from datetime import datetime
 import json
-import os
 from pathlib import Path
 
 from .profile import Profile
@@ -141,9 +140,8 @@ class Session:
 
         try:
             # Create parent directories
-            parent_dir = os.path.dirname(history_file)
-            if parent_dir:
-                os.makedirs(parent_dir, exist_ok=True)
+            parent_dir = Path(history_file).parent
+            parent_dir.mkdir(parents=True, exist_ok=True)
 
             # Append entries to JSONL file
             with open(history_file, "a") as f:
@@ -166,7 +164,7 @@ class Session:
         if not history_file:
             history_file = str(self._state_root / "sessions" / "history.jsonl")
 
-        if not os.path.exists(history_file):
+        if not Path(history_file).exists():
             return
 
         try:
