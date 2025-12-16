@@ -46,7 +46,7 @@ Because these phases affect core structure, they require Sonnet’s deeper reaso
 
 ### When invoking Sonnet:
 
-* Use your `phase_plan_prompt.txt` or `phase_plan_prompt_webgpt.txt` template.
+* Use your `docs/internal/phase_plan_prompt.txt` or `docs/internal/phase_plan_prompt_webgpt.txt` template.
 * Provide only the files mentioned in `<Context>`.
 * Require Sonnet to output a **step-by-step implementation brief** with:
 
@@ -509,7 +509,7 @@ ASCII art is optional, not required.
 
 * **ARCHITECTURE.md**: All 5 Mermaid diagrams with explanations
 * **README.md**: Complete feature list, quick start, phase status (0-23 complete)
-* **TUTORIAL.md**: Step-by-step walkthrough using mini-editor
+* **DEVELOPER_GUIDE.md**: Combined setup + first workflow walkthrough
 * **API_REFERENCE.md**: Complete public API documentation
 
 ### Mini-Editor Example App

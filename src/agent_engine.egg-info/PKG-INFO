@@ -6,6 +6,7 @@ Author: Agent Engine Team
 License: MIT
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: pydantic>=2.6
 Requires-Dist: pyyaml>=6.0
 Provides-Extra: dev
@@ -13,6 +14,7 @@ Requires-Dist: pytest>=7.4; extra == "dev"
 Requires-Dist: pytest-cov>=4.1; extra == "dev"
 Requires-Dist: ruff>=0.4; extra == "dev"
 Requires-Dist: mypy>=1.9; extra == "dev"
+Dynamic: license-file
 
 # Agent Engine
 
@@ -711,15 +713,14 @@ All 23 phases complete with comprehensive documentation, example apps, and test 
 
 **Getting Started:**
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete system architecture with Mermaid diagrams
-- **[TUTORIAL.md](docs/TUTORIAL.md)** - Step-by-step walkthrough with mini-editor example
+- **[DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** - Setup and first workflow walkthrough
 - **[Quick Start](#quick-start)** - 5-minute introduction (above)
 
 **Reference:**
 - **[API_REFERENCE.md](docs/API_REFERENCE.md)** - Complete public API documentation
 - **[CLI_FRAMEWORK.md](docs/CLI_FRAMEWORK.md)** - Interactive REPL usage guide
-- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
-- **[SECURITY.md](docs/SECURITY.md)** - Security best practices
-- **[PACKAGING.md](docs/PACKAGING.md)** - PyPI packaging guide
+ - **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
+ - **[SECURITY.md](docs/SECURITY.md)** - Security best practices
 
 **Examples:**
 - **[examples/minimal_config/](examples/minimal_config/)** - Minimal working example
@@ -731,9 +732,8 @@ All 23 phases complete with comprehensive documentation, example apps, and test 
 - **[PROJECT_INTEGRATION_SPEC.md](docs/canonical/PROJECT_INTEGRATION_SPEC.md)** - Integration specification (frozen)
 
 **Operational & Development:**
-- **[CHANGELOG.md](docs/CHANGELOG.md)** - Release notes and phase completion summaries
-- **[PLAN_BUILD_AGENT_ENGINE.md](docs/operational/PLAN_BUILD_AGENT_ENGINE.md)** - v1 roadmap and implementation status
-- **[MULTI_TASK_ISOLATION.md](docs/MULTI_TASK_ISOLATION.md)** - Phase 17 multi-task isolation guarantees
+ - **[CHANGELOG.md](docs/CHANGELOG.md)** - Release notes and phase completion summaries
+ - **[PLAN_BUILD_AGENT_ENGINE.md](docs/operational/PLAN_BUILD_AGENT_ENGINE.md)** - v1 roadmap and implementation status
 
 ## Development
 

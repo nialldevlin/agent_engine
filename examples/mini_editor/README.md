@@ -184,20 +184,11 @@ Run the mini-editor tests:
 pytest ../../tests/test_phase23_mini_editor.py
 ```
 
-## Advanced Usage
+## See Also
 
-### Using Different Context Profiles
-
-Modify `config/memory.yaml` to change retrieval policies:
-
-```yaml
-context_profiles:
-  - id: "semantic"
-    max_tokens: 8000
-    retrieval_policy: "semantic"  # Uses embeddings
-```
-
-### Custom Document Schemas
+- `docs/DEVELOPER_GUIDE.md` for end-to-end setup
+- `docs/API_REFERENCE.md` for Engine and CLI APIs
+- `docs/ARCHITECTURE.md` for node roles and routing
 
 Add schema validation in `config/schemas/document.json`:
 
@@ -224,7 +215,7 @@ agents:
 
 ## See Also
 
-- [Agent Engine Documentation](../../docs/ARCHITECTURE.md)
+- [Architecture](../../docs/ARCHITECTURE.md)
+- [Developer Guide](../../docs/DEVELOPER_GUIDE.md)
 - [CLI Framework Guide](../../docs/CLI_FRAMEWORK.md)
-- [Tutorial](../../docs/TUTORIAL.md)
 - [API Reference](../../docs/API_REFERENCE.md)

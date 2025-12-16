@@ -421,7 +421,6 @@ pip show agent-engine
 ## Documentation
 
 - `docs/README.md` - Project documentation
-- `docs/SETUP.md` - Detailed setup instructions
 - `docs/API.md` - API documentation
 - Main repo: [Agent Engine](https://github.com/example/agent-engine)
 
@@ -440,5 +439,4 @@ For issues and questions:
 
 - Agent Engine Overview: See main repository README
 - Deployment Guide: `docs/DEPLOYMENT.md` in main repo
-- Packaging Guide: `docs/PACKAGING.md` in main repo
 - Template Examples: `templates/` in main repo

@@ -305,10 +305,10 @@ class TestDocumentation:
         arch_file = Path(__file__).parent.parent / "docs" / "ARCHITECTURE.md"
         assert arch_file.exists(), "ARCHITECTURE.md not found"
 
-    def test_tutorial_md_exists(self):
-        """Test TUTORIAL.md exists."""
-        tutorial_file = Path(__file__).parent.parent / "docs" / "TUTORIAL.md"
-        assert tutorial_file.exists(), "TUTORIAL.md not found"
+    def test_developer_guide_exists(self):
+        """Test DEVELOPER_GUIDE.md exists."""
+        guide_file = Path(__file__).parent.parent / "docs" / "DEVELOPER_GUIDE.md"
+        assert guide_file.exists(), "DEVELOPER_GUIDE.md not found"
 
     def test_api_reference_md_exists(self):
         """Test API_REFERENCE.md exists."""

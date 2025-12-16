@@ -1,6 +1,6 @@
-# Phase 22: Deployment & Packaging Guide
+# Deployment Guide
 
-This document provides comprehensive guidance for deploying and managing Agent Engine in production environments. It covers repository layout, environment setup, dependency management, configuration, secret management, and operational monitoring.
+This document provides guidance for deploying and managing Agent Engine in production environments. It covers repository layout, environment setup, configuration, secret management, and operational monitoring.
 
 ## Table of Contents
 
@@ -891,6 +891,6 @@ load_dotenv(); print(os.getenv('ANTHROPIC_API_KEY')[:10])
 7. Document your deployment process
 
 For more information, see:
-- `docs/PACKAGING.md` - Python packaging and distribution
+- Packaging guidance is consolidated in `docs/DEVELOPER_GUIDE.md` when needed
 - `templates/deployment/` - Deployment templates
 - `templates/project_template/` - Example project structure

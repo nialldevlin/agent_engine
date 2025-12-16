@@ -87,6 +87,24 @@ print(f"Output: {result['output']}")
 
 ---
 
+### `Engine.run_multiple(inputs: list[dict]) -> list[dict]`
+
+Execute multiple tasks sequentially with full isolation guarantees.
+
+**Parameters:**
+- `inputs` (list[dict]): List of input payloads validated against the start node schema
+
+**Returns:**
+- list of result dicts (same shape as `Engine.run`), one per input, executed in order
+
+**Behavior:**
+- Tasks never run concurrently; each task gets unique `task_id` and isolated memory (`task/project/global` scopes)
+- Failures in one task do not block subsequent tasks
+
+**Isolation:** Tasks run sequentially with isolated task/project/global memory; failures in one task do not affect others.
+
+---
+
 ### `Engine.create_repl() -> REPL`
 
 Create an interactive REPL for multi-turn sessions.
@@ -200,6 +218,33 @@ task_store.add("key", {"data": "value"})
 ```
 
 ---
+
+## Inspector & Task Queries
+
+Inspector APIs provide read-only access to task state without mutating execution.
+
+### `Engine.create_inspector() -> Inspector`
+
+Returns an Inspector instance bound to the engine.
+
+### `Inspector.get_task(task_id: str) -> Task`
+### `Inspector.get_task_history(task_id: str) -> list`
+### `Inspector.get_task_artifacts(task_id: str) -> list`
+### `Inspector.get_task_events(task_id: str) -> list`
+### `Inspector.get_task_summary(task_id: str) -> dict`
+
+All inspector methods are read-only and preserve task state.
+
+---
+
+## Task Manager Helpers
+
+### `Engine.get_all_task_ids() -> list[str]`
+### `Engine.get_tasks_by_status(status: str) -> list[Task]`
+### `Engine.get_task_count() -> int`
+### `Engine.clear_completed_tasks() -> int`
+
+These helpers allow querying tracked tasks (pending/running/completed) without mutating in-flight executions.
 
 ## REPL & CLI
 
@@ -936,6 +981,6 @@ repl.run()
 ## See Also
 
 - [Architecture](ARCHITECTURE.md)
-- [Tutorial](TUTORIAL.md)
+- [Developer Guide](DEVELOPER_GUIDE.md)
 - [CLI Framework](CLI_FRAMEWORK.md)
 - [Specification](canonical/AGENT_ENGINE_SPEC.md)

@@ -8,6 +8,8 @@ LLM NOTICE: Do not modify this file unless explicitly instructed by the user.
 
 **Active Work**: Check `PLAN_BUILD_AGENT_ENGINE.md` for phases still in progress
 
+**Internal LLM Prompts**: Archived under `docs/internal/` to reduce noise in operational docs.
+
 ---
 
 ## Historical Phase Implementation Plans

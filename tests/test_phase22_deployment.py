@@ -346,16 +346,11 @@ def test_deployment_documentation_exists():
     docs_dir = Path(__file__).parent.parent / "docs"
 
     assert (docs_dir / "DEPLOYMENT.md").exists()
-    assert (docs_dir / "PACKAGING.md").exists()
 
     # Check content
     deployment_doc = (docs_dir / "DEPLOYMENT.md").read_text()
     assert "Deployment" in deployment_doc
     assert "Docker" in deployment_doc or "deployment" in deployment_doc.lower()
-
-    packaging_doc = (docs_dir / "PACKAGING.md").read_text()
-    assert "Packaging" in packaging_doc or "packaging" in packaging_doc.lower()
-
 
 # Test 16: Deployment metadata persists through workflow
 def test_deployment_metadata_persists(tmp_path, monkeypatch):

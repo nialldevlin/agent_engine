@@ -707,34 +707,34 @@ registry.unregister("custom")
 | 3 | Task Management & Lineage | ✅ Complete |
 | 4 | Node Execution & Tool Invocation | ✅ Complete |
 | 5 | Router v1.0 (Deterministic DAG Routing) | ✅ Complete |
-| 6 | Context Assembly & Memory | ✅ Complete |
-| 7 | Node Failure Handling & Lifecycle | ✅ Complete |
+| 6 | Memory & Context v1 | ✅ Complete |
+| 7 | Error Handling, Status Propagation & Exit | ✅ Complete |
 | 8 | Telemetry & Event Bus | ✅ Complete |
 | 9 | Plugin System v1 (Read-Only Observers) | ✅ Complete |
-| 10 | Artifact Storage & Retrieval | ✅ Complete |
-| 11 | Metadata & Provenance Tracking | ✅ Complete |
-| 12 | Evaluation Framework | ✅ Complete |
-| 13 | Performance Metrics & Profiling | ✅ Complete |
+| 10 | Artifact Storage Subsystem | ✅ Complete |
+| 11 | Engine Metadata & Versioning Layer | ✅ Complete |
+| 12 | Evaluation & Regression System | ✅ Complete |
+| 13 | Performance Profiling & Metrics Layer | ✅ Complete |
 | 14 | Security & Policy Layer | ✅ Complete |
-| 15 | Adapter Management & Discovery | ✅ Complete |
-| 16 | Inspector Mode & Debugging | ✅ Complete |
-| 17 | Multi-Task Isolation & Execution | ✅ Complete |
+| 15 | Provider / Adapter Management Layer | ✅ Complete |
+| 16 | Debugger / Inspector Mode | ✅ Complete |
+| 17 | Multi-Task Execution Model | ✅ Complete |
 | 18 | CLI Framework (Reusable REPL) | ✅ Complete |
-| 19 | (Future) Advanced Routing | ⏳ Planned |
-| 20 | (Future) Distributed Execution | ⏳ Planned |
-| 21 | (Future) ML Model Management | ⏳ Planned |
-| 22 | (Future) Enterprise Features | ⏳ Planned |
+| 19 | Persistent Memory & Artifact Storage | ✅ Complete |
+| 20 | Secrets & Provider Credential Management | ✅ Complete |
+| 21 | Scheduler (Multi-Task Execution Layer) | ✅ Complete |
+| 22 | Packaging & Deployment Templates | ✅ Complete |
 | 23 | Example App & Documentation | ✅ Complete |
 
-All 23 phases complete with comprehensive documentation, example apps, and test coverage.
+All 24 phases complete; see docs/CHANGELOG.md for release history and test counts.
 
 ## Documentation
 
 ### For Users & Developers
 
 **Getting Started:**
+- **[DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** - End-to-end setup, first workflow, credentials, and troubleshooting
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete system architecture with Mermaid diagrams
-- **[TUTORIAL.md](docs/TUTORIAL.md)** - Step-by-step walkthrough with mini-editor example
 - **[Quick Start](#quick-start)** - 5-minute introduction (above)
 
 **Reference:**
@@ -742,7 +742,6 @@ All 23 phases complete with comprehensive documentation, example apps, and test 
 - **[CLI_FRAMEWORK.md](docs/CLI_FRAMEWORK.md)** - Interactive REPL usage guide
 - **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[SECURITY.md](docs/SECURITY.md)** - Security best practices
-- **[PACKAGING.md](docs/PACKAGING.md)** - PyPI packaging guide
 
 **Examples:**
 - **[examples/minimal_config/](examples/minimal_config/)** - Minimal working example
@@ -756,7 +755,6 @@ All 23 phases complete with comprehensive documentation, example apps, and test 
 **Operational & Development:**
 - **[CHANGELOG.md](docs/CHANGELOG.md)** - Release notes and phase completion summaries
 - **[PLAN_BUILD_AGENT_ENGINE.md](docs/operational/PLAN_BUILD_AGENT_ENGINE.md)** - v1 roadmap and implementation status
-- **[MULTI_TASK_ISOLATION.md](docs/MULTI_TASK_ISOLATION.md)** - Phase 17 multi-task isolation guarantees
 
 ## Development
 

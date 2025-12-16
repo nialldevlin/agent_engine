@@ -2,6 +2,15 @@
 
 This document describes the complete architecture of Agent Engine, including the core data structures, execution model, routing semantics, and system design.
 
+## Canonical References
+
+The authoritative semantics for every subsystem live in the canonical documents:
+- `docs/canonical/AGENT_ENGINE_SPEC.md` – behavioral contract and execution semantics
+- `docs/canonical/AGENT_ENGINE_OVERVIEW.md` – architectural overview and motivations
+- `docs/canonical/PROJECT_INTEGRATION_SPEC.md` – required manifests and integration rules
+
+Use this architecture doc as an implementation map; consult the canonical files above for the source of truth.
+
 ## Table of Contents
 
 1. [Core Concepts](#core-concepts)

@@ -2,43 +2,9 @@
 
 This document covers security practices and credential management for Agent Engine v1.
 
-## Quick Setup (2 minutes)
-
-For immediate setup, follow these three steps:
-
-### 1. Create provider_credentials.yaml
-
-Create `config/provider_credentials.yaml`:
-
-```yaml
-provider_credentials:
-  - id: "anthropic"
-    provider: "anthropic"
-    auth:
-      type: "api_key"
-      source: "env"
-      env_var: "ANTHROPIC_API_KEY"
-```
-
-### 2. Set Environment Variable
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-### 3. Verify
-
-```bash
-python -c "from agent_engine import Engine; Engine.from_config_dir('config')"
-```
-
-If no error, you're ready to go!
-
----
-
-**For detailed security practices, continue reading below.**
-
----
+## Quick Pointer
+- For first-time setup and credentials, start with `docs/DEVELOPER_GUIDE.md`.
+- This document focuses on secure credential handling and deployment-grade practices (deployment details in `docs/DEPLOYMENT.md`).
 
 ## Phase 20: Secrets & Provider Credential Management
 
