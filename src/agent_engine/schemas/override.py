@@ -91,3 +91,126 @@ class OverrideSpec(SchemaBase):
     severity: OverrideSeverity = Field(default=OverrideSeverity.HINT, description="HINT or ENFORCE")
     payload: Dict[str, Any] = Field(default_factory=dict, description="Override-specific payload (kind-dependent)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata")
+
+
+def _now_iso() -> str:
+    """Return current UTC time in ISO format."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+class ParameterOverrideKind(str, Enum):
+    """Kind of parameter override."""
+
+    LLM_CONFIG = "llm_config"  # Temperature, max_tokens, model, etc.
+    TOOL_CONFIG = "tool_config"  # Tool enabled/disabled, timeout, permissions
+    EXECUTION_CONFIG = "execution"  # Node timeout, retry policy, etc.
+
+
+class ParameterOverride(SchemaBase):
+    """Override for LLM, tool, and execution parameters at runtime.
+
+    Scope format:
+    - "agent/{agent_id}" - applies to agent
+    - "tool/{tool_id}" - applies to tool
+    - "node/{node_id}" - applies to node
+    - "global" - applies globally
+    """
+
+    kind: ParameterOverrideKind = Field(..., description="Kind of parameter override")
+    scope: str = Field(..., description='Scope: "agent/{id}", "tool/{id}", "node/{id}", or "global"')
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict, description="Parameter overrides (e.g., {temperature: 0.3, max_tokens: 500})"
+    )
+    severity: OverrideSeverity = Field(default=OverrideSeverity.HINT, description="HINT (warn if invalid) or ENFORCE (fail)")
+    reason: Optional[str] = Field(default=None, description="Why this override exists")
+    created_at: str = Field(default_factory=_now_iso, description="ISO timestamp of creation")
+
+
+class ParameterOverrideStore:
+    """Runtime storage and retrieval of parameter overrides.
+
+    Supports three scopes with priority: TASK > PROJECT > GLOBAL
+    """
+
+    def __init__(self) -> None:
+        """Initialize empty override stores."""
+        self.global_overrides: Dict[str, ParameterOverride] = {}
+        self.project_overrides: Dict[str, Dict[str, ParameterOverride]] = {}  # project_id -> overrides
+        self.task_overrides: Dict[str, Dict[str, ParameterOverride]] = {}  # task_id -> overrides
+
+    def add_override(
+        self,
+        override: ParameterOverride,
+        scope: str = "global",
+        project_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> None:
+        """Add override to appropriate scope.
+
+        Args:
+            override: The parameter override to add.
+            scope: Storage scope ("global", "project", or "task").
+            project_id: Project ID if scope is "project" or "task".
+            task_id: Task ID if scope is "task".
+        """
+        key = f"{override.kind}:{override.scope}"
+
+        if scope == "global":
+            self.global_overrides[key] = override
+        elif scope == "project" and project_id:
+            if project_id not in self.project_overrides:
+                self.project_overrides[project_id] = {}
+            self.project_overrides[project_id][key] = override
+        elif scope == "task" and task_id:
+            if task_id not in self.task_overrides:
+                self.task_overrides[task_id] = {}
+            self.task_overrides[task_id][key] = override
+
+    def get_overrides(
+        self,
+        override_kind: ParameterOverrideKind,
+        target_scope: str,
+        task_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> list[ParameterOverride]:
+        """Get overrides for a target, respecting priority (TASK > PROJECT > GLOBAL).
+
+        Args:
+            override_kind: The kind of override to retrieve.
+            target_scope: The target scope to match (e.g., "agent/analyzer", "tool/write_file").
+            task_id: Task ID to check for task-scoped overrides.
+            project_id: Project ID to check for project-scoped overrides.
+
+        Returns:
+            List of matching ParameterOverride objects, in priority order.
+        """
+        key = f"{override_kind}:{target_scope}"
+        results: list[ParameterOverride] = []
+
+        # Check task-scoped overrides first (highest priority)
+        if task_id and task_id in self.task_overrides:
+            if key in self.task_overrides[task_id]:
+                results.append(self.task_overrides[task_id][key])
+                return results
+
+        # Check project-scoped overrides (medium priority)
+        if project_id and project_id in self.project_overrides:
+            if key in self.project_overrides[project_id]:
+                results.append(self.project_overrides[project_id][key])
+                return results
+
+        # Check global overrides (lowest priority)
+        if key in self.global_overrides:
+            results.append(self.global_overrides[key])
+
+        return results
+
+    def clear_task_overrides(self, task_id: str) -> None:
+        """Clear all overrides for a task (called when task completes).
+
+        Args:
+            task_id: Task ID whose overrides should be cleared.
+        """
+        if task_id in self.task_overrides:
+            del self.task_overrides[task_id]

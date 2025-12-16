@@ -8,16 +8,67 @@ from typing import Any, Dict, Optional, Tuple
 
 from agent_engine.json_engine import validate
 from agent_engine.schemas import EngineError, Node, Task, NodeRole
+from agent_engine.runtime.parameter_resolver import ParameterResolver
+from agent_engine.runtime.llm_client import LLMClient
 import re
 
 
 class AgentRuntime:
     """Lightweight AgentRuntime wiring prompt assembly to an LLM client."""
 
-    def __init__(self, llm_client=None, template_version: str = "v1", workspace_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        llm_client=None,
+        template_version: str = "v1",
+        workspace_root: Optional[Path] = None,
+        parameter_resolver: Optional[ParameterResolver] = None,
+    ) -> None:
         self.llm_client = llm_client
         self.template_version = template_version
         self.workspace_root = Path(workspace_root).resolve() if workspace_root else None
+        self.parameter_resolver = parameter_resolver
+        # Cache for per-agent LLM clients: key = f"{agent_id}:{model}"
+        self.agent_llm_clients: Dict[str, LLMClient] = {}
+
+    def _get_or_create_llm_client(
+        self,
+        agent_id: str,
+        llm_config: Dict[str, Any]
+    ) -> Optional[LLMClient]:
+        """Get cached LLM client or return default client.
+
+        Key: f"{agent_id}:{llm_config['model']}"
+        For now, returns the default self.llm_client since per-agent
+        client creation depends on external configuration.
+
+        Args:
+            agent_id: ID of the agent.
+            llm_config: Resolved LLM configuration dict.
+
+        Returns:
+            LLM client instance or None if not available.
+        """
+        if not self.llm_client:
+            return None
+
+        # Build cache key from agent_id and model
+        model = llm_config.get("model", "unknown")
+        cache_key = f"{agent_id}:{model}"
+
+        # For now, return the default client
+        # Future: instantiate per-agent clients based on llm_config
+        return self.llm_client
+
+    def clear_task_clients(self, task_id: str) -> None:
+        """Clear parameter overrides for a task.
+
+        Called when task completes to reset per-task parameter scope.
+
+        Args:
+            task_id: Task ID whose overrides should be cleared.
+        """
+        if self.parameter_resolver:
+            self.parameter_resolver.clear_task_overrides(task_id)
 
     def run_agent_stage(self, task: Task, node: Node, context_package) -> Tuple[Any | None, EngineError | None, Optional[Dict]]:
         """Execute agent stage with potential ToolPlan emission.
@@ -53,8 +104,38 @@ class AgentRuntime:
         # Deterministic fallback for Mini-Editor style flows (tools present, no LLM)
         fallback_output, fallback_tool_plan = self._maybe_build_editor_plan(task, node)
 
+        # Resolve LLM config from manifest + overrides if parameter_resolver available
+        llm_client = self.llm_client
+        if self.parameter_resolver and node.agent_id and self.llm_client:
+            try:
+                # Extract project_id and task_id from task
+                project_id = getattr(task, "project_id", None)
+                task_id = getattr(task, "task_id", None)
+
+                # Get agent's manifest config (empty dict as fallback)
+                manifest_config = getattr(node, "config", {})
+                manifest_llm_model = getattr(node, "llm", None)
+
+                # Resolve final LLM config respecting priority: task > project > global
+                llm_config = self.parameter_resolver.resolve_llm_config(
+                    agent_id=node.agent_id,
+                    manifest_config=manifest_config,
+                    task_id=task_id,
+                    project_id=project_id,
+                    manifest_llm_model=manifest_llm_model,
+                )
+
+                # Get or create LLM client for this config
+                llm_client = self._get_or_create_llm_client(node.agent_id, llm_config)
+            except Exception as e:
+                # Log error and fall back to default LLM client
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Error resolving LLM config for agent {node.agent_id}: {e}")
+                llm_client = self.llm_client
+
         # Call LLM (adapt prompt to generic payload)
-        if self.llm_client:
+        if llm_client:
             if isinstance(prompt, dict):
                 content = json.dumps(prompt)
             else:
@@ -64,7 +145,7 @@ class AgentRuntime:
                 "prompt": content,
             }
             try:
-                llm_output = self.llm_client.generate(request_payload)
+                llm_output = llm_client.generate(request_payload)
             except Exception as e:
                 # Graceful fallback: return prompt payload with error note
                 llm_output = {
@@ -91,7 +172,7 @@ class AgentRuntime:
         main_result = llm_output
 
         # Handle draft_document and edit_document nodes specially
-        if node.stage_id in ("draft_document", "edit_document") and self.llm_client and node.stage_id != "generate_summary":
+        if node.stage_id in ("draft_document", "edit_document") and llm_client and node.stage_id != "generate_summary":
             # Extract payload details
             payload = getattr(task, "current_output", None)
             if isinstance(payload, dict):
@@ -138,7 +219,7 @@ class AgentRuntime:
                         "prompt": natural_prompt,
                     }
                     try:
-                        generated_content = self.llm_client.generate(request_payload)
+                        generated_content = llm_client.generate(request_payload)
                         # Clean up the generated content
                         if isinstance(generated_content, str):
                             generated_content = generated_content.strip()

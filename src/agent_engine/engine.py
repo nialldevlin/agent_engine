@@ -54,6 +54,8 @@ from .telemetry import TelemetryBus
 from .plugin_registry import PluginRegistry
 from .plugin_loader import PluginLoader
 from .paths import resolve_state_root, ensure_directory
+from .schemas.override import ParameterOverride, ParameterOverrideKind, OverrideSeverity
+from .runtime.parameter_resolver import ParameterResolver
 from urllib import request as urlrequest
 
 
@@ -205,6 +207,10 @@ class Engine:
 
         # Load plugins from config directory (Phase 9)
         self._load_plugins(config_dir)
+
+        # Initialize parameter resolver for dynamic configuration (Phase 22)
+        from .schemas.override import ParameterOverrideStore
+        self.parameter_resolver = ParameterResolver(ParameterOverrideStore())
 
         # AgentRuntime expects llm_client and template_version
         self.agent_runtime = AgentRuntime(llm_client=llm_client, template_version="v1", workspace_root=self.workspace_root)
@@ -884,6 +890,341 @@ class Engine:
             "completed_count": self.scheduler.get_completed_count(),
             "tasks": self.scheduler.get_all_states()
         }
+
+    def set_agent_model(self, agent_id: str, model: str, scope: str = "global") -> None:
+        """Override LLM model for an agent.
+
+        Per Phase 22: Dynamic parameter configuration API.
+
+        Args:
+            agent_id: Agent identifier (must exist in agents.yaml)
+            model: Model identifier (e.g., "anthropic/claude-3-5-haiku", "ollama/llama2")
+            scope: Override scope ("global", "project", "task")
+
+        Raises:
+            ValueError: If agent_id not found in configuration or model format invalid
+        """
+        # Validate agent exists
+        agent_found = False
+        if isinstance(self.agents, dict):
+            agent_found = agent_id in self.agents
+        elif isinstance(self.agents, list):
+            agent_found = any(a.get("id") == agent_id or a.get("agent_id") == agent_id for a in self.agents)
+
+        if not agent_found:
+            raise ValueError(f"Agent '{agent_id}' not found in configuration")
+
+        # Validate model format
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError(f"Model must be a non-empty string, got {repr(model)}")
+
+        # Create override
+        override = ParameterOverride(
+            kind=ParameterOverrideKind.LLM_CONFIG,
+            scope=f"agent/{agent_id}",
+            parameters={"model": model},
+            severity=OverrideSeverity.ENFORCE,
+            reason=f"Runtime model override via set_agent_model"
+        )
+
+        # Add to resolver
+        self.parameter_resolver.add_override(override, scope=scope)
+
+    def set_agent_hyperparameters(
+        self,
+        agent_id: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        timeout: Optional[float] = None,
+        scope: str = "global"
+    ) -> None:
+        """Override LLM hyperparameters for an agent.
+
+        Per Phase 22: Dynamic parameter configuration API.
+
+        Args:
+            agent_id: Agent identifier (must exist in agents.yaml)
+            temperature: Temperature parameter (0.0-1.0, optional)
+            max_tokens: Maximum tokens for response (optional)
+            top_p: Top-p sampling parameter (optional)
+            timeout: Timeout in seconds (optional)
+            scope: Override scope ("global", "project", "task")
+
+        Raises:
+            ValueError: If agent_id not found or parameters invalid
+        """
+        # Validate agent exists
+        agent_found = False
+        if isinstance(self.agents, dict):
+            agent_found = agent_id in self.agents
+        elif isinstance(self.agents, list):
+            agent_found = any(a.get("id") == agent_id or a.get("agent_id") == agent_id for a in self.agents)
+
+        if not agent_found:
+            raise ValueError(f"Agent '{agent_id}' not found in configuration")
+
+        # Build parameters dict with only specified values
+        parameters = {}
+        if temperature is not None:
+            if not isinstance(temperature, (int, float)) or temperature < 0.0 or temperature > 1.0:
+                raise ValueError(f"temperature must be in range [0.0, 1.0], got {temperature}")
+            parameters["temperature"] = temperature
+
+        if max_tokens is not None:
+            if not isinstance(max_tokens, int) or max_tokens < 1:
+                raise ValueError(f"max_tokens must be integer >= 1, got {max_tokens}")
+            parameters["max_tokens"] = max_tokens
+
+        if top_p is not None:
+            if not isinstance(top_p, (int, float)) or top_p < 0.0 or top_p > 1.0:
+                raise ValueError(f"top_p must be in range [0.0, 1.0], got {top_p}")
+            parameters["top_p"] = top_p
+
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise ValueError(f"timeout must be numeric > 0, got {timeout}")
+            parameters["timeout"] = timeout
+
+        if not parameters:
+            # No parameters to override
+            return
+
+        # Create override
+        override = ParameterOverride(
+            kind=ParameterOverrideKind.LLM_CONFIG,
+            scope=f"agent/{agent_id}",
+            parameters=parameters,
+            severity=OverrideSeverity.ENFORCE,
+            reason=f"Runtime hyperparameter override via set_agent_hyperparameters"
+        )
+
+        # Add to resolver
+        self.parameter_resolver.add_override(override, scope=scope)
+
+    def enable_tool(self, tool_id: str, enabled: bool = True, scope: str = "global") -> None:
+        """Enable or disable a tool.
+
+        Per Phase 22: Dynamic parameter configuration API.
+
+        Args:
+            tool_id: Tool identifier (must exist in tools.yaml)
+            enabled: True to enable, False to disable
+            scope: Override scope ("global", "project", "task")
+
+        Raises:
+            ValueError: If tool_id not found in configuration
+        """
+        # Validate tool exists
+        tool_found = False
+        if isinstance(self.tools, dict):
+            tool_found = tool_id in self.tools
+        elif isinstance(self.tools, list):
+            tool_found = any(t.get("id") == tool_id or getattr(t, "tool_id", None) == tool_id for t in self.tools)
+
+        if not tool_found:
+            raise ValueError(f"Tool '{tool_id}' not found in configuration")
+
+        # Create override
+        override = ParameterOverride(
+            kind=ParameterOverrideKind.TOOL_CONFIG,
+            scope=f"tool/{tool_id}",
+            parameters={"enabled": enabled},
+            severity=OverrideSeverity.ENFORCE,
+            reason=f"Runtime tool enable/disable via enable_tool"
+        )
+
+        # Add to resolver
+        self.parameter_resolver.add_override(override, scope=scope)
+
+    def set_node_timeout(self, node_id: str, timeout_seconds: float, scope: str = "global") -> None:
+        """Override timeout for a specific node.
+
+        Per Phase 22: Dynamic parameter configuration API.
+
+        Args:
+            node_id: Node identifier (must exist in workflow.yaml)
+            timeout_seconds: Timeout in seconds (must be > 0)
+            scope: Override scope ("global", "project", "task")
+
+        Raises:
+            ValueError: If node_id not found or timeout invalid
+        """
+        # Validate node exists
+        node_found = False
+        if hasattr(self.workflow, 'nodes'):
+            node_found = node_id in self.workflow.nodes
+        elif hasattr(self, 'dag') and hasattr(self.dag, 'nodes'):
+            node_found = node_id in self.dag.nodes
+
+        if not node_found:
+            raise ValueError(f"Node '{node_id}' not found in workflow")
+
+        # Validate timeout
+        if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
+            raise ValueError(f"timeout_seconds must be numeric > 0, got {timeout_seconds}")
+
+        # Create override
+        override = ParameterOverride(
+            kind=ParameterOverrideKind.EXECUTION_CONFIG,
+            scope=f"node/{node_id}",
+            parameters={"timeout_seconds": timeout_seconds},
+            severity=OverrideSeverity.ENFORCE,
+            reason=f"Runtime node timeout override via set_node_timeout"
+        )
+
+        # Add to resolver
+        self.parameter_resolver.add_override(override, scope=scope)
+
+    def set_task_parameters(
+        self,
+        task_id: str,
+        agent_id: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        tools_enabled: Optional[List[str]] = None,
+        timeout_seconds: Optional[float] = None
+    ) -> None:
+        """Set parameters for a specific task (highest priority).
+
+        Per Phase 22: Dynamic parameter configuration API.
+
+        Called during task execution to override parameters for that specific run.
+        Task-scoped overrides take precedence over project and global overrides.
+
+        Args:
+            task_id: Task identifier to apply overrides to
+            agent_id: Agent ID to set LLM config for (optional)
+            temperature: Temperature parameter 0.0-1.0 (optional)
+            max_tokens: Maximum tokens for response (optional)
+            tools_enabled: List of tool IDs to enable (optional, other tools disabled)
+            timeout_seconds: Timeout in seconds (optional)
+
+        Raises:
+            ValueError: If task_id, agent_id invalid or parameters out of range
+        """
+        # Validate agent exists if specified
+        if agent_id is not None:
+            agent_found = False
+            if isinstance(self.agents, dict):
+                agent_found = agent_id in self.agents
+            elif isinstance(self.agents, list):
+                agent_found = any(a.get("id") == agent_id or a.get("agent_id") == agent_id for a in self.agents)
+
+            if not agent_found:
+                raise ValueError(f"Agent '{agent_id}' not found in configuration")
+
+        # Validate and build LLM parameters if specified
+        llm_parameters = {}
+        if temperature is not None:
+            if not isinstance(temperature, (int, float)) or temperature < 0.0 or temperature > 1.0:
+                raise ValueError(f"temperature must be in range [0.0, 1.0], got {temperature}")
+            llm_parameters["temperature"] = temperature
+
+        if max_tokens is not None:
+            if not isinstance(max_tokens, int) or max_tokens < 1:
+                raise ValueError(f"max_tokens must be integer >= 1, got {max_tokens}")
+            llm_parameters["max_tokens"] = max_tokens
+
+        # Add LLM override if parameters specified
+        if llm_parameters and agent_id:
+            override = ParameterOverride(
+                kind=ParameterOverrideKind.LLM_CONFIG,
+                scope=f"agent/{agent_id}",
+                parameters=llm_parameters,
+                severity=OverrideSeverity.ENFORCE,
+                reason=f"Task-scoped LLM override via set_task_parameters"
+            )
+            self.parameter_resolver.add_override(override, scope="task", task_id=task_id)
+
+        # Handle tool enablement if specified
+        if tools_enabled is not None:
+            if not isinstance(tools_enabled, list):
+                raise ValueError(f"tools_enabled must be a list of tool IDs, got {type(tools_enabled)}")
+
+            # Validate all tool IDs exist
+            for tool_id in tools_enabled:
+                tool_found = False
+                if isinstance(self.tools, dict):
+                    tool_found = tool_id in self.tools
+                elif isinstance(self.tools, list):
+                    tool_found = any(t.get("id") == tool_id or getattr(t, "tool_id", None) == tool_id for t in self.tools)
+
+                if not tool_found:
+                    raise ValueError(f"Tool '{tool_id}' in tools_enabled not found in configuration")
+
+            # Create overrides to enable specified tools
+            for tool_id in tools_enabled:
+                override = ParameterOverride(
+                    kind=ParameterOverrideKind.TOOL_CONFIG,
+                    scope=f"tool/{tool_id}",
+                    parameters={"enabled": True},
+                    severity=OverrideSeverity.ENFORCE,
+                    reason=f"Task-scoped tool enable via set_task_parameters"
+                )
+                self.parameter_resolver.add_override(override, scope="task", task_id=task_id)
+
+        # Handle execution timeout if specified
+        if timeout_seconds is not None:
+            if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
+                raise ValueError(f"timeout_seconds must be numeric > 0, got {timeout_seconds}")
+
+            override = ParameterOverride(
+                kind=ParameterOverrideKind.EXECUTION_CONFIG,
+                scope="global",
+                parameters={"timeout_seconds": timeout_seconds},
+                severity=OverrideSeverity.ENFORCE,
+                reason=f"Task-scoped execution timeout via set_task_parameters"
+            )
+            self.parameter_resolver.add_override(override, scope="task", task_id=task_id)
+
+    def clear_overrides(self, scope: str = "global", agent_id: Optional[str] = None, tool_id: Optional[str] = None) -> None:
+        """Clear parameter overrides.
+
+        Per Phase 22: Dynamic parameter configuration API.
+
+        Useful for testing or resetting to manifest defaults.
+
+        Args:
+            scope: Scope to clear ("global", "project", "task")
+            agent_id: If specified, only clear overrides for this agent
+            tool_id: If specified, only clear overrides for this tool
+
+        Raises:
+            ValueError: If scope is invalid
+        """
+        if scope not in ("global", "project", "task"):
+            raise ValueError(f"Invalid scope '{scope}', must be 'global', 'project', or 'task'")
+
+        # Clear from override store
+        if scope == "global":
+            if agent_id:
+                # Clear specific agent overrides
+                keys_to_remove = [k for k in self.parameter_resolver.override_store.global_overrides.keys()
+                                  if k.startswith(f"llm_config:agent/{agent_id}")]
+                for key in keys_to_remove:
+                    del self.parameter_resolver.override_store.global_overrides[key]
+            elif tool_id:
+                # Clear specific tool overrides
+                keys_to_remove = [k for k in self.parameter_resolver.override_store.global_overrides.keys()
+                                  if k.startswith(f"tool_config:tool/{tool_id}")]
+                for key in keys_to_remove:
+                    del self.parameter_resolver.override_store.global_overrides[key]
+            else:
+                # Clear all global overrides
+                self.parameter_resolver.override_store.global_overrides.clear()
+        elif scope == "project":
+            if agent_id or tool_id:
+                # Partial clear not fully implemented for project scope in v1
+                return
+            else:
+                self.parameter_resolver.override_store.project_overrides.clear()
+        elif scope == "task":
+            if agent_id or tool_id:
+                # Partial clear not fully implemented for task scope in v1
+                return
+            else:
+                self.parameter_resolver.override_store.task_overrides.clear()
 
     def create_repl(self, config_dir: Optional[str] = None, profile_id: Optional[str] = None) -> 'REPL':
         """Create a REPL for interactive workflow execution.

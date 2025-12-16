@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import signal
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+from agent_engine.runtime.parameter_resolver import ParameterResolver
 from agent_engine.schemas import (
     EngineError,
     EngineErrorCode,
@@ -20,10 +23,39 @@ from agent_engine.schemas import (
     ArtifactType,
 )
 
+# Default node timeout in seconds
+DEFAULT_NODE_TIMEOUT = 300  # 5 minutes
+
 
 def _now_iso() -> str:
     """Generate ISO-8601 timestamp."""
     return datetime.now(ZoneInfo("UTC")).isoformat()
+
+
+@contextmanager
+def timeout_context(timeout_seconds: float):
+    """Context manager for enforcing execution timeout.
+
+    Args:
+        timeout_seconds: Maximum execution time in seconds.
+
+    Raises:
+        TimeoutError: If execution exceeds timeout_seconds.
+    """
+    def timeout_handler(signum, frame):
+        raise TimeoutError(f"Execution timed out after {timeout_seconds} seconds")
+
+    # Set the signal handler and alarm
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(int(timeout_seconds))
+
+    try:
+        yield
+    finally:
+        # Disable the alarm
+        signal.alarm(0)
+        # Restore the old signal handler
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 class NodeExecutor:
@@ -47,6 +79,7 @@ class NodeExecutor:
         context_assembler,
         json_engine,
         deterministic_registry,
+        parameter_resolver: Optional[ParameterResolver] = None,
         telemetry=None,
         artifact_store=None,
         metadata=None
@@ -56,6 +89,7 @@ class NodeExecutor:
         self.context_assembler = context_assembler
         self.json_engine = json_engine
         self.deterministic_registry = deterministic_registry
+        self.parameter_resolver = parameter_resolver
         self.telemetry = telemetry
         self.artifact_store = artifact_store
         self.metadata = metadata
@@ -195,12 +229,46 @@ class NodeExecutor:
             # No context required for this node
             context_package = None
 
-        # Step 3: Execute node (agent or deterministic)
+        # Step 3: Resolve execution config (timeouts, retry policy)
+        timeout_seconds = DEFAULT_NODE_TIMEOUT
+        if self.parameter_resolver:
+            try:
+                exec_config = self.parameter_resolver.resolve_execution_config(
+                    node_id=node.stage_id,
+                    task_id=task.task_id,
+                    project_id=task.project_id
+                )
+                timeout_seconds = exec_config.get("timeout_seconds", DEFAULT_NODE_TIMEOUT)
+            except Exception as e:
+                # Log resolution failure but continue with default timeout
+                if self.telemetry:
+                    self.telemetry.node_started(
+                        task_id=task.task_id,
+                        node_id=node.stage_id,
+                        message=f"Failed to resolve execution config: {e}"
+                    )
+                timeout_seconds = DEFAULT_NODE_TIMEOUT
+
+        # Step 4: Execute node (agent or deterministic) with timeout
         tool_calls = []
-        if node.kind == NodeKind.AGENT:
-            output, error, tool_plan, tool_calls = self._execute_agent_node(task, node, context_package)
-        else:  # DETERMINISTIC
-            output, error = self._execute_deterministic_node(task, node, context_package)
+        try:
+            with timeout_context(timeout_seconds):
+                if node.kind == NodeKind.AGENT:
+                    output, error, tool_plan, tool_calls = self._execute_agent_node(task, node, context_package)
+                else:  # DETERMINISTIC
+                    output, error = self._execute_deterministic_node(task, node, context_package)
+                    tool_plan = None
+        except TimeoutError as e:
+            # Handle timeout as execution failure
+            error = EngineError(
+                error_id="node_execution_timeout",
+                code=EngineErrorCode.TIMEOUT,
+                message=f"Node {node.stage_id} timed out after {timeout_seconds}s",
+                source=EngineErrorSource.RUNTIME,
+                severity=Severity.ERROR,
+                stage_id=node.stage_id
+            )
+            output = None
             tool_plan = None
 
         # If execution failed, return error record
@@ -224,7 +292,7 @@ class NodeExecutor:
             )
             return record, None
 
-        # Step 4: Validate output (if schema present)
+        # Step 5: Validate output (if schema present)
         if node.outputs_schema_id:
             validated_output, validation_error = self._validate_output(node, output)
             if validation_error:
@@ -249,7 +317,7 @@ class NodeExecutor:
                 return record, None
             output = validated_output
 
-        # Step 5: Create complete StageExecutionRecord
+        # Step 6: Create complete StageExecutionRecord
         record = StageExecutionRecord(
             node_id=node.stage_id,
             node_role=node.role,

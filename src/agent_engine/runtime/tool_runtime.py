@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import signal
+import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from agent_engine.json_engine import validate
+from agent_engine.runtime.parameter_resolver import ParameterResolver
 from agent_engine.schemas import EngineError, EngineErrorCode, EngineErrorSource, Node, Severity, Task, ToolCallRecord, ToolDefinition, ToolKind, ArtifactType, ToolCapability
 from agent_engine.security import check_tool_call
 
@@ -23,6 +26,7 @@ class ToolRuntime:
         workspace_root=None,
         allow_network: bool = False,
         allow_workspace_mutation: bool = True,
+        parameter_resolver: Optional[ParameterResolver] = None,
     ) -> None:
         self.tools = tools
         self.tool_handlers = tool_handlers or {}
@@ -31,6 +35,7 @@ class ToolRuntime:
         self.artifact_store = artifact_store
         self.policy_evaluator = policy_evaluator
         self.workspace_root = workspace_root
+        self.parameter_resolver = parameter_resolver
         # Security gates can be overridden at runtime; defaults allow workspace mutation for app tools
         self.allow_network = allow_network
         self.allow_workspace_mutation = allow_workspace_mutation
@@ -142,6 +147,21 @@ class ToolRuntime:
                 )
                 return tool_calls, error
 
+            # Resolve tool config if parameter resolver is available
+            tool_config = {}
+            if self.parameter_resolver:
+                manifest_config = getattr(tool_def, 'config', {}) or {}
+                tool_config = self.parameter_resolver.resolve_tool_config(
+                    tool_id=tool_id,
+                    manifest_config=manifest_config,
+                    task_id=task.task_id,
+                    project_id=getattr(task, 'project_id', None)
+                )
+
+            # Check if tool is enabled (enabled=false means skip)
+            if not tool_config.get("enabled", True):
+                continue  # Skip disabled tool
+
             # Check permissions
             decision = check_tool_call(
                 tool_def,
@@ -186,12 +206,17 @@ class ToolRuntime:
             output = None
             tool_error = None
 
+            # Get timeout override or use default
+            timeout = tool_config.get("timeout", getattr(tool_def, 'timeout', None))
+
             try:
                 handler = self.tool_handlers.get(tool_id)
                 if tool_def.kind == ToolKind.DETERMINISTIC and handler:
-                    output = handler(inputs)
+                    output = self._execute_with_timeout(handler, inputs, timeout, tool_id)
                 elif tool_def.kind == ToolKind.LLM_TOOL and self.llm_client:
-                    output = self.llm_client.generate(inputs)
+                    output = self._execute_with_timeout(
+                        self.llm_client.generate, inputs, timeout, tool_id
+                    )
                 else:
                     # Echo fallback
                     output = {"tool": tool_id, "echo": inputs}
@@ -205,6 +230,14 @@ class ToolRuntime:
                     else:
                         output = validated
 
+            except TimeoutError as e:
+                tool_error = EngineError(
+                    error_id="tool_execution_timeout",
+                    code=EngineErrorCode.TOOL,
+                    message=f"Tool execution timeout: {e}",
+                    source=EngineErrorSource.TOOL_RUNTIME,
+                    severity=Severity.ERROR
+                )
             except Exception as e:
                 tool_error = EngineError(
                     error_id="tool_execution_failed",
@@ -269,6 +302,55 @@ class ToolRuntime:
                 return tool_calls, tool_error
 
         return tool_calls, None
+
+    def _execute_with_timeout(
+        self,
+        func: Callable[[Dict[str, Any]], Any],
+        inputs: Dict[str, Any],
+        timeout: Optional[float],
+        tool_id: str
+    ) -> Any:
+        """Execute a tool handler with optional timeout.
+
+        Args:
+            func: The callable to execute (handler or llm_client.generate).
+            inputs: The input parameters for the function.
+            timeout: Optional timeout in seconds. If None, executes without timeout.
+            tool_id: Tool ID for error messages.
+
+        Returns:
+            The result of func(inputs).
+
+        Raises:
+            TimeoutError: If execution exceeds the timeout.
+            Any exception raised by func.
+        """
+        if timeout is None:
+            # No timeout, execute directly
+            return func(inputs)
+
+        # Use threading to implement timeout
+        result = [None]
+        exception = [None]
+
+        def worker():
+            try:
+                result[0] = func(inputs)
+            except Exception as e:
+                exception[0] = e
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if thread.is_alive():
+            # Thread is still running after timeout
+            raise TimeoutError(f"Tool '{tool_id}' execution exceeded timeout of {timeout} seconds")
+
+        if exception[0]:
+            raise exception[0]
+
+        return result[0]
 
     def _now_iso(self) -> str:
         """Generate ISO-8601 timestamp."""
