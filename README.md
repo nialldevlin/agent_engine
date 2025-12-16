@@ -742,6 +742,7 @@ All 24 phases complete; see docs/CHANGELOG.md for release history and test count
 - **[CLI_FRAMEWORK.md](docs/CLI_FRAMEWORK.md)** - Interactive REPL usage guide
 - **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
 - **[SECURITY.md](docs/SECURITY.md)** - Security best practices
+- **[DYNAMIC_PARAMETERS.md](docs/DYNAMIC_PARAMETERS.md)** - Runtime overrides for models, tools, and timeouts
 
 **Examples:**
 - **[examples/minimal_config/](examples/minimal_config/)** - Minimal working example

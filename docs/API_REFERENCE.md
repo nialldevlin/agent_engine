@@ -466,6 +466,12 @@ A Task represents one execution of a workflow.
 
 ---
 
+### Runtime Overrides
+
+For runtime control of models, hyperparameters, tool availability, node timeouts, and per-task settings, use the dynamic-parameter APIs described in `docs/DYNAMIC_PARAMETERS.md` (`set_agent_model`, `set_agent_hyperparameters`, `enable_tool`, `set_node_timeout`, `set_task_parameters`, `clear_overrides`). These overrides respect scope precedence (task > project > global > manifest).
+
+---
+
 ### Node Roles
 
 Seven semantic node types determine routing behavior:

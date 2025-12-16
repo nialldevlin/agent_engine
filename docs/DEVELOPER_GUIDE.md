@@ -112,4 +112,5 @@ Uses `cli_profiles.yaml` if present. See `docs/CLI_FRAMEWORK.md` for commands an
 ## 9. Production Readiness
 - Deployment patterns: `docs/DEPLOYMENT.md`
 - Security hardening: `docs/SECURITY.md`
+- Runtime overrides (models/tools/timeouts): `docs/DYNAMIC_PARAMETERS.md`
 - Canonical semantics and invariants: `docs/canonical/AGENT_ENGINE_SPEC.md`
