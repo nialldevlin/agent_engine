@@ -106,6 +106,7 @@ class AgentRuntime:
 
         # Resolve LLM config from manifest + overrides if parameter_resolver available
         llm_client = self.llm_client
+        llm_config: Dict[str, Any] = {}
         if self.parameter_resolver and node.agent_id and self.llm_client:
             try:
                 # Extract project_id and task_id from task
@@ -144,6 +145,9 @@ class AgentRuntime:
                 "messages": [{"role": "user", "content": content}],
                 "prompt": content,
             }
+            # Pass through resolved LLM config keys (model, temperature, thresholds, etc.)
+            if llm_config:
+                request_payload.update({k: v for k, v in llm_config.items() if v is not None})
             try:
                 llm_output = llm_client.generate(request_payload)
             except Exception as e:

@@ -1,3 +1,4 @@
+import agent_engine.runtime.llm_client as llm_module
 from agent_engine.runtime.llm_client import AnthropicLLMClient, MockLLMClient, OllamaLLMClient
 
 
@@ -44,3 +45,36 @@ def test_mock_llm_client():
     client = MockLLMClient({"a": 1})
     assert client.generate({}) == {"a": 1}
     assert next(client.stream_generate({})) == {"a": 1}
+
+
+def test_ollama_auto_select_respects_min_max():
+    # Simulate 64GB memory environment
+    original_get_mem = llm_module._get_system_memory_gb
+    llm_module._get_system_memory_gb = lambda: 64
+
+    captured = {}
+
+    def transport(url, headers, payload):
+        captured["payload"] = payload
+        return DummyResponse({"response": "ok"})
+
+    try:
+        client = OllamaLLMClient(
+            model="llama3",
+            base_url="http://ollama",
+            transport=transport,
+            auto_pull=False,
+            auto_select_llama_size=True,
+            llama_size_thresholds_gb={"70b": 96, "34b": 48, "13b": 20, "8b": 8},
+            min_llama_size="8b",
+            max_llama_size="34b",
+        )
+        client.generate({"prompt": "hi"})
+        assert captured["payload"]["model"] == "llama3:34b"
+
+        # Now force a smaller cap
+        client.max_llama_size = "13b"
+        client.generate({"prompt": "hi again"})
+        assert captured["payload"]["model"] == "llama3:13b"
+    finally:
+        llm_module._get_system_memory_gb = original_get_mem

@@ -81,6 +81,21 @@ agents:
       maintain_conversation_history: true
       context_window_size: 2000
 
+  # Local Ollama agent with hardware-aware size selection
+  - id: "local_llama"
+    kind: "agent"
+    llm: "ollama/llama3"
+    description: "Runs locally via Ollama; auto-selects a size that fits memory"
+    config:
+      auto_select_llama_size: true
+      min_llama_size: "8b"   # never go smaller than this size tag
+      max_llama_size: "34b"  # cap selection even if more RAM is available
+      llama_size_thresholds_gb:
+        70b: 96
+        34b: 48
+        13b: 20
+        8b: 8
+
 # Default agent used when not specified
 default_agent: "default_agent"
 

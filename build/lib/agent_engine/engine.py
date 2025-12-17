@@ -375,8 +375,7 @@ class Engine:
 
         # Optional: lightweight Anthropics HTTP client if explicitly enabled
         llm_client = None
-        real_llm_env = os.getenv("AGENT_ENGINE_REAL_LLM_CALLS") or os.getenv("AGENT_ENGINE_USE_ANTHROPIC")
-        if real_llm_env and os.getenv("ANTHROPIC_API_KEY"):
+        if (os.getenv("AGENT_ENGINE_REAL_LLM_CALLS") or os.getenv("AGENT_ENGINE_USE_ANTHROPIC")) and os.getenv("ANTHROPIC_API_KEY"):
             default_model = None
             try:
                 config_model = (agents_data.get("agents") or [{}])[0].get("llm")

@@ -226,6 +226,28 @@ agents:
     config: {}
 ```
 
+## LLM Backends & Local Llama Sizing
+
+- Supported backends: Anthropic, OpenAI (chat completions), and Ollama. Configure with `llm: "<provider>/<model>"` (e.g., `anthropic/claude-3-5-sonnet`, `openai/gpt-4o`, `ollama/llama3`).
+- Ollama auto-pulls models when missing. With `auto_select_llama_size: true`, a base `llama*` model picks the largest size tag that fits detected system memory.
+- Boundaries: `min_llama_size` / `max_llama_size` constrain selection (e.g., `"8b"` floor, `"34b"` cap) while still respecting hardware. Tune `llama_size_thresholds_gb` to map size tags to RAM requirements.
+- Example:
+```yaml
+agents:
+  - id: "local_llama"
+    kind: "agent"
+    llm: "ollama/llama3"
+    config:
+      auto_select_llama_size: true
+      min_llama_size: "8b"
+      max_llama_size: "34b"
+      llama_size_thresholds_gb:
+        70b: 96
+        34b: 48
+        13b: 20
+        8b: 8
+```
+
 ### tools.yaml
 
 Defines deterministic tool configurations.

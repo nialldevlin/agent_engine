@@ -2,7 +2,13 @@
 
 from agent_engine.runtime.agent_runtime import AgentRuntime
 from agent_engine.runtime.context import ContextAssembler
-from agent_engine.runtime.llm_client import AnthropicLLMClient, LLMClient, MockLLMClient, OllamaLLMClient
+from agent_engine.runtime.llm_client import (
+    AnthropicLLMClient,
+    LLMClient,
+    MockLLMClient,
+    OllamaLLMClient,
+    OpenAILLMClient,
+)
 from agent_engine.runtime.dag_executor import DAGExecutor
 from agent_engine.runtime.router import Router
 from agent_engine.runtime.task_manager import TaskManager
@@ -32,6 +38,7 @@ __all__ = [
     "ContextAssembler",
     "AnthropicLLMClient",
     "OllamaLLMClient",
+    "OpenAILLMClient",
     "MockLLMClient",
     "LLMClient",
     "DAGExecutor",
