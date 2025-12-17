@@ -162,6 +162,7 @@ class OllamaLLMClient:
         llama_size_thresholds_gb: Dict[str, int] | None = None,
         min_llama_size: str | None = None,
         max_llama_size: str | None = None,
+        auto_start: bool = True,
     ) -> None:
         self.model = model or "llama3"
         normalized_base = base_url.rstrip("/")
@@ -181,11 +182,13 @@ class OllamaLLMClient:
         self.max_llama_size = max_llama_size
         self._model_cache: set[str] = set()
         self.transport = transport or self._requests_transport
+        self.auto_start = auto_start
 
     def generate(self, request: Dict[str, Any]) -> Any:
         prompt = request.get("prompt") if isinstance(request, dict) else str(request)
         model_name = self._resolve_model_name(request)
         payload = {"model": model_name, "prompt": prompt}
+        self._ensure_server_ready()
         self._ensure_model_available(model_name)
         response = self.transport(self.generate_url, {}, payload)
         return _parse_response(response, content_key="response")
@@ -256,6 +259,7 @@ class OllamaLLMClient:
         """Ensure the Ollama model is available locally, pulling if needed."""
         if not self.auto_pull or model in self._model_cache:
             return
+        self._ensure_server_ready()
         needs_pull = True
         try:
             import requests
@@ -284,6 +288,33 @@ class OllamaLLMClient:
                 self._model_cache.add(model)
             except Exception as exc:
                 logger.warning("Failed to pull Ollama model %s: %s", model, exc)
+
+    def _ensure_server_ready(self) -> None:
+        """Best-effort to verify Ollama is reachable and optionally auto-start."""
+        try:
+            import requests
+        except ImportError:
+            return
+
+        try:
+            resp = requests.get(self.tags_url, timeout=self.timeout)
+            resp.raise_for_status()
+            return
+        except Exception:
+            pass
+
+        if not self.auto_start:
+            return
+
+        try:
+            import subprocess
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as exc:
+            logger.warning("Could not auto-start Ollama: %s", exc)
 
 
 def _get_system_memory_gb() -> int:
