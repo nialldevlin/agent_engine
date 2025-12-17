@@ -226,6 +226,33 @@ agents:
     config: {}
 ```
 
+## RAG Context Example
+
+Add a context profile with semantic retrieval and reference it from a node:
+
+```yaml
+# memory.yaml (context profile)
+context_profiles:
+  - id: "rag_profile"
+    max_tokens: 4000
+    retrieval_policy: "semantic"
+    metadata:
+      rag_enabled: true
+      rag_top_k: 6
+    sources:
+      - store: "task"
+      - store: "project"
+      - store: "global"
+
+# workflow.yaml (node)
+nodes:
+  - id: "analyze"
+    kind: "agent"
+    role: "linear"
+    context: "rag_profile"   # enables RAG for this node
+    llm: "anthropic/claude-3-5-sonnet"
+```
+
 ## LLM Backends & Local Llama Sizing
 
 - Supported backends: Anthropic, OpenAI (chat completions), and Ollama. Configure with `llm: "<provider>/<model>"` (e.g., `anthropic/claude-3-5-sonnet`, `openai/gpt-4o`, `ollama/llama3`).

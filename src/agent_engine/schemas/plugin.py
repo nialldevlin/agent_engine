@@ -35,14 +35,12 @@ class PluginConfig:
 
 
 class PluginBase(ABC):
-    """Base class for all plugins (read-only observers).
+    """Base class for all plugins (read-only observers with optional extensions).
 
     Plugins observe engine events and perform logging, metrics, or other
-    read-only operations. Plugins MUST NOT:
-    - Mutate event objects
-    - Access internal engine state
-    - Modify DAG or task state
-    - Affect execution flow
+    read-only operations. Plugins MAY optionally register extensions
+    (e.g., LLM providers) via register_extensions; core execution flow
+    remains controlled by the engine.
 
     Plugin exceptions are caught and logged; they never affect engine execution.
     """
@@ -94,3 +92,14 @@ class PluginBase(ABC):
         Default implementation does nothing.
         """
         pass
+
+    def register_extensions(self, adapters) -> None:
+        """Optional hook to register runtime extensions (e.g., LLM providers).
+
+        Args:
+            adapters: AdapterRegistry instance
+
+        Default implementation does nothing.
+        """
+        # Plugins can override to register LLM provider factories or tool adapters.
+        return None

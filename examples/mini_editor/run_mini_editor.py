@@ -56,7 +56,7 @@ def initialize_engine(config_dir: str) -> Engine:
         print(f"✓ Engine initialized from {config_dir}")
 
         if engine.agent_runtime.llm_client is None:
-            print("  Using mock agents (set ANTHROPIC_API_KEY and AGENT_ENGINE_REAL_LLM_CALLS=1 for real LLM calls)")
+            print("  Using mock agents (set ANTHROPIC_API_KEY and unset AGENT_ENGINE_USE_MOCK_LLM to enable real LLM calls)")
 
         # Register custom normalize_request handler
         engine.deterministic_registry.register("normalize_request", normalize_request_handler)

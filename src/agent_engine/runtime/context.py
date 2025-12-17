@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+import os
+import time
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from agent_engine.schemas import (
     ContextItem,
@@ -19,6 +22,8 @@ from agent_engine.runtime.memory import (
     GlobalMemoryStore,
     InMemoryBackend,
 )
+from agent_engine.retrieval import Retriever, OllamaEmbeddingProvider, SimpleVectorStore
+from agent_engine.retrieval.retriever import embed_memory_items
 
 
 @dataclass
@@ -42,6 +47,24 @@ class ContextAssembler:
 
     memory_config: Optional[MemoryConfig] = None
     context_profiles: Dict[str, ContextProfile] = field(default_factory=dict)
+    workspace_root: Optional[str] = None
+    retriever: Optional[Retriever] = None
+    rag_index_path: Optional[str] = None
+    head_tail_conversation_count: int = 3
+    _last_retrieval_metadata: Dict[str, Any] = field(default_factory=dict, init=False)
+
+    def __post_init__(self):
+        if self.workspace_root and not self.retriever:
+            index_path = self.rag_index_path or os.path.join(
+                self.workspace_root, ".agent_engine", "rag_index.json"
+            )
+            embedder = OllamaEmbeddingProvider()
+            store = SimpleVectorStore(index_path)
+            self.retriever = Retriever(
+                workspace_root=self.workspace_root,
+                embedder=embedder,
+                store=store,
+            )
 
     def resolve_context_profile(
         self, context_spec: Optional[str], profiles: Optional[Dict[str, ContextProfile]] = None
@@ -107,8 +130,8 @@ class ContextAssembler:
                 f"Context profile '{profile.id}': max_tokens must be > 0, got {profile.max_tokens}"
             )
 
-        # Validate retrieval_policy (v1 only supports recency)
-        valid_policies = ["recency"]  # v1 only, semantic/hybrid in future
+        # Validate retrieval_policy
+        valid_policies = ["recency", "semantic", "hybrid"]
         if profile.retrieval_policy not in valid_policies:
             raise ValueError(
                 f"Context profile '{profile.id}': retrieval_policy '{profile.retrieval_policy}' "
@@ -142,6 +165,7 @@ class ContextAssembler:
         Raises:
             ValueError: If memory stores not accessible
         """
+        self._last_retrieval_metadata = {}
         # Get or create memory stores for this task/project
         task_store = self.task_stores.get(task.task_id)
         if not task_store:
@@ -158,6 +182,7 @@ class ContextAssembler:
 
         # Collect items from specified sources per profile
         all_items: List[ContextItem] = []
+        memory_dicts: List[Dict[str, Any]] = []
 
         for source in profile.sources:
             if source.store == "task":
@@ -174,19 +199,32 @@ class ContextAssembler:
                 items = self._filter_items_by_tags(items, source.tags)
 
             all_items.extend(items)
+            memory_dicts.extend([self._context_item_to_dict(i) for i in items])
+
+        rag_items: List[ContextItem] = []
+        rag_metadata: Dict[str, Any] = {}
+        if self._should_use_rag(profile) and self.retriever:
+            rag_items, rag_metadata = self._retrieve_semantic_chunks(
+                task, profile, memory_dicts
+            )
+            all_items.extend(rag_items)
 
         # Sort by recency (timestamp, newest first)
-        all_items.sort(
-            key=lambda i: i.timestamp or "", reverse=True
+        all_items.sort(key=lambda i: i.timestamp or "", reverse=True)
+        protected = self._protected_items(all_items)
+        # Select items within token budget with head/tail protection
+        selected = self._select_within_token_budget(
+            all_items, profile.max_tokens, protected_items=protected
         )
-
-        # Select items within token budget
-        selected = self._select_within_token_budget(all_items, profile.max_tokens)
 
         # Compute compression ratio
         total_cost = sum(i.token_cost or 0 for i in all_items) or 1
         current_cost = sum(i.token_cost or 0 for i in selected)
         compression_ratio = current_cost / total_cost if total_cost > 0 else 1.0
+
+        # Store retrieval metadata for telemetry
+        if rag_metadata:
+            self._last_retrieval_metadata = rag_metadata
 
         return ContextPackage(
             context_package_id=f"ctx-{task.task_id}-{profile.id}",
@@ -216,8 +254,131 @@ class ContextAssembler:
                 filtered.append(item)
         return filtered
 
+    def _should_use_rag(self, profile: ContextProfile) -> bool:
+        metadata = profile.metadata or {}
+        return bool(metadata.get("rag_enabled") or profile.retrieval_policy in ("semantic", "hybrid"))
+
+    def _resolve_rag_top_k(self, profile: ContextProfile) -> int:
+        metadata = profile.metadata or {}
+        if "rag_top_k" in metadata:
+            return int(metadata.get("rag_top_k") or 5)
+        # heuristic: analysts get more context by default
+        if "analyst" in profile.id.lower():
+            return 8
+        return 5
+
+    def _infer_query(self, task: Task) -> str:
+        request = getattr(task, "spec", None)
+        if request and hasattr(request, "request"):
+            req_val = request.request
+        else:
+            req_val = getattr(task, "current_output", "") or ""
+        if isinstance(req_val, str):
+            return req_val
+        try:
+            import json
+            return json.dumps(req_val)
+        except Exception:
+            return str(req_val)
+
+    def _retrieve_semantic_chunks(
+        self,
+        task: Task,
+        profile: ContextProfile,
+        memory_items: List[Dict[str, Any]],
+    ) -> Tuple[List[ContextItem], Dict[str, Any]]:
+        if not self.retriever:
+            return [], {}
+        query = self._infer_query(task)
+        if not query:
+            return [], {}
+
+        top_k = self._resolve_rag_top_k(profile)
+        start = time.time()
+        chunks = self.retriever.search(query, top_k=top_k)
+        mem_chunks = []
+        if memory_items:
+            mem_chunks = embed_memory_items(
+                self.retriever.embedder, memory_items, query, top_k=max(1, top_k // 2)
+            )
+        latency_ms = int((time.time() - start) * 1000)
+
+        all_chunks = chunks + mem_chunks
+        rag_items: List[ContextItem] = []
+        seen_ids = set()
+        for chunk in all_chunks:
+            if chunk.chunk_id in seen_ids:
+                continue
+            seen_ids.add(chunk.chunk_id)
+            token_cost = len(chunk.text.split())
+            metadata = dict(chunk.metadata)
+            metadata["retrieval_score"] = chunk.score
+            metadata["source_type"] = metadata.get("source", "file")
+            rag_items.append(
+                ContextItem(
+                    context_item_id=f"rag-{chunk.chunk_id}",
+                    kind="retrieval_chunk",
+                    source=metadata.get("source_type", "retrieval"),
+                    timestamp=None,
+                    tags=["retrieval", metadata.get("source_type", "retrieval")],
+                    importance=chunk.score,
+                    token_cost=token_cost,
+                    payload=chunk.text,
+                    metadata=metadata,
+                )
+            )
+
+        rag_metadata = {
+            "rag_enabled": True,
+            "query": query,
+            "top_k": top_k,
+            "retrieval_latency_ms": latency_ms,
+            "results": [
+                {
+                    "source_path": c.metadata.get("path") or c.metadata.get("memory_id"),
+                    "start_line": c.metadata.get("start_line"),
+                    "end_line": c.metadata.get("end_line"),
+                    "score": c.score,
+                }
+                for c in all_chunks
+            ],
+        }
+        return rag_items, rag_metadata
+
+    def _protected_items(self, items: List[ContextItem]) -> List[ContextItem]:
+        """Protect system prompt + last N conversation turns from displacement."""
+        protected: List[ContextItem] = []
+        # System prompt
+        for item in items:
+            role = item.metadata.get("role") if hasattr(item, "metadata") else None
+            if role == "system":
+                protected.append(item)
+        # Last conversation turns
+        convo = [i for i in items if i.metadata.get("role") in ("user", "assistant")]
+        convo_sorted = sorted(convo, key=lambda i: i.timestamp or "")
+        protected.extend(convo_sorted[-self.head_tail_conversation_count :])
+
+        # Deduplicate by context_item_id
+        deduped = {}
+        for item in protected:
+            deduped[item.context_item_id] = item
+        return list(deduped.values())
+
+    def _context_item_to_dict(self, item: ContextItem) -> Dict[str, Any]:
+        return {
+            "context_item_id": item.context_item_id,
+            "kind": item.kind,
+            "source": item.source,
+            "timestamp": item.timestamp,
+            "tags": item.tags,
+            "importance": item.importance,
+            "token_cost": item.token_cost,
+            "payload": item.payload,
+            "metadata": item.metadata,
+        }
+
     def _select_within_token_budget(
-        self, items: List[ContextItem], budget: int
+        self, items: List[ContextItem], budget: int, protected_items: Optional[List[ContextItem]] = None
     ) -> List[ContextItem]:
         """Select items within token budget.
 
@@ -231,9 +392,18 @@ class ContextAssembler:
         Returns:
             Selected items within budget
         """
+        protected_items = protected_items or []
+        protected_ids = {i.context_item_id for i in protected_items}
+        selected = []
+        current_tokens = 0
+        for item in protected_items:
+            selected.append(item)
+            current_tokens += item.token_cost or 0
+
         # Sort by importance (descending) then timestamp
         items_sorted = sorted(
-            items, key=lambda i: (-(i.importance or 0), i.timestamp or "")
+            [i for i in items if i.context_item_id not in protected_ids],
+            key=lambda i: (-(i.importance or 0), i.timestamp or "")
         )
 
         # Apply HEAD/TAIL compression if configured
@@ -248,8 +418,6 @@ class ContextAssembler:
             items_sorted = head + middle + tail
 
         # Select within budget
-        selected = []
-        current_tokens = 0
         for item in items_sorted:
             cost = item.token_cost or 0
             if current_tokens + cost <= budget:
@@ -407,5 +575,8 @@ class ContextAssembler:
 
         if hasattr(context_package, 'profile_id'):
             metadata['profile_id'] = context_package.profile_id
+
+        if self._last_retrieval_metadata:
+            metadata['retrieval'] = self._last_retrieval_metadata
 
         return metadata

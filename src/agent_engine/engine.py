@@ -88,7 +88,7 @@ def _load_tool_handler(entrypoint: str, workspace_root: Path) -> Optional[Callab
         return handler
 
 
-def _convert_tools(tools_data: List[Dict], workspace_root: Path) -> Tuple[List[ToolDefinition], Dict[str, Callable]]:
+def _convert_tools(tools_data: List[Dict], workspace_root: Path, adapter_registry=None) -> Tuple[List[ToolDefinition], Dict[str, Callable]]:
     """Convert manifest tools to ToolDefinition objects and handlers."""
     tool_defs: List[ToolDefinition] = []
     handlers: Dict[str, Callable] = {}
@@ -105,9 +105,21 @@ def _convert_tools(tools_data: List[Dict], workspace_root: Path) -> Tuple[List[T
             None if fs_root in (None, False, "") else str(Path(fs_root).expanduser().resolve())
         )
 
+        tool_type = str(tool.get("type", "")).lower()
+
+        # Plugin-provided factory path
+        created = adapter_registry.create_tool(tool_type, tool, workspace_root) if adapter_registry else None
+        if created:
+            tool_def, handler = created
+            if tool_def:
+                tool_defs.append(tool_def)
+            if handler:
+                handlers[tool_id] = handler
+            continue
+
         # Map type -> ToolKind (default deterministic for v1 filesystem tools)
         kind = ToolKind.DETERMINISTIC
-        if str(tool.get("type")).lower() == "llm_tool":
+        if tool_type == "llm_tool":
             kind = ToolKind.LLM_TOOL
 
         # Capabilities/risk defaults
@@ -156,7 +168,7 @@ class Engine:
         memory_stores: Dict[str, MemoryStore],
         context_profiles: Dict[str, ContextProfile],
         adapters: AdapterRegistry,
-        plugins: List[Dict],
+        plugins: List[Any],
         metadata: Optional[EngineMetadata] = None,
         metrics_collector: Optional[MetricsCollector] = None,
         policy_evaluator: Optional[PolicyEvaluator] = None,
@@ -206,14 +218,20 @@ class Engine:
         self.task_manager.telemetry = self.telemetry
 
         # Load plugins from config directory (Phase 9)
-        self._load_plugins(config_dir)
+        self._load_plugins(config_dir, plugin_instances=plugins, extensions_pre_registered=True)
 
         # Initialize parameter resolver for dynamic configuration (Phase 22)
         from .schemas.override import ParameterOverrideStore
         self.parameter_resolver = ParameterResolver(ParameterOverrideStore())
 
         # AgentRuntime expects llm_client and template_version
-        self.agent_runtime = AgentRuntime(llm_client=llm_client, template_version="v1", workspace_root=self.workspace_root)
+        self.agent_runtime = AgentRuntime(
+            llm_client=llm_client,
+            template_version="v1",
+            workspace_root=self.workspace_root,
+            parameter_resolver=self.parameter_resolver,
+            adapter_registry=self.adapters,
+        )
 
         # ToolRuntime expects tools dict and tool_handlers
         tools_dict = {}
@@ -232,7 +250,11 @@ class Engine:
         )
 
         # ContextAssembler uses configured memory stores and context profiles
-        self.context_assembler = ContextAssembler(context_profiles=context_profiles)
+        self.context_assembler = ContextAssembler(
+            context_profiles=context_profiles,
+            memory_config=memory_config,
+            workspace_root=str(self.workspace_root),
+        )
 
         self.deterministic_registry = DeterministicRegistry()
 
@@ -336,22 +358,37 @@ class Engine:
         # Step 4a: Validate exit nodes (Phase 7)
         validate_exit_nodes(dag)
 
-        # Step 5: Initialize memory stores
-        memory_stores = initialize_memory_stores(memory_config)
-        context_profiles = initialize_context_profiles(memory_config)
-
         # Phase 20: Load credentials (optional)
         credentials_data = load_credentials_manifest(path)
         credentials_manifest = parse_credentials(credentials_data)
         credential_provider = CredentialProvider(credentials_manifest)
 
+        # Create adapter registry early so plugins can register extensions
+        adapters = AdapterRegistry(credential_provider=credential_provider)
+        from agent_engine.adapters import _register_builtin_llm_factories, _register_builtin_memory_store_factories
+        _register_builtin_llm_factories(adapters)
+        _register_builtin_memory_store_factories(adapters)
+
+        # Step 5: Initialize memory stores (with plugin-extensible factories)
+        plugins_yaml = Path(path) / "plugins.yaml"
+        plugin_instances = []
+        if plugins_yaml.exists():
+            loader = PluginLoader()
+            plugin_instances = loader.load_plugins_from_yaml(plugins_yaml)
+            for plugin in plugin_instances:
+                if hasattr(plugin, "register_extensions"):
+                    plugin.register_extensions(adapters)
+
+        memory_stores = initialize_memory_stores(memory_config, adapter_registry=adapters)
+        context_profiles = initialize_context_profiles(memory_config)
+
         # Step 6: Register tools and adapters (with credential support)
         workspace_root = _resolve_workspace_root(path)
-        tool_definitions, tool_handlers = _convert_tools(tools, workspace_root)
-        adapters = initialize_adapters(agents, tool_definitions, credential_provider)
+        tool_definitions, tool_handlers = _convert_tools(tools, workspace_root, adapter_registry=adapters)
+        adapters = initialize_adapters(agents, tool_definitions, credential_provider, registry=adapters)
 
-        # Step 7: Load plugins
-        plugins = plugins_data.get('plugins', []) if plugins_data else []
+        # Step 7: Load plugins (register to registry; extensions already applied)
+        plugins = plugin_instances
 
         # Phase 11: Collect engine metadata
         metadata = collect_engine_metadata(path, adapters)
@@ -375,7 +412,8 @@ class Engine:
 
         # Optional: lightweight Anthropics HTTP client if explicitly enabled
         llm_client = None
-        real_llm_env = os.getenv("AGENT_ENGINE_REAL_LLM_CALLS") or os.getenv("AGENT_ENGINE_USE_ANTHROPIC")
+        use_mock_flag = os.getenv("AGENT_ENGINE_USE_MOCK_LLM")
+        real_llm_env = os.getenv("AGENT_ENGINE_REAL_LLM_CALLS") or os.getenv("AGENT_ENGINE_USE_ANTHROPIC") or not use_mock_flag
         if real_llm_env and os.getenv("ANTHROPIC_API_KEY"):
             default_model = None
             try:
@@ -627,28 +665,32 @@ class Engine:
         """
         return self.credential_provider
 
-    def _load_plugins(self, config_dir: str) -> None:
+    def _load_plugins(self, config_dir: str, plugin_instances: Optional[List[Any]] = None, extensions_pre_registered: bool = False) -> None:
         """Load plugins from config directory.
 
         Args:
             config_dir: Configuration directory path
+            plugin_instances: Optional preloaded plugin objects (extensions already applied)
+            extensions_pre_registered: If True, skips calling register_extensions here
 
         Raises:
             ValueError: If plugin loading fails
         """
-        plugins_yaml = Path(config_dir) / "plugins.yaml"
-        if not plugins_yaml.exists():
-            return
-
-        try:
+        plugins = plugin_instances
+        if plugins is None:
+            plugins_yaml = Path(config_dir) / "plugins.yaml"
+            if not plugins_yaml.exists():
+                return
             loader = PluginLoader()
             plugins = loader.load_plugins_from_yaml(plugins_yaml)
 
-            for plugin in plugins:
-                self.plugin_registry.register(plugin)
-
-        except ValueError as e:
-            raise ValueError(f"Failed to load plugins: {e}")
+        for plugin in plugins or []:
+            if not extensions_pre_registered and hasattr(plugin, "register_extensions"):
+                try:
+                    plugin.register_extensions(self.adapters)
+                except Exception as ext_err:
+                    raise ValueError(f"Plugin '{plugin.plugin_id}' failed to register extensions: {ext_err}")
+            self.plugin_registry.register(plugin)
 
     def load_evaluations(self) -> List['EvaluationSuite']:
         """Load evaluation suites from config directory.

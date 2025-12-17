@@ -664,6 +664,37 @@ class MyPlugin(PluginBase):
     def on_shutdown(self) -> None:
         """Called when plugin unregistered."""
         pass
+
+    def register_extensions(self, adapters) -> None:
+        """Optional: register runtime extensions (LLM/tool/memory)."""
+        # Example: register a custom LLM provider "my-llm"
+        from agent_engine.runtime.llm_client import MockLLMClient
+        adapters.register_llm_factory("my-llm", lambda conf: MockLLMClient("hi"))
+        # Example: register a custom tool factory keyed by type
+        from agent_engine.schemas.tool import ToolDefinition, ToolKind, ToolCapability, ToolRiskLevel
+        adapters.register_tool_factory(
+            "my_tool",
+            lambda conf, workspace_root: (
+                ToolDefinition(
+                    tool_id=conf["id"],
+                    kind=ToolKind.DETERMINISTIC,
+                    name=conf.get("name", conf["id"]),
+                    description=conf.get("description", ""),
+                    inputs_schema_id="",
+                    outputs_schema_id="",
+                    capabilities=[ToolCapability.DETERMINISTIC_SAFE],
+                    risk_level=ToolRiskLevel.LOW,
+                    version="1.0.0",
+                    metadata={},
+                    allow_network=False,
+                    allow_shell=False,
+                    filesystem_root=str(workspace_root),
+                ),
+                lambda **kwargs: "ok",
+            ),
+        )
+        # Example: memory store factory keyed by backend name
+        adapters.register_memory_store_factory("my_store", lambda store_id, conf: {"store_id": store_id})
 ```
 
 Register in `plugins.yaml`:

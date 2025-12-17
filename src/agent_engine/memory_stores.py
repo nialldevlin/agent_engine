@@ -108,7 +108,7 @@ class MemoryStore:
         self.put(item)
 
 
-def initialize_memory_stores(memory_config: Optional[Dict]) -> Dict[str, MemoryStore]:
+def initialize_memory_stores(memory_config: Optional[Dict], adapter_registry=None) -> Dict[str, MemoryStore]:
     """Initialize memory stores from config or defaults.
 
     Creates and returns a dictionary of MemoryStore instances. If no configuration
@@ -136,14 +136,24 @@ def initialize_memory_stores(memory_config: Optional[Dict]) -> Dict[str, MemoryS
         if store_name in memory_config:
             store_config = memory_config[store_name]
             store_id = store_name.replace("_store", "")
-            stores[store_id] = MemoryStore(
-                store_id,
-                store_config.get("type", "in_memory"),
-                backend=store_config.get("backend"),
-                file_path=store_config.get("file_path"),
-                db_path=store_config.get("db_path"),
-                max_items=store_config.get("max_items")
-            )
+            backend = store_config.get("backend") or store_config.get("type", "in_memory")
+            # Allow adapter-registered memory store factories
+            if adapter_registry:
+                created = adapter_registry.create_memory_store(backend, store_id, store_config)
+            else:
+                created = None
+
+            if created:
+                stores[store_id] = created
+            else:
+                stores[store_id] = MemoryStore(
+                    store_id,
+                    store_config.get("type", "in_memory"),
+                    backend=backend,
+                    file_path=store_config.get("file_path"),
+                    db_path=store_config.get("db_path"),
+                    max_items=store_config.get("max_items")
+                )
 
     return stores
 
