@@ -494,7 +494,6 @@ class Engine:
         engine.scheduler = TaskScheduler(config=scheduler_config, telemetry=engine.telemetry)
 
         # Determine run mode: execute if CLI profiles present (full app), otherwise stub initialization
-        from pathlib import Path
         engine.run_mode = "execute" if Path(path).joinpath("cli_profiles.yaml").exists() else "stub"
 
         return engine

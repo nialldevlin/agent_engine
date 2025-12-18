@@ -42,6 +42,10 @@ src/agent_engine/patterns/supervisor.py
 src/agent_engine/plugins/__init__.py
 src/agent_engine/plugins/example_plugin.py
 src/agent_engine/plugins/manager.py
+src/agent_engine/retrieval/__init__.py
+src/agent_engine/retrieval/embedder.py
+src/agent_engine/retrieval/retriever.py
+src/agent_engine/retrieval/vector_store.py
 src/agent_engine/runtime/__init__.py
 src/agent_engine/runtime/agent_runtime.py
 src/agent_engine/runtime/artifact_store.py
@@ -55,6 +59,7 @@ src/agent_engine/runtime/llm_client.py
 src/agent_engine/runtime/metadata_collector.py
 src/agent_engine/runtime/metrics_collector.py
 src/agent_engine/runtime/node_executor.py
+src/agent_engine/runtime/parameter_resolver.py
 src/agent_engine/runtime/persistent_memory.py
 src/agent_engine/runtime/policy_evaluator.py
 src/agent_engine/runtime/router.py
@@ -109,6 +114,7 @@ tests/test_builtin_tools.py
 tests/test_config_loader_and_json_engine.py
 tests/test_context_integration.py
 tests/test_dag_validator.py
+tests/test_dynamic_parameters.py
 tests/test_engine_initialization.py
 tests/test_engine_integration.py
 tests/test_global_store.py
@@ -138,8 +144,10 @@ tests/test_phase7_error_handling.py
 tests/test_phase8_telemetry.py
 tests/test_phase9_plugins.py
 tests/test_pipeline_dag_execution.py
+tests/test_plugin_extensions.py
 tests/test_plugins_and_patterns.py
 tests/test_project_store.py
+tests/test_retrieval.py
 tests/test_runtime.py
 tests/test_schemas_canonical.py
 tests/test_schemas_models.py

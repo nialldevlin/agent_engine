@@ -1,0 +1,63 @@
+"""Engine metadata schema for Phase 11.
+
+Records immutable metadata (engine version, manifest hashes, schema revisions,
+adapter versions) for every load and execution.
+"""
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+
+@dataclass
+class EngineMetadata:
+    """Immutable metadata recorded for every engine load and execution.
+
+    This schema captures the engine state at initialization time, including
+    versions, manifest hashes, and configuration details. Metadata is immutable
+    once collected and used for verification and debugging.
+
+    Phase 22: Extended with deployment metadata for packaging & deployment support.
+    """
+
+    # Engine version from __version__
+    engine_version: str
+
+    # SHA256 hashes of all loaded manifests
+    manifest_hashes: Dict[str, str] = field(default_factory=dict)
+    # Example: {"workflow.yaml": "abc123...", "agents.yaml": "def456..."}
+
+    # Schema version (currently use engine version)
+    schema_version: str = ""
+
+    # Adapter versions from registry
+    adapter_versions: Dict[str, str] = field(default_factory=dict)
+    # Example: {"openai": "1.0.0", "anthropic": "0.9.1"}
+
+    # Timestamp when metadata was collected (ISO-8601)
+    load_timestamp: str = ""
+
+    # Config directory path
+    config_dir: str = ""
+
+    # Adapter metadata from Phase 15
+    adapter_metadata: List = field(default_factory=list)
+    # List of AdapterMetadata instances, but using List to avoid circular import
+
+    # Phase 22: Deployment metadata
+    deployment_id: str = ""
+    # Unique identifier for this deployment instance
+    # Examples: "systemd-prod-001", "k8s-pod-abc123", "docker-container-xyz"
+
+    deployment_timestamp: str = ""
+    # When this deployment was bootstrapped (ISO-8601)
+
+    bootstrap_hash: str = ""
+    # SHA256 hash of bootstrap script (if applicable)
+    # Used to verify deployment consistency
+
+    environment: str = ""
+    # Deployment environment: "development", "staging", "production"
+    # From AGENT_ENGINE_ENV or DEPLOYMENT_ENV environment variable
+
+    # Additional metadata for extensibility
+    additional: Dict[str, str] = field(default_factory=dict)

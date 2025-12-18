@@ -41,6 +41,45 @@ Run the full test suite at any time with:
 make test
 ```
 
+### Windows Installation
+
+For Windows users, use the provided batch script or Windows Makefile:
+
+**Option 1: Using build.bat (Recommended for Windows)**
+
+```cmd
+build.bat install
+.venv\Scripts\activate
+```
+
+**Option 2: Using Makefile.windows (requires Make for Windows)**
+
+```cmd
+make -f Makefile.windows install
+.venv\Scripts\activate
+```
+
+**Option 3: Manual installation**
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -e .[dev]
+```
+
+Run tests on Windows:
+
+```cmd
+build.bat test
+```
+
+Or with Makefile:
+
+```cmd
+make -f Makefile.windows test
+```
+
 ## Quick Start
 
 ### 1. Create a Config Directory
@@ -203,6 +242,55 @@ agents:
     kind: "agent"
     llm: "anthropic/claude-3-5-sonnet"
     config: {}
+```
+
+## RAG Context Example
+
+Add a context profile with semantic retrieval and reference it from a node:
+
+```yaml
+# memory.yaml (context profile)
+context_profiles:
+  - id: "rag_profile"
+    max_tokens: 4000
+    retrieval_policy: "semantic"
+    metadata:
+      rag_enabled: true
+      rag_top_k: 6
+    sources:
+      - store: "task"
+      - store: "project"
+      - store: "global"
+
+# workflow.yaml (node)
+nodes:
+  - id: "analyze"
+    kind: "agent"
+    role: "linear"
+    context: "rag_profile"   # enables RAG for this node
+    llm: "anthropic/claude-3-5-sonnet"
+```
+
+## LLM Backends & Local Llama Sizing
+
+- Supported backends: Anthropic, OpenAI (chat completions), and Ollama. Configure with `llm: "<provider>/<model>"` (e.g., `anthropic/claude-3-5-sonnet`, `openai/gpt-4o`, `ollama/llama3`).
+- Ollama auto-pulls models when missing. With `auto_select_llama_size: true`, a base `llama*` model picks the largest size tag that fits detected system memory.
+- Boundaries: `min_llama_size` / `max_llama_size` constrain selection (e.g., `"8b"` floor, `"34b"` cap) while still respecting hardware. Tune `llama_size_thresholds_gb` to map size tags to RAM requirements.
+- Example:
+```yaml
+agents:
+  - id: "local_llama"
+    kind: "agent"
+    llm: "ollama/llama3"
+    config:
+      auto_select_llama_size: true
+      min_llama_size: "8b"
+      max_llama_size: "34b"
+      llama_size_thresholds_gb:
+        70b: 96
+        34b: 48
+        13b: 20
+        8b: 8
 ```
 
 ### tools.yaml
@@ -686,41 +774,42 @@ registry.unregister("custom")
 | 3 | Task Management & Lineage | ✅ Complete |
 | 4 | Node Execution & Tool Invocation | ✅ Complete |
 | 5 | Router v1.0 (Deterministic DAG Routing) | ✅ Complete |
-| 6 | Context Assembly & Memory | ✅ Complete |
-| 7 | Node Failure Handling & Lifecycle | ✅ Complete |
+| 6 | Memory & Context v1 | ✅ Complete |
+| 7 | Error Handling, Status Propagation & Exit | ✅ Complete |
 | 8 | Telemetry & Event Bus | ✅ Complete |
 | 9 | Plugin System v1 (Read-Only Observers) | ✅ Complete |
-| 10 | Artifact Storage & Retrieval | ✅ Complete |
-| 11 | Metadata & Provenance Tracking | ✅ Complete |
-| 12 | Evaluation Framework | ✅ Complete |
-| 13 | Performance Metrics & Profiling | ✅ Complete |
+| 10 | Artifact Storage Subsystem | ✅ Complete |
+| 11 | Engine Metadata & Versioning Layer | ✅ Complete |
+| 12 | Evaluation & Regression System | ✅ Complete |
+| 13 | Performance Profiling & Metrics Layer | ✅ Complete |
 | 14 | Security & Policy Layer | ✅ Complete |
-| 15 | Adapter Management & Discovery | ✅ Complete |
-| 16 | Inspector Mode & Debugging | ✅ Complete |
-| 17 | Multi-Task Isolation & Execution | ✅ Complete |
+| 15 | Provider / Adapter Management Layer | ✅ Complete |
+| 16 | Debugger / Inspector Mode | ✅ Complete |
+| 17 | Multi-Task Execution Model | ✅ Complete |
 | 18 | CLI Framework (Reusable REPL) | ✅ Complete |
-| 19 | (Future) Advanced Routing | ⏳ Planned |
-| 20 | (Future) Distributed Execution | ⏳ Planned |
-| 21 | (Future) ML Model Management | ⏳ Planned |
-| 22 | (Future) Enterprise Features | ⏳ Planned |
+| 19 | Persistent Memory & Artifact Storage | ✅ Complete |
+| 20 | Secrets & Provider Credential Management | ✅ Complete |
+| 21 | Scheduler (Multi-Task Execution Layer) | ✅ Complete |
+| 22 | Packaging & Deployment Templates | ✅ Complete |
 | 23 | Example App & Documentation | ✅ Complete |
 
-All 23 phases complete with comprehensive documentation, example apps, and test coverage.
+All 24 phases complete; see docs/CHANGELOG.md for release history and test counts.
 
 ## Documentation
 
 ### For Users & Developers
 
 **Getting Started:**
+- **[DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** - End-to-end setup, first workflow, credentials, and troubleshooting
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete system architecture with Mermaid diagrams
-- **[DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** - Setup and first workflow walkthrough
 - **[Quick Start](#quick-start)** - 5-minute introduction (above)
 
 **Reference:**
 - **[API_REFERENCE.md](docs/API_REFERENCE.md)** - Complete public API documentation
 - **[CLI_FRAMEWORK.md](docs/CLI_FRAMEWORK.md)** - Interactive REPL usage guide
- - **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
- - **[SECURITY.md](docs/SECURITY.md)** - Security best practices
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[SECURITY.md](docs/SECURITY.md)** - Security best practices
+- **[DYNAMIC_PARAMETERS.md](docs/DYNAMIC_PARAMETERS.md)** - Runtime overrides for models, tools, and timeouts
 
 **Examples:**
 - **[examples/minimal_config/](examples/minimal_config/)** - Minimal working example
@@ -732,8 +821,8 @@ All 23 phases complete with comprehensive documentation, example apps, and test 
 - **[PROJECT_INTEGRATION_SPEC.md](docs/canonical/PROJECT_INTEGRATION_SPEC.md)** - Integration specification (frozen)
 
 **Operational & Development:**
- - **[CHANGELOG.md](docs/CHANGELOG.md)** - Release notes and phase completion summaries
- - **[PLAN_BUILD_AGENT_ENGINE.md](docs/operational/PLAN_BUILD_AGENT_ENGINE.md)** - v1 roadmap and implementation status
+- **[CHANGELOG.md](docs/CHANGELOG.md)** - Release notes and phase completion summaries
+- **[PLAN_BUILD_AGENT_ENGINE.md](docs/operational/PLAN_BUILD_AGENT_ENGINE.md)** - v1 roadmap and implementation status
 
 ## Development
 
